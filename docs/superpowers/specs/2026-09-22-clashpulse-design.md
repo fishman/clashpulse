@@ -54,6 +54,22 @@ Every I/O operation has a context and runs off the UI/TUI event path. The app
 emits coalesced immutable snapshots. A slow client is isolated from process,
 monitor, and scheduler progress.
 
+## Shared library dependencies
+
+ClashPulse reuses released, exact versions of focused modules extracted from
+notmutt:
+
+- `github.com/fishman/notmutt/lib/xdg` for XDG base-directory resolution;
+- `github.com/fishman/notmutt/lib/localipc` for bounded local Unix-socket
+  transport, stale-socket handling, and same-user peer checks.
+
+ClashPulse owns its typed IPC messages, protocol-version negotiation, snapshots,
+secret redaction, and Windows named-pipe adapter. It does not reuse notmutt's
+Lua IPC protocol. Development-only `replace` directives and cross-repository
+workspace wiring are forbidden in committed ClashPulse module metadata. A shared
+module must be tagged before ClashPulse pins it; new shared utilities are
+extracted only after both projects prove the same low-level contract.
+
 ## Binary selection and capabilities
 
 Selection is user intent in `config.toml`:
