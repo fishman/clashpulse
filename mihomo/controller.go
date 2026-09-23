@@ -48,7 +48,9 @@ func NewController(baseURL, secret string, client *http.Client) (*Controller, er
 	if client == nil {
 		client = http.DefaultClient
 	}
-	return &Controller{BaseURL: strings.TrimRight(baseURL, "/"), Secret: secret, Client: client}, nil
+	copy := *client
+	copy.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &Controller{BaseURL: strings.TrimRight(baseURL, "/"), Secret: secret, Client: &copy}, nil
 }
 
 func (c *Controller) Proxies(ctx context.Context) ([]Proxy, []Group, error) {

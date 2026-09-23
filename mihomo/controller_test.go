@@ -18,6 +18,27 @@ func TestNewControllerRejectsNonLoopbackBaseURL(t *testing.T) {
 	}
 }
 
+func TestControllerRejectsRedirectWithoutLeakingSecret(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "" {
+			t.Errorf("Authorization = %q, want empty", got)
+		}
+	}))
+	defer remote.Close()
+	controllerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, remote.URL, http.StatusFound)
+	}))
+	defer controllerServer.Close()
+
+	controller, err := NewController(controllerServer.URL, "secret", controllerServer.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := controller.Proxies(context.Background()); err == nil {
+		t.Fatal("Proxies() error = nil")
+	}
+}
+
 func TestControllerUsesTypedRequests(t *testing.T) {
 	testURL := "https://example.com/path?x=1"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
