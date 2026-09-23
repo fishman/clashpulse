@@ -61,31 +61,40 @@ func (s *Store) Replace(next Snapshot) Change {
 		s.mu.Unlock()
 		return Change{}
 	}
-	callbackBuckets := make(map[string][]func(Change), len(changed))
+	callbacks := make(map[string][]func(Change), len(changed))
 	for _, section := range changed {
 		if bucket := s.subs[section]; len(bucket) > 0 {
 			for _, fn := range bucket {
-				callbackBuckets[section] = append(callbackBuckets[section], fn)
+				callbacks[section] = append(callbacks[section], fn)
 			}
 		}
 	}
 	s.snap = candidate
 	s.mu.Unlock()
 
-	change := Change{
+	base := Change{
 		Section:  changed[0],
 		Sections: append([]string(nil), changed...),
 		Before:   cloneSnapshot(old),
 		After:    cloneSnapshot(candidate),
 	}
 	for _, section := range changed {
-		event := change
+		event := cloneChange(base)
 		event.Section = section
-		for _, fn := range callbackBuckets[section] {
-			fn(event)
+		for _, fn := range callbacks[section] {
+			fn(cloneChange(event))
 		}
 	}
-	return change
+	return cloneChange(base)
+}
+
+func cloneChange(change Change) Change {
+	return Change{
+		Section:  change.Section,
+		Sections: append([]string(nil), change.Sections...),
+		Before:   cloneSnapshot(change.Before),
+		After:    cloneSnapshot(change.After),
+	}
 }
 
 func diffSections(old, next Snapshot) []string {

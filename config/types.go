@@ -1,9 +1,6 @@
 package config
 
-import (
-	"reflect"
-	"time"
-)
+import "time"
 
 type Snapshot struct {
 	App           App
@@ -155,8 +152,4 @@ func cloneStrings(in []string) []string {
 	out := make([]string, len(in))
 	copy(out, in)
 	return out
-}
-
-func snapshotEqual(a, b Snapshot) bool {
-	return reflect.DeepEqual(a, b)
 }

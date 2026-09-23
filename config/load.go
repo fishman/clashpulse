@@ -1,27 +1,14 @@
 package config
 
 import (
-	"bufio"
-	"bytes"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 )
-
-type tomlBlock struct {
-	name   string
-	line   int
-	values map[string]tomlValue
-}
-
-type tomlValue struct {
-	raw  string
-	line int
-}
 
 var resourceKinds = map[string]struct{}{
 	"geoip.dat":     {},
@@ -30,6 +17,11 @@ var resourceKinds = map[string]struct{}{
 	"rule-provider": {},
 	"rule-set":      {},
 	"dns-route":     {},
+}
+
+var filterFormats = map[string]struct{}{
+	"rule-provider": {},
+	"rule-set":      {},
 }
 
 var subscriptionRoutes = map[string]struct{}{
@@ -56,7 +48,6 @@ func Load(dir string) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
-
 	snapshot := Snapshot{
 		App:           app,
 		Mihomo:        mihomo,
@@ -80,595 +71,495 @@ func loadConfig(path string) (App, Mihomo, Monitor, DNS, error) {
 	var mihomo Mihomo
 	var monitor Monitor
 	var dns DNS
-
-	blocks, err := readBlocks(path)
+	err := loadTables(path, map[string]tomlTableKind{"mihomo": tomlSingleTable, "monitor": tomlSingleTable, "dns": tomlSingleTable, "system_proxy": tomlSingleTable}, func(table tomlTable) error {
+		switch table.name {
+		case "mihomo":
+			return decodeMihomo(table, &mihomo)
+		case "monitor":
+			return decodeMonitor(table, &monitor)
+		case "dns":
+			return decodeDNS(table, &dns)
+		case "system_proxy":
+			return decodeSystemProxy(table, &app)
+		default:
+			return fmt.Errorf("%s: unknown table %q", table.path, table.name)
+		}
+	})
 	if err != nil {
 		return App{}, Mihomo{}, Monitor{}, DNS{}, err
-	}
-	seen := map[string]bool{}
-	for _, block := range blocks {
-		switch block.name {
-		case "mihomo":
-			if seen[block.name] {
-				return App{}, Mihomo{}, Monitor{}, DNS{}, fmt.Errorf("%s: duplicate section %q", path, block.name)
-			}
-			seen[block.name] = true
-			if err := decodeMihomo(path, block, &mihomo); err != nil {
-				return App{}, Mihomo{}, Monitor{}, DNS{}, err
-			}
-		case "monitor":
-			if seen[block.name] {
-				return App{}, Mihomo{}, Monitor{}, DNS{}, fmt.Errorf("%s: duplicate section %q", path, block.name)
-			}
-			seen[block.name] = true
-			if err := decodeMonitor(path, block, &monitor); err != nil {
-				return App{}, Mihomo{}, Monitor{}, DNS{}, err
-			}
-		case "dns":
-			if seen[block.name] {
-				return App{}, Mihomo{}, Monitor{}, DNS{}, fmt.Errorf("%s: duplicate section %q", path, block.name)
-			}
-			seen[block.name] = true
-			if err := decodeDNS(path, block, &dns); err != nil {
-				return App{}, Mihomo{}, Monitor{}, DNS{}, err
-			}
-		case "system_proxy":
-			if seen[block.name] {
-				return App{}, Mihomo{}, Monitor{}, DNS{}, fmt.Errorf("%s: duplicate section %q", path, block.name)
-			}
-			seen[block.name] = true
-			if err := decodeSystemProxy(path, block, &app); err != nil {
-				return App{}, Mihomo{}, Monitor{}, DNS{}, err
-			}
-		default:
-			return App{}, Mihomo{}, Monitor{}, DNS{}, fmt.Errorf("%s: unknown section %q", path, block.name)
-		}
 	}
 	return app, mihomo, monitor, dns, nil
 }
 
 func loadSubscriptions(path string) ([]Subscription, error) {
-	blocks, err := readBlocks(path)
-	if err != nil {
-		return nil, err
-	}
 	var items []Subscription
-	for _, block := range blocks {
-		if block.name != "subscription" {
-			return nil, fmt.Errorf("%s: unknown section %q", path, block.name)
-		}
-		item, err := decodeSubscription(path, block)
+	err := loadTables(path, map[string]tomlTableKind{"subscription": tomlArrayTable}, func(table tomlTable) error {
+		item, err := decodeSubscription(table)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		items = append(items, item)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return items, nil
 }
 
 func loadResources(path string) ([]Resource, []ResolverSet, []DNSRoute, error) {
-	blocks, err := readBlocks(path)
-	if err != nil {
-		return nil, nil, nil, err
-	}
 	var resources []Resource
 	var resolverSets []ResolverSet
 	var routes []DNSRoute
-	for _, block := range blocks {
-		switch block.name {
+	err := loadTables(path, map[string]tomlTableKind{"resource": tomlArrayTable, "resolver_set": tomlArrayTable, "dns_route": tomlArrayTable}, func(table tomlTable) error {
+		switch table.name {
 		case "resource":
-			item, err := decodeResource(path, block)
+			item, err := decodeResource(table)
 			if err != nil {
-				return nil, nil, nil, err
+				return err
 			}
 			resources = append(resources, item)
 		case "resolver_set":
-			item, err := decodeResolverSet(path, block)
+			item, err := decodeResolverSet(table)
 			if err != nil {
-				return nil, nil, nil, err
+				return err
 			}
 			resolverSets = append(resolverSets, item)
 		case "dns_route":
-			item, err := decodeDNSRoute(path, block)
+			item, err := decodeDNSRoute(table)
 			if err != nil {
-				return nil, nil, nil, err
+				return err
 			}
 			routes = append(routes, item)
 		default:
-			return nil, nil, nil, fmt.Errorf("%s: unknown section %q", path, block.name)
+			return fmt.Errorf("%s: unknown table %q", table.path, table.name)
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, nil, nil, err
 	}
 	return resources, resolverSets, routes, nil
 }
 
 func loadFilters(path string) ([]Filter, error) {
-	blocks, err := readBlocks(path)
-	if err != nil {
-		return nil, err
-	}
 	var items []Filter
-	for _, block := range blocks {
-		if block.name != "filter" {
-			return nil, fmt.Errorf("%s: unknown section %q", path, block.name)
-		}
-		item, err := decodeFilter(path, block)
+	err := loadTables(path, map[string]tomlTableKind{"filter": tomlArrayTable}, func(table tomlTable) error {
+		item, err := decodeFilter(table)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		items = append(items, item)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return items, nil
 }
 
-func readBlocks(path string) ([]tomlBlock, error) {
+func loadTables(path string, expected map[string]tomlTableKind, fn func(tomlTable) error) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil
 		}
-		return nil, err
+		return err
 	}
-	return parseBlocks(path, data)
+	tables, err := parseTOMLFile(path, data)
+	if err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	for _, table := range tables {
+		want, ok := expected[table.name]
+		if !ok {
+			return fmt.Errorf("%s: unknown table %q", table.path, table.name)
+		}
+		if table.kind != want {
+			return fmt.Errorf("%s: table %q has wrong kind", table.path, table.name)
+		}
+		if seen[table.name] {
+			return fmt.Errorf("%s: duplicate table %q", table.path, table.name)
+		}
+		seen[table.name] = true
+		if err := fn(table); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func parseBlocks(path string, data []byte) ([]tomlBlock, error) {
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	var blocks []tomlBlock
-	var current *tomlBlock
-	lineNo := 0
-	for scanner.Scan() {
-		lineNo++
-		line := strings.TrimSpace(stripComment(scanner.Text()))
-		if line == "" {
-			continue
-		}
-		switch {
-		case strings.HasPrefix(line, "[[") && strings.HasSuffix(line, "]]"):
-			name := strings.TrimSpace(line[2 : len(line)-2])
-			if name == "" {
-				return nil, fmt.Errorf("%s: line %d: empty table name", path, lineNo)
-			}
-			blocks = append(blocks, tomlBlock{name: name, line: lineNo, values: map[string]tomlValue{}})
-			current = &blocks[len(blocks)-1]
-		case strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]"):
-			name := strings.TrimSpace(line[1 : len(line)-1])
-			if name == "" {
-				return nil, fmt.Errorf("%s: line %d: empty table name", path, lineNo)
-			}
-			blocks = append(blocks, tomlBlock{name: name, line: lineNo, values: map[string]tomlValue{}})
-			current = &blocks[len(blocks)-1]
-		default:
-			if current == nil {
-				return nil, fmt.Errorf("%s: line %d: key outside table", path, lineNo)
-			}
-			key, raw, ok := strings.Cut(line, "=")
-			if !ok {
-				return nil, fmt.Errorf("%s: line %d: expected key = value", path, lineNo)
-			}
-			key = strings.TrimSpace(key)
-			raw = strings.TrimSpace(raw)
-			if key == "" || raw == "" {
-				return nil, fmt.Errorf("%s: line %d: expected key = value", path, lineNo)
-			}
-			if _, exists := current.values[key]; exists {
-				return nil, fmt.Errorf("%s: line %d: duplicate key %q", path, lineNo, key)
-			}
-			current.values[key] = tomlValue{raw: raw, line: lineNo}
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return blocks, nil
-}
-
-func stripComment(line string) string {
-	inString := false
-	escaped := false
-	for i := 0; i < len(line); i++ {
-		c := line[i]
-		if inString {
-			if escaped {
-				escaped = false
-				continue
-			}
-			switch c {
-			case '\\':
-				escaped = true
-			case '"':
-				inString = false
-			}
-			continue
-		}
-		switch c {
-		case '"':
-			inString = true
-		case '#':
-			return line[:i]
-		}
-	}
-	return line
-}
-
-func decodeMihomo(path string, block tomlBlock, out *Mihomo) error {
-	for key, item := range block.values {
+func decodeMihomo(table tomlTable, out *Mihomo) error {
+	for key := range table.values {
 		switch key {
 		case "binary":
-			value, err := parseString(item.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return blockValueError(path, block.name, key, err.Error())
+				return err
 			}
 			out.Binary = value
 		default:
-			return blockValueError(path, block.name, key, "unknown key")
+			return fieldError(table, key, "unknown key")
 		}
-	}
-	if out.Binary == "" {
-		out.Binary = "system"
 	}
 	return nil
 }
 
-func decodeMonitor(path string, block tomlBlock, out *Monitor) error {
-	for key, item := range block.values {
+func decodeMonitor(table tomlTable, out *Monitor) error {
+	for key := range table.values {
 		switch key {
 		case "enabled":
-			value, err := parseBool(item.raw)
+			value, err := boolField(table, key)
 			if err != nil {
-				return blockValueError(path, block.name, key, err.Error())
+				return err
 			}
 			out.Enabled = value
 		case "test_url":
-			value, err := parseString(item.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return blockValueError(path, block.name, key, err.Error())
+				return err
 			}
 			out.TestURL = value
 		case "interval":
-			value, err := parseDuration(item.raw)
+			value, err := durationField(table, key)
 			if err != nil {
-				return blockValueError(path, block.name, key, err.Error())
+				return err
+			}
+			if value <= 0 {
+				return fieldError(table, key, "must be positive")
 			}
 			out.Interval = value
 		default:
-			return blockValueError(path, block.name, key, "unknown key")
+			return fieldError(table, key, "unknown key")
 		}
-	}
-	if out.TestURL == "" {
-		out.TestURL = "https://example.invalid/generate_204"
-	}
-	if out.Interval == 0 {
-		out.Interval = 5 * time.Minute
 	}
 	return nil
 }
 
-func decodeDNS(path string, block tomlBlock, out *DNS) error {
-	for key, item := range block.values {
+func decodeDNS(table tomlTable, out *DNS) error {
+	for key := range table.values {
 		switch key {
 		case "listen":
-			value, err := parseString(item.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return blockValueError(path, block.name, key, err.Error())
+				return err
 			}
 			out.Listen = value
 		default:
-			return blockValueError(path, block.name, key, "unknown key")
+			return fieldError(table, key, "unknown key")
 		}
-	}
-	if out.Listen == "" {
-		out.Listen = "127.0.0.1:53"
 	}
 	return nil
 }
 
-func decodeSystemProxy(path string, block tomlBlock, out *App) error {
-	for key, item := range block.values {
+func decodeSystemProxy(table tomlTable, out *App) error {
+	for key := range table.values {
 		switch key {
 		case "enabled":
-			value, err := parseBool(item.raw)
+			value, err := boolField(table, key)
 			if err != nil {
-				return blockValueError(path, block.name, key, err.Error())
+				return err
 			}
 			out.SystemProxy.Enabled = value
 		default:
-			return blockValueError(path, block.name, key, "unknown key")
+			return fieldError(table, key, "unknown key")
 		}
 	}
 	return nil
 }
 
-func decodeSubscription(path string, block tomlBlock) (Subscription, error) {
+func decodeSubscription(table tomlTable) (Subscription, error) {
 	var item Subscription
-	for key, value := range block.values {
+	for key := range table.values {
 		switch key {
 		case "id":
-			raw, err := parseString(value.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return Subscription{}, blockValueError(path, block.name, key, err.Error())
+				return Subscription{}, err
 			}
-			item.ID = raw
+			item.ID = value
 		case "name":
-			raw, err := parseString(value.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return Subscription{}, blockValueError(path, block.name, key, err.Error())
+				return Subscription{}, err
 			}
-			item.Name = raw
+			item.Name = value
 		case "url":
-			raw, err := parseString(value.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return Subscription{}, blockValueError(path, block.name, key, err.Error())
+				return Subscription{}, err
 			}
-			item.URL = raw
+			item.URL = value
 		case "enabled":
-			raw, err := parseBool(value.raw)
+			value, err := boolField(table, key)
 			if err != nil {
-				return Subscription{}, blockValueError(path, block.name, key, err.Error())
+				return Subscription{}, err
 			}
-			item.Enabled = raw
+			item.Enabled = value
 		case "refresh_interval":
-			raw, err := parseDuration(value.raw)
+			value, err := durationField(table, key)
 			if err != nil {
-				return Subscription{}, blockValueError(path, block.name, key, err.Error())
+				return Subscription{}, err
 			}
-			item.RefreshInterval = raw
+			if value <= 0 {
+				return Subscription{}, fieldError(table, key, "must be positive")
+			}
+			item.RefreshInterval = value
 		case "timeout":
-			raw, err := parseDuration(value.raw)
+			value, err := durationField(table, key)
 			if err != nil {
-				return Subscription{}, blockValueError(path, block.name, key, err.Error())
+				return Subscription{}, err
 			}
-			item.Timeout = raw
+			if value <= 0 {
+				return Subscription{}, fieldError(table, key, "must be positive")
+			}
+			item.Timeout = value
 		case "route":
-			raw, err := parseString(value.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return Subscription{}, blockValueError(path, block.name, key, err.Error())
+				return Subscription{}, err
 			}
-			item.Route = raw
+			item.Route = value
 		case "allow_http":
-			raw, err := parseBool(value.raw)
+			value, err := boolField(table, key)
 			if err != nil {
-				return Subscription{}, blockValueError(path, block.name, key, err.Error())
+				return Subscription{}, err
 			}
-			item.AllowHTTP = raw
+			item.AllowHTTP = value
 		case "allow_invalid_tls":
-			raw, err := parseBool(value.raw)
+			value, err := boolField(table, key)
 			if err != nil {
-				return Subscription{}, blockValueError(path, block.name, key, err.Error())
+				return Subscription{}, err
 			}
-			item.AllowInvalidTLS = raw
+			item.AllowInvalidTLS = value
 		default:
-			return Subscription{}, blockValueError(path, block.name, key, "unknown key")
+			return Subscription{}, fieldError(table, key, "unknown key")
 		}
 	}
 	if item.ID == "" {
-		return Subscription{}, blockValueError(path, block.name, "id", "required")
+		return Subscription{}, fieldError(table, "id", "required")
 	}
 	if item.URL == "" {
-		return Subscription{}, blockValueError(path, block.name, "url", "required")
-	}
-	if item.Name == "" {
-		item.Name = item.ID
-	}
-	if item.RefreshInterval == 0 {
-		item.RefreshInterval = 12 * time.Hour
-	}
-	if item.Route == "" {
-		item.Route = "direct"
-	}
-	if _, ok := subscriptionRoutes[item.Route]; !ok {
-		return Subscription{}, blockValueError(path, block.name, "route", "unknown route")
-	}
-	if _, ok := block.values["enabled"]; !ok {
-		item.Enabled = true
+		return Subscription{}, fieldError(table, "url", "required")
 	}
 	return item, nil
 }
 
-func decodeResource(path string, block tomlBlock) (Resource, error) {
+func decodeResource(table tomlTable) (Resource, error) {
 	var item Resource
-	for key, value := range block.values {
+	for key := range table.values {
 		switch key {
 		case "id":
-			raw, err := parseString(value.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return Resource{}, blockValueError(path, block.name, key, err.Error())
+				return Resource{}, err
 			}
-			item.ID = raw
+			item.ID = value
 		case "kind":
-			raw, err := parseString(value.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return Resource{}, blockValueError(path, block.name, key, err.Error())
+				return Resource{}, err
 			}
-			item.Kind = raw
+			item.Kind = value
 		case "url":
-			raw, err := parseString(value.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return Resource{}, blockValueError(path, block.name, key, err.Error())
+				return Resource{}, err
 			}
-			item.URL = raw
+			item.URL = value
 		case "enabled":
-			raw, err := parseBool(value.raw)
+			value, err := boolField(table, key)
 			if err != nil {
-				return Resource{}, blockValueError(path, block.name, key, err.Error())
+				return Resource{}, err
 			}
-			item.Enabled = raw
+			item.Enabled = value
 		case "interval":
-			raw, err := parseDuration(value.raw)
+			value, err := durationField(table, key)
 			if err != nil {
-				return Resource{}, blockValueError(path, block.name, key, err.Error())
+				return Resource{}, err
 			}
-			item.Interval = raw
+			if value <= 0 {
+				return Resource{}, fieldError(table, key, "must be positive")
+			}
+			item.Interval = value
 		case "sha256":
-			raw, err := parseString(value.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return Resource{}, blockValueError(path, block.name, key, err.Error())
+				return Resource{}, err
 			}
-			item.SHA256 = raw
+			item.SHA256 = value
 		default:
-			return Resource{}, blockValueError(path, block.name, key, "unknown key")
+			return Resource{}, fieldError(table, key, "unknown key")
 		}
 	}
 	if item.ID == "" {
-		return Resource{}, blockValueError(path, block.name, "id", "required")
+		return Resource{}, fieldError(table, "id", "required")
 	}
 	if item.Kind == "" {
-		return Resource{}, blockValueError(path, block.name, "kind", "required")
+		return Resource{}, fieldError(table, "kind", "required")
 	}
 	if item.URL == "" {
-		return Resource{}, blockValueError(path, block.name, "url", "required")
+		return Resource{}, fieldError(table, "url", "required")
 	}
 	if _, ok := resourceKinds[item.Kind]; !ok {
-		return Resource{}, blockValueError(path, block.name, "kind", "unknown kind")
+		return Resource{}, fieldError(table, "kind", "unknown kind")
 	}
-	if _, err := parseSourceOrPath(item.URL, true); err != nil {
-		return Resource{}, blockValueError(path, block.name, "url", err.Error())
-	}
-	if _, ok := block.values["enabled"]; !ok {
-		item.Enabled = true
+	if err := validateSourceOrPath(item.URL, true); err != nil {
+		return Resource{}, fieldError(table, "url", err.Error())
 	}
 	return item, nil
 }
 
-func decodeResolverSet(path string, block tomlBlock) (ResolverSet, error) {
+func decodeResolverSet(table tomlTable) (ResolverSet, error) {
 	var item ResolverSet
-	for key, value := range block.values {
+	for key := range table.values {
 		switch key {
 		case "id":
-			raw, err := parseString(value.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return ResolverSet{}, blockValueError(path, block.name, key, err.Error())
+				return ResolverSet{}, err
 			}
-			item.ID = raw
+			item.ID = value
 		case "endpoints":
-			raw, err := parseStringArray(value.raw)
+			value, err := stringListField(table, key)
 			if err != nil {
-				return ResolverSet{}, blockValueError(path, block.name, key, err.Error())
+				return ResolverSet{}, err
 			}
-			item.Endpoints = raw
+			item.Endpoints = value
 		default:
-			return ResolverSet{}, blockValueError(path, block.name, key, "unknown key")
+			return ResolverSet{}, fieldError(table, key, "unknown key")
 		}
 	}
 	if item.ID == "" {
-		return ResolverSet{}, blockValueError(path, block.name, "id", "required")
+		return ResolverSet{}, fieldError(table, "id", "required")
 	}
 	if len(item.Endpoints) == 0 {
-		return ResolverSet{}, blockValueError(path, block.name, "endpoints", "required")
+		return ResolverSet{}, fieldError(table, "endpoints", "required")
 	}
 	for _, endpoint := range item.Endpoints {
 		if err := validateResolverEndpoint(endpoint); err != nil {
-			return ResolverSet{}, blockValueError(path, block.name, "endpoints", err.Error())
+			return ResolverSet{}, fieldError(table, "endpoints", err.Error())
 		}
 	}
 	return item, nil
 }
 
-func decodeDNSRoute(path string, block tomlBlock) (DNSRoute, error) {
+func decodeDNSRoute(table tomlTable) (DNSRoute, error) {
 	var item DNSRoute
-	for key, value := range block.values {
+	for key := range table.values {
 		switch key {
 		case "suffix":
-			raw, err := parseString(value.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return DNSRoute{}, blockValueError(path, block.name, key, err.Error())
+				return DNSRoute{}, err
 			}
-			item.Suffix = raw
+			item.Suffix = value
 		case "geosite":
-			raw, err := parseString(value.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return DNSRoute{}, blockValueError(path, block.name, key, err.Error())
+				return DNSRoute{}, err
 			}
-			item.GeoSite = raw
+			item.GeoSite = value
 		case "resource":
-			raw, err := parseString(value.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return DNSRoute{}, blockValueError(path, block.name, key, err.Error())
+				return DNSRoute{}, err
 			}
-			item.Resource = raw
+			item.Resource = value
 		case "resolver_set":
-			raw, err := parseString(value.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return DNSRoute{}, blockValueError(path, block.name, key, err.Error())
+				return DNSRoute{}, err
 			}
-			item.ResolverSet = raw
+			item.ResolverSet = value
 		default:
-			return DNSRoute{}, blockValueError(path, block.name, key, "unknown key")
+			return DNSRoute{}, fieldError(table, key, "unknown key")
 		}
 	}
 	if item.ResolverSet == "" {
-		return DNSRoute{}, blockValueError(path, block.name, "resolver_set", "required")
+		return DNSRoute{}, fieldError(table, "resolver_set", "required")
 	}
 	if item.Suffix == "" && item.GeoSite == "" && item.Resource == "" {
-		return DNSRoute{}, blockValueError(path, block.name, "suffix", "required")
+		return DNSRoute{}, fieldError(table, "suffix", "required")
 	}
 	return item, nil
 }
 
-func decodeFilter(path string, block tomlBlock) (Filter, error) {
+func decodeFilter(table tomlTable) (Filter, error) {
 	var item Filter
-	for key, value := range block.values {
+	for key := range table.values {
 		switch key {
 		case "id":
-			raw, err := parseString(value.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return Filter{}, blockValueError(path, block.name, key, err.Error())
+				return Filter{}, err
 			}
-			item.ID = raw
+			item.ID = value
 		case "resource":
-			raw, err := parseString(value.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return Filter{}, blockValueError(path, block.name, key, err.Error())
+				return Filter{}, err
 			}
-			item.Resource = raw
+			item.Resource = value
 		case "url":
-			raw, err := parseString(value.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return Filter{}, blockValueError(path, block.name, key, err.Error())
+				return Filter{}, err
 			}
-			item.URL = raw
+			item.URL = value
 		case "path":
-			raw, err := parseString(value.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return Filter{}, blockValueError(path, block.name, key, err.Error())
+				return Filter{}, err
 			}
-			item.Path = raw
+			item.Path = value
 		case "format":
-			raw, err := parseString(value.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return Filter{}, blockValueError(path, block.name, key, err.Error())
+				return Filter{}, err
 			}
-			item.Format = raw
+			item.Format = value
 		case "enabled":
-			raw, err := parseBool(value.raw)
+			value, err := boolField(table, key)
 			if err != nil {
-				return Filter{}, blockValueError(path, block.name, key, err.Error())
+				return Filter{}, err
 			}
-			item.Enabled = raw
+			item.Enabled = value
 		case "interval":
-			raw, err := parseDuration(value.raw)
+			value, err := durationField(table, key)
 			if err != nil {
-				return Filter{}, blockValueError(path, block.name, key, err.Error())
+				return Filter{}, err
 			}
-			item.Interval = raw
+			if value <= 0 {
+				return Filter{}, fieldError(table, key, "must be positive")
+			}
+			item.Interval = value
 		case "sha256":
-			raw, err := parseString(value.raw)
+			value, err := stringField(table, key)
 			if err != nil {
-				return Filter{}, blockValueError(path, block.name, key, err.Error())
+				return Filter{}, err
 			}
-			item.SHA256 = raw
+			item.SHA256 = value
 		default:
-			return Filter{}, blockValueError(path, block.name, key, "unknown key")
+			return Filter{}, fieldError(table, key, "unknown key")
 		}
 	}
 	if item.ID == "" {
-		return Filter{}, blockValueError(path, block.name, "id", "required")
+		return Filter{}, fieldError(table, "id", "required")
 	}
 	if item.Resource == "" {
-		return Filter{}, blockValueError(path, block.name, "resource", "required")
+		return Filter{}, fieldError(table, "resource", "required")
 	}
-	if _, ok := block.values["enabled"]; !ok {
-		item.Enabled = true
+	if item.URL != "" {
+		if err := validateSourceOrPath(item.URL, true); err != nil {
+			return Filter{}, fieldError(table, "url", err.Error())
+		}
+	}
+	if item.Path != "" {
+		if err := validateSourceOrPath(item.Path, true); err != nil {
+			return Filter{}, fieldError(table, "path", err.Error())
+		}
 	}
 	return item, nil
 }
@@ -693,14 +584,27 @@ func applyDefaults(s *Snapshot) {
 		if s.Subscriptions[i].RefreshInterval == 0 {
 			s.Subscriptions[i].RefreshInterval = 12 * time.Hour
 		}
+		if s.Subscriptions[i].Timeout == 0 {
+			s.Subscriptions[i].Timeout = 30 * time.Second
+		}
 		if s.Subscriptions[i].Route == "" {
 			s.Subscriptions[i].Route = "direct"
+		}
+	}
+	for i := range s.Resources {
+		if s.Resources[i].Interval == 0 {
+			s.Resources[i].Interval = 12 * time.Hour
+		}
+	}
+	for i := range s.Filters {
+		if s.Filters[i].Interval == 0 {
+			s.Filters[i].Interval = 12 * time.Hour
 		}
 	}
 }
 
 func validateSnapshot(s Snapshot) error {
-	if err := validateMihomo(s.Mihomo); err != nil {
+	if err := validateMihomoBinary(s.Mihomo.Binary); err != nil {
 		return err
 	}
 	if err := validateMonitor(s.Monitor); err != nil {
@@ -709,38 +613,32 @@ func validateSnapshot(s Snapshot) error {
 	if err := validateDNS(s.DNS); err != nil {
 		return err
 	}
-	ids := map[string]string{}
-	recordID := func(kind, id string) error {
-		if id == "" {
-			return nil
-		}
-		if prev, ok := ids[id]; ok {
-			return fmt.Errorf("duplicate id %q used by %s and %s", id, prev, kind)
-		}
-		ids[id] = kind
-		return nil
-	}
-	for i := range s.Subscriptions {
-		item := s.Subscriptions[i]
+	subscriptionIDs := map[string]string{}
+	resourceIDs := map[string]string{}
+	resolverSetIDs := map[string]string{}
+	filterIDs := map[string]string{}
+	resourcesByID := map[string]Resource{}
+	resolverSetsByID := map[string]ResolverSet{}
+	for _, item := range s.Subscriptions {
 		if item.ID == "" {
 			return fmt.Errorf("subscriptions.toml: subscription.id: required")
 		}
 		if item.URL == "" {
 			return fmt.Errorf("subscriptions.toml: subscription.url: required")
 		}
-		if err := recordID("subscription", item.ID); err != nil {
+		if err := uniqueID(subscriptionIDs, "subscription", item.ID); err != nil {
 			return fmt.Errorf("subscriptions.toml: subscription.id: %w", err)
 		}
-		if err := validateHTTPSURL("subscriptions.toml", "subscription.url", item.URL); err != nil {
-			return err
+		if err := validateSubscriptionURL(item.URL, item.AllowHTTP); err != nil {
+			return fmt.Errorf("subscriptions.toml: subscription.url: %w", err)
 		}
-		if _, ok := subscriptionRoutes[item.Route]; !ok {
-			return fmt.Errorf("subscriptions.toml: subscription.route: unknown route %q", item.Route)
+		if item.Route != "" {
+			if _, ok := subscriptionRoutes[item.Route]; !ok {
+				return fmt.Errorf("subscriptions.toml: subscription.route: unknown route %q", item.Route)
+			}
 		}
 	}
-	resourceByID := map[string]Resource{}
-	for i := range s.Resources {
-		item := s.Resources[i]
+	for _, item := range s.Resources {
 		if item.ID == "" {
 			return fmt.Errorf("resources.toml: resource.id: required")
 		}
@@ -750,71 +648,74 @@ func validateSnapshot(s Snapshot) error {
 		if item.URL == "" {
 			return fmt.Errorf("resources.toml: resource.url: required")
 		}
-		if err := recordID("resource", item.ID); err != nil {
+		if err := uniqueID(resourceIDs, "resource", item.ID); err != nil {
 			return fmt.Errorf("resources.toml: resource.id: %w", err)
 		}
 		if _, ok := resourceKinds[item.Kind]; !ok {
 			return fmt.Errorf("resources.toml: resource.kind: unknown kind %q", item.Kind)
 		}
-		if err := validateResourceSource(item.URL); err != nil {
+		if err := validateSourceOrPath(item.URL, true); err != nil {
 			return fmt.Errorf("resources.toml: resource.url: %w", err)
 		}
-		resourceByID[item.ID] = item
+		if item.Interval <= 0 {
+			return fmt.Errorf("resources.toml: resource.interval: must be positive")
+		}
+		resourcesByID[item.ID] = item
 	}
-	for i := range s.DNS.ResolverSets {
-		item := s.DNS.ResolverSets[i]
+	for _, item := range s.DNS.ResolverSets {
 		if item.ID == "" {
 			return fmt.Errorf("resources.toml: resolver_set.id: required")
 		}
 		if len(item.Endpoints) == 0 {
 			return fmt.Errorf("resources.toml: resolver_set.endpoints: required")
 		}
-		if err := recordID("resolver_set", item.ID); err != nil {
+		if err := uniqueID(resolverSetIDs, "resolver_set", item.ID); err != nil {
 			return fmt.Errorf("resources.toml: resolver_set.id: %w", err)
 		}
 		for _, endpoint := range item.Endpoints {
 			if err := validateResolverEndpoint(endpoint); err != nil {
 				return fmt.Errorf("resources.toml: resolver_set.endpoints: %w", err)
 			}
-			if s.DNS.Listen != "" && endpoint == s.DNS.Listen {
-				return fmt.Errorf("resources.toml: resolver_set.endpoints: endpoint %q loops back to dns.listen", endpoint)
-			}
 		}
+		resolverSetsByID[item.ID] = item
 	}
-	for i := range s.DNS.Routes {
-		item := s.DNS.Routes[i]
+	for _, item := range s.DNS.Routes {
 		if item.ResolverSet == "" {
 			return fmt.Errorf("resources.toml: dns_route.resolver_set: required")
 		}
 		if item.Suffix == "" && item.GeoSite == "" && item.Resource == "" {
 			return fmt.Errorf("resources.toml: dns_route.suffix: required")
 		}
-		if _, ok := ids[item.ResolverSet]; !ok {
+		if _, ok := resolverSetsByID[item.ResolverSet]; !ok {
 			return fmt.Errorf("resources.toml: dns_route.resolver_set: unknown resolver set %q", item.ResolverSet)
 		}
 		if item.Resource != "" {
-			resource, ok := resourceByID[item.Resource]
-			if !ok {
+			if _, ok := resourcesByID[item.Resource]; !ok {
 				return fmt.Errorf("resources.toml: dns_route.resource: unknown resource %q", item.Resource)
-			}
-			if resource.Kind != "rule-set" && resource.Kind != "dns-route" {
-				return fmt.Errorf("resources.toml: dns_route.resource: resource %q has kind %q", item.Resource, resource.Kind)
 			}
 		}
 	}
-	for i := range s.Filters {
-		item := s.Filters[i]
+	for _, item := range s.Filters {
 		if item.ID == "" {
 			return fmt.Errorf("filters.toml: filter.id: required")
 		}
 		if item.Resource == "" {
 			return fmt.Errorf("filters.toml: filter.resource: required")
 		}
-		if err := recordID("filter", item.ID); err != nil {
+		if err := uniqueID(filterIDs, "filter", item.ID); err != nil {
 			return fmt.Errorf("filters.toml: filter.id: %w", err)
 		}
-		if _, ok := resourceByID[item.Resource]; !ok {
+		if _, ok := resourcesByID[item.Resource]; !ok {
 			return fmt.Errorf("filters.toml: filter.resource: unknown resource %q", item.Resource)
+		}
+		if item.Format == "" {
+			return fmt.Errorf("filters.toml: filter.format: required")
+		}
+		if _, ok := filterFormats[item.Format]; !ok {
+			return fmt.Errorf("filters.toml: filter.format: unsupported format %q", item.Format)
+		}
+		if item.Interval <= 0 {
+			return fmt.Errorf("filters.toml: filter.interval: must be positive")
 		}
 		if item.URL != "" {
 			if err := validateSourceOrPath(item.URL, true); err != nil {
@@ -830,23 +731,13 @@ func validateSnapshot(s Snapshot) error {
 	return nil
 }
 
-func validateMihomo(m Mihomo) error {
-	if m.Binary == "" {
-		return fmt.Errorf("config.toml: mihomo.binary: required")
-	}
-	if strings.Contains(m.Binary, "://") {
-		return fmt.Errorf("config.toml: mihomo.binary: invalid binary %q", m.Binary)
-	}
-	return nil
-}
-
 func validateMonitor(m Monitor) error {
 	if m.TestURL != "" {
-		if err := validateHTTPSURL("config.toml", "monitor.test_url", m.TestURL); err != nil {
-			return err
+		if err := validateHTTPSURL(m.TestURL); err != nil {
+			return fmt.Errorf("config.toml: monitor.test_url: %w", err)
 		}
 	}
-	if m.Interval < 0 {
+	if m.Interval <= 0 {
 		return fmt.Errorf("config.toml: monitor.interval: must be positive")
 	}
 	return nil
@@ -859,142 +750,154 @@ func validateDNS(d DNS) error {
 	return nil
 }
 
-func validateHTTPSURL(file, key, raw string) error {
-	if raw == "" {
-		return fmt.Errorf("%s: %s: required", file, key)
+func validateMihomoBinary(binary string) error {
+	switch binary {
+	case "system", "bundled":
+		return nil
 	}
-	u, err := url.Parse(raw)
+	if binary == "" {
+		return fmt.Errorf("config.toml: mihomo.binary: required")
+	}
+	if strings.Contains(binary, "://") {
+		return fmt.Errorf("config.toml: mihomo.binary: invalid binary %q", binary)
+	}
+	if !strings.ContainsAny(binary, "/\\") {
+		return fmt.Errorf("config.toml: mihomo.binary: unsupported binary %q", binary)
+	}
+	info, err := os.Stat(binary)
 	if err != nil {
-		return fmt.Errorf("%s: %s: %v", file, key, err)
+		return fmt.Errorf("config.toml: mihomo.binary: %w", err)
 	}
-	if u.Scheme != "https" || u.Host == "" {
-		return fmt.Errorf("%s: %s: must use https", file, key)
+	if !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
+		return fmt.Errorf("config.toml: mihomo.binary: not executable %q", binary)
 	}
 	return nil
 }
 
-func validateResourceSource(raw string) error {
-	return validateSourceOrPath(raw, true)
+func validateHTTPSURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return err
+	}
+	if u.User != nil {
+		return fmt.Errorf("userinfo not allowed")
+	}
+	if u.Scheme != "https" || u.Host == "" || u.Opaque != "" {
+		return fmt.Errorf("must use https")
+	}
+	return nil
 }
 
-func validateSourceOrPath(raw string, allowPath bool) error {
-	if raw == "" {
-		return fmt.Errorf("required")
+func validateSubscriptionURL(raw string, allowHTTP bool) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return err
 	}
-	if strings.Contains(raw, "://") {
-		u, err := url.Parse(raw)
-		if err != nil {
-			return err
-		}
-		if u.Scheme != "https" || u.Host == "" {
+	if u.User != nil {
+		return fmt.Errorf("userinfo not allowed")
+	}
+	if u.Scheme == "https" {
+		if u.Host == "" || u.Opaque != "" {
 			return fmt.Errorf("must use https")
 		}
 		return nil
 	}
-	if allowPath {
+	if allowHTTP && u.Scheme == "http" && u.Host != "" && u.Opaque == "" {
 		return nil
 	}
 	return fmt.Errorf("must use https")
 }
 
-func parseSourceOrPath(raw string, allowPath bool) (string, error) {
-	if raw == "" {
-		return "", fmt.Errorf("required")
+func validateSourceOrPath(raw string, allowPath bool) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return err
 	}
-	if strings.Contains(raw, "://") {
-		u, err := url.Parse(raw)
-		if err != nil {
-			return "", err
+	if u.Scheme == "" {
+		if allowPath {
+			return nil
 		}
-		if u.Scheme != "https" || u.Host == "" {
-			return "", fmt.Errorf("must use https")
-		}
-		return raw, nil
+		return fmt.Errorf("must use https")
 	}
-	if allowPath {
-		return raw, nil
+	if u.User != nil {
+		return fmt.Errorf("userinfo not allowed")
 	}
-	return "", fmt.Errorf("must use https")
+	if u.Scheme != "https" || u.Host == "" || u.Opaque != "" {
+		return fmt.Errorf("must use https")
+	}
+	return nil
 }
 
 func validateResolverEndpoint(raw string) error {
-	if raw == "" {
-		return fmt.Errorf("required")
-	}
 	if strings.Contains(raw, "://") {
 		u, err := url.Parse(raw)
 		if err != nil {
 			return err
 		}
-		if u.Scheme == "" || u.Host == "" {
+		if u.Scheme == "" || u.Host == "" || u.Opaque != "" {
 			return fmt.Errorf("invalid endpoint")
 		}
+		return nil
+	}
+	host, port, err := net.SplitHostPort(raw)
+	if err != nil || host == "" || port == "" {
+		return fmt.Errorf("invalid endpoint")
 	}
 	return nil
 }
 
-func parseString(raw string) (string, error) {
-	if !strings.HasPrefix(raw, "\"") {
-		return "", fmt.Errorf("expected quoted string")
+func uniqueID(seen map[string]string, kind, id string) error {
+	if prev, ok := seen[id]; ok {
+		return fmt.Errorf("duplicate id %q used by %s and %s", id, prev, kind)
 	}
-	prefix, err := strconv.QuotedPrefix(raw)
-	if err != nil || prefix != raw {
-		return "", fmt.Errorf("expected quoted string")
-	}
-	return strconv.Unquote(raw)
+	seen[id] = kind
+	return nil
 }
 
-func parseBool(raw string) (bool, error) {
-	switch raw {
-	case "true":
-		return true, nil
-	case "false":
-		return false, nil
-	default:
-		return false, fmt.Errorf("expected boolean")
-	}
+func fieldError(table tomlTable, key, msg string) error {
+	return fmt.Errorf("%s: %s.%s: %s", table.path, table.name, key, msg)
 }
 
-func parseDuration(raw string) (time.Duration, error) {
-	value, err := parseString(raw)
-	if err != nil {
-		return 0, err
+func stringField(table tomlTable, key string) (string, error) {
+	value, ok := table.values[key]
+	if !ok {
+		return "", fmt.Errorf("%s: %s.%s: required", table.path, table.name, key)
 	}
-	return time.ParseDuration(value)
+	if value.kind != tomlString {
+		return "", fmt.Errorf("%s: %s.%s: expected string", table.path, table.name, key)
+	}
+	return value.stringValue, nil
 }
 
-func parseStringArray(raw string) ([]string, error) {
-	if !strings.HasPrefix(raw, "[") || !strings.HasSuffix(raw, "]") {
-		return nil, fmt.Errorf("expected array")
+func boolField(table tomlTable, key string) (bool, error) {
+	value, ok := table.values[key]
+	if !ok {
+		return false, fmt.Errorf("%s: %s.%s: required", table.path, table.name, key)
 	}
-	inner := strings.TrimSpace(raw[1 : len(raw)-1])
-	if inner == "" {
-		return nil, nil
+	if value.kind != tomlBool {
+		return false, fmt.Errorf("%s: %s.%s: expected boolean", table.path, table.name, key)
 	}
-	var values []string
-	for len(inner) > 0 {
-		inner = strings.TrimSpace(inner)
-		prefix, err := strconv.QuotedPrefix(inner)
-		if err != nil || prefix == "" {
-			return nil, fmt.Errorf("expected quoted string")
-		}
-		value, err := strconv.Unquote(prefix)
-		if err != nil {
-			return nil, err
-		}
-		values = append(values, value)
-		inner = strings.TrimSpace(inner[len(prefix):])
-		if inner == "" {
-			break
-		}
-		if inner[0] != ',' {
-			return nil, fmt.Errorf("expected comma")
-		}
-		inner = strings.TrimSpace(inner[1:])
-	}
-	return values, nil
+	return value.boolValue, nil
 }
 
-func blockValueError(path, section, key, msg string) error {
-	return fmt.Errorf("%s: %s.%s: %s", path, section, key, msg)
+func durationField(table tomlTable, key string) (time.Duration, error) {
+	value, ok := table.values[key]
+	if !ok {
+		return 0, nil
+	}
+	if value.kind != tomlString {
+		return 0, fmt.Errorf("%s: %s.%s: expected duration string", table.path, table.name, key)
+	}
+	return time.ParseDuration(value.stringValue)
+}
+
+func stringListField(table tomlTable, key string) ([]string, error) {
+	value, ok := table.values[key]
+	if !ok {
+		return nil, fmt.Errorf("%s: %s.%s: required", table.path, table.name, key)
+	}
+	if value.kind != tomlStringList {
+		return nil, fmt.Errorf("%s: %s.%s: expected string array", table.path, table.name, key)
+	}
+	return cloneStrings(value.strings), nil
 }

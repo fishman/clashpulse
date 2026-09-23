@@ -37,6 +37,10 @@ func Write(path string, data []byte) error {
 	if err := os.Rename(name, path); err != nil {
 		return err
 	}
+	if d, err := os.Open(dir); err == nil {
+		_ = d.Sync()
+		_ = d.Close()
+	}
 	success = true
 	return nil
 }
