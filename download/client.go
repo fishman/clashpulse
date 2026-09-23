@@ -1,17 +1,17 @@
 package download
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"net/url"
 	"strings"
 )
 
-const maxRedirects = 10
+const maxRedirects = 5
 
 type Route string
 
@@ -54,6 +54,7 @@ func (c *Client) Fetch(ctx context.Context, req Request) (Response, error) {
 	if req.MaxBytes <= 0 {
 		return Response{}, fmt.Errorf("download: max bytes must be positive")
 	}
+
 	transport, err := c.transport(req.Route)
 	if err != nil {
 		return Response{}, err
@@ -66,6 +67,7 @@ func (c *Client) Fetch(ctx context.Context, req Request) (Response, error) {
 	if err != nil {
 		return Response{}, err
 	}
+	origin := originOf(current)
 
 	for redirects := 0; ; redirects++ {
 		if redirects > maxRedirects {
@@ -75,7 +77,7 @@ func (c *Client) Fetch(ctx context.Context, req Request) (Response, error) {
 			return Response{}, err
 		}
 
-		response, err := c.do(ctx, client, current, req)
+		response, err := c.do(ctx, client, current, req, origin)
 		if err != nil {
 			return Response{}, err
 		}
@@ -92,15 +94,17 @@ func (c *Client) Fetch(ctx context.Context, req Request) (Response, error) {
 			continue
 		}
 		if response.StatusCode == http.StatusNotModified {
+			etag := response.Header.Get("ETag")
+			lastModified := response.Header.Get("Last-Modified")
 			response.Body.Close()
-			return Response{StatusCode: http.StatusNotModified}, nil
+			return Response{StatusCode: http.StatusNotModified, ETag: etag, LastModified: lastModified}, nil
 		}
 		if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 			response.Body.Close()
 			return Response{}, fmt.Errorf("download: unexpected status %s", response.Status)
 		}
 
-		body, err := readBody(response.Body, req.MaxBytes)
+		body, err := readBody(ctx, response.Body, req.MaxBytes)
 		response.Body.Close()
 		if err != nil {
 			return Response{}, err
@@ -133,22 +137,52 @@ func (c *Client) transport(route Route) (http.RoundTripper, error) {
 	}
 }
 
-func (c *Client) do(ctx context.Context, client *http.Client, target *url.URL, req Request) (*http.Response, error) {
+func (c *Client) do(ctx context.Context, client *http.Client, target *url.URL, req Request, origin originKey) (*http.Response, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("download: request: %w", err)
 	}
-	if req.ETag != "" {
-		httpReq.Header.Set("If-None-Match", req.ETag)
-	}
-	if req.LastModified != "" {
-		httpReq.Header.Set("If-Modified-Since", req.LastModified)
+	if sameOrigin(target, origin) {
+		if req.ETag != "" {
+			httpReq.Header.Set("If-None-Match", req.ETag)
+		}
+		if req.LastModified != "" {
+			httpReq.Header.Set("If-Modified-Since", req.LastModified)
+		}
 	}
 	response, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("download: request: %w", err)
 	}
 	return response, nil
+}
+
+type originKey struct {
+	Scheme string
+	Host   string
+	Port   string
+}
+
+func originOf(u *url.URL) originKey {
+	return originKey{Scheme: strings.ToLower(u.Scheme), Host: strings.ToLower(u.Hostname()), Port: effectivePort(u)}
+}
+
+func sameOrigin(u *url.URL, origin originKey) bool {
+	return origin == originOf(u)
+}
+
+func effectivePort(u *url.URL) string {
+	if port := u.Port(); port != "" {
+		return port
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http":
+		return "80"
+	case "https":
+		return "443"
+	default:
+		return ""
+	}
 }
 
 func parseURL(raw string, allowHTTP bool) (*url.URL, error) {
@@ -207,20 +241,30 @@ func isRedirect(status int) bool {
 	}
 }
 
-func readBody(body io.Reader, maxBytes int64) ([]byte, error) {
+func readBody(ctx context.Context, body io.Reader, maxBytes int64) ([]byte, error) {
 	if maxBytes <= 0 {
 		return nil, fmt.Errorf("download: max bytes must be positive")
 	}
-	limit := maxBytes
-	if limit < math.MaxInt64 {
-		limit++
+	var buf bytes.Buffer
+	chunk := make([]byte, 32*1024)
+	var size int64
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		n, err := body.Read(chunk)
+		if n > 0 {
+			size += int64(n)
+			if size > maxBytes {
+				return nil, errors.New("download: body too large")
+			}
+			buf.Write(chunk[:n])
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return buf.Bytes(), nil
+			}
+			return nil, fmt.Errorf("download: read body: %w", err)
+		}
 	}
-	data, err := io.ReadAll(io.LimitReader(body, limit))
-	if err != nil {
-		return nil, fmt.Errorf("download: read body: %w", err)
-	}
-	if int64(len(data)) > maxBytes {
-		return nil, errors.New("download: body too large")
-	}
-	return data, nil
 }
