@@ -1,6 +1,7 @@
 package mihomo
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -32,13 +33,13 @@ func Resolve(selection Selection) (string, error) {
 	}
 }
 
-func Inspect(selection Selection) (Capability, error) {
+func Inspect(ctx context.Context, selection Selection) (Capability, error) {
 	path, err := Resolve(selection)
 	if err != nil {
 		return Capability{}, err
 	}
 
-	output, err := exec.Command(path, "-v").Output()
+	output, err := exec.CommandContext(ctx, path, "-v").Output()
 	if err != nil {
 		return Capability{}, fmt.Errorf("inspect mihomo: %w", err)
 	}

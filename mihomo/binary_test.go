@@ -1,14 +1,19 @@
 package mihomo
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
 func fakeBinary(t *testing.T, version string, exitCode int) string {
 	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skip("fake executable requires POSIX shell")
+	}
 
 	path := filepath.Join(t.TempDir(), "mihomo")
 	script := fmt.Sprintf("#!/bin/sh\nif [ \"$#\" -eq 1 ] && [ \"$1\" = \"-v\" ]; then\n\tif [ -n %q ]; then\n\t\tprintf '%%s\\n' %q\n\tfi\n\texit %d\nfi\nexit 1\n", version, version, exitCode)
@@ -45,13 +50,20 @@ func TestResolveValidatesBundledAndExplicitPaths(t *testing.T) {
 			t.Fatalf("Resolve(%+v) = %q, want %q", selection, got, path)
 		}
 	}
+}
 
+func TestResolveRejectsNonExecutableBundledAndExplicitPaths(t *testing.T) {
 	plain := filepath.Join(t.TempDir(), "mihomo")
 	if err := os.WriteFile(plain, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Resolve(Selection{Kind: "path", Path: plain}); err == nil {
-		t.Fatal("Resolve accepted a non-executable file")
+	for _, selection := range []Selection{
+		{Kind: "bundled", Path: plain},
+		{Kind: "path", Path: plain},
+	} {
+		if _, err := Resolve(selection); err == nil {
+			t.Fatalf("Resolve(%+v) accepted a non-executable file", selection)
+		}
 	}
 	if _, err := Resolve(Selection{Kind: "invalid"}); err == nil {
 		t.Fatal("Resolve accepted an invalid selection")
@@ -61,7 +73,7 @@ func TestResolveValidatesBundledAndExplicitPaths(t *testing.T) {
 func TestInspectUsesVersionArgv(t *testing.T) {
 	path := fakeBinary(t, "v1.19.31", 0)
 
-	got, err := Inspect(Selection{Kind: "path", Path: path})
+	got, err := Inspect(context.Background(), Selection{Kind: "path", Path: path})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +84,17 @@ func TestInspectUsesVersionArgv(t *testing.T) {
 
 func TestInspectRejectsInvalidBinary(t *testing.T) {
 	path := fakeBinary(t, "", 1)
-	if _, err := Inspect(Selection{Kind: "path", Path: path}); err == nil {
+	if _, err := Inspect(context.Background(), Selection{Kind: "path", Path: path}); err == nil {
 		t.Fatal("Inspect accepted a binary that rejected version inspection")
+	}
+}
+
+func TestInspectHonorsCanceledContext(t *testing.T) {
+	path := fakeBinary(t, "v1.19.31", 0)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := Inspect(ctx, Selection{Kind: "path", Path: path}); err == nil {
+		t.Fatal("Inspect accepted a canceled context")
 	}
 }
