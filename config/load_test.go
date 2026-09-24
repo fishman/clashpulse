@@ -64,15 +64,15 @@ func TestLoadMonitorPolicyDefaultsAndOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if defaults.Monitor.TestURL != "https://www.gstatic.com/generate_204" || defaults.Monitor.Interval != 5*time.Minute || defaults.Monitor.Timeout != 5*time.Second || defaults.Monitor.Concurrency != 3 || defaults.Monitor.Threshold != 800*time.Millisecond || defaults.Monitor.AlertThreshold != 250*time.Millisecond || defaults.Monitor.ConsecutiveBadSamples != 3 || defaults.Monitor.MinImprovement != 100*time.Millisecond || defaults.Monitor.Cooldown != 10*time.Minute || defaults.Monitor.Jitter != 15*time.Second {
+	if defaults.Monitor.TestURL != "http://cp.cloudflare.com/generate_204" || defaults.Monitor.Interval != 5*time.Minute || defaults.Monitor.Timeout != 5*time.Second || defaults.Monitor.Concurrency != 3 || defaults.Monitor.Threshold != 800*time.Millisecond || defaults.Monitor.AlertThreshold != 250*time.Millisecond || defaults.Monitor.ConsecutiveBadSamples != 3 || defaults.Monitor.MinImprovement != 100*time.Millisecond || defaults.Monitor.Cooldown != 10*time.Minute || defaults.Monitor.Jitter != 15*time.Second {
 		t.Fatalf("monitor policy defaults = %+v", defaults.Monitor)
 	}
-	writeFile(t, dir, "config.toml", "[monitor]\ntimeout = \"2s\"\nconcurrency = 4\nthreshold = \"600ms\"\nconsecutive_bad_samples = 2\nmin_improvement = \"150ms\"\ncooldown = \"0s\"\njitter = \"0s\"\n")
+	writeFile(t, dir, "config.toml", "[monitor]\ntest_url = \"http://cp.cloudflare.com/generate_204\"\ntimeout = \"2s\"\nconcurrency = 4\nthreshold = \"600ms\"\nconsecutive_bad_samples = 2\nmin_improvement = \"150ms\"\ncooldown = \"0s\"\njitter = \"0s\"\n")
 	configured, err := Load(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if configured.Monitor.Timeout != 2*time.Second || configured.Monitor.Concurrency != 4 || configured.Monitor.Threshold != 600*time.Millisecond || configured.Monitor.ConsecutiveBadSamples != 2 || configured.Monitor.MinImprovement != 150*time.Millisecond || configured.Monitor.Cooldown != 0 || configured.Monitor.Jitter != 0 {
+	if configured.Monitor.TestURL != "http://cp.cloudflare.com/generate_204" || configured.Monitor.Timeout != 2*time.Second || configured.Monitor.Concurrency != 4 || configured.Monitor.Threshold != 600*time.Millisecond || configured.Monitor.ConsecutiveBadSamples != 2 || configured.Monitor.MinImprovement != 150*time.Millisecond || configured.Monitor.Cooldown != 0 || configured.Monitor.Jitter != 0 {
 		t.Fatalf("configured monitor policy = %+v", configured.Monitor)
 	}
 	writeFile(t, dir, "config.toml", "[monitor]\ninterval = \"1s\"\n")
@@ -123,21 +123,21 @@ func TestPatchSettingsPersistsMonitorPolicy(t *testing.T) {
 
 func TestLoadRejectsInvalidMonitorPolicyLimits(t *testing.T) {
 	for name, setting := range map[string]string{
-		"blank test URL":         "test_url = \"\"",
-		"insecure test URL":      "test_url = \"http://example.com\"",
-		"fragmented test URL":    "test_url = \"https://example.com/204#fragment\"",
-		"zero timeout":           "timeout = \"0s\"",
-		"timeout after interval": "timeout = \"6m\"",
-		"zero concurrency":       "concurrency = 0",
-		"excess concurrency":     "concurrency = 65",
-		"zero bad samples":       "consecutive_bad_samples = 0",
-		"excess bad samples":     "consecutive_bad_samples = 6",
-		"negative cooldown":      "cooldown = \"-1s\"",
-		"excess jitter":          "jitter = \"5m\"",
-		"interval over one day":  "interval = \"25h\"",
-		"zero switch threshold":  "threshold = \"0s\"",
-		"zero improvement":       "min_improvement = \"0s\"",
-		"negative jitter":        "jitter = \"-1s\"",
+		"blank test URL":              "test_url = \"\"",
+		"unsupported test URL scheme": "test_url = \"ftp://example.com\"",
+		"fragmented test URL":         "test_url = \"https://example.com/204#fragment\"",
+		"zero timeout":                "timeout = \"0s\"",
+		"timeout after interval":      "timeout = \"6m\"",
+		"zero concurrency":            "concurrency = 0",
+		"excess concurrency":          "concurrency = 65",
+		"zero bad samples":            "consecutive_bad_samples = 0",
+		"excess bad samples":          "consecutive_bad_samples = 6",
+		"negative cooldown":           "cooldown = \"-1s\"",
+		"excess jitter":               "jitter = \"5m\"",
+		"interval over one day":       "interval = \"25h\"",
+		"zero switch threshold":       "threshold = \"0s\"",
+		"zero improvement":            "min_improvement = \"0s\"",
+		"negative jitter":             "jitter = \"-1s\"",
 	} {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()

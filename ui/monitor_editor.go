@@ -19,8 +19,8 @@ type monitorPolicyInput struct {
 func monitorPolicyPatch(input monitorPolicyInput) (*ipc.ConfigPatch, error) {
 	rawURL := strings.TrimSpace(input.TestURL)
 	parsed, err := url.Parse(rawURL)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" || strings.ContainsAny(rawURL, "\x00\r\n") {
-		return nil, fmt.Errorf("test URL must be HTTPS without credentials or fragment")
+	if err != nil || strings.ContainsAny(input.TestURL, "\x00\r\n#") || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" || parsed.Opaque != "" {
+		return nil, fmt.Errorf("test URL must use HTTP or HTTPS without credentials or fragment")
 	}
 	parse := func(label, text string, min, max uint64) (*uint32, error) {
 		value, err := strconv.ParseUint(strings.TrimSpace(text), 10, 32)
@@ -63,14 +63,15 @@ func monitorPolicyPatch(input monitorPolicyInput) (*ipc.ConfigPatch, error) {
 
 func (p *settingsPage) editMonitorPolicy() {
 	state := p.monitorState
-	items := make([]*widget.FormItem, 0, 10)
+	items := make([]*widget.FormItem, 0, 11)
 	add := func(label, value string) *widget.Entry {
 		field := widget.NewEntry()
 		field.SetText(value)
 		items = append(items, widget.NewFormItem(label, field))
 		return field
 	}
-	testURL := add("HTTPS test URL", state.TestURL)
+	testURL := add("Probe URL", state.TestURL)
+	items = append(items, widget.NewFormItem("Warning", widget.NewLabel("Plain HTTP probes can be intercepted; use HTTPS for probe integrity.")))
 	interval := add("Interval (seconds)", strconv.FormatInt(state.IntervalSeconds, 10))
 	timeout := add("Timeout (ms)", strconv.FormatInt(state.TimeoutMillis, 10))
 	concurrency := add("Concurrent probes", strconv.Itoa(state.Concurrency))

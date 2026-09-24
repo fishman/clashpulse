@@ -5,15 +5,40 @@
 # Rule types: domain, ipcidr, or classical (classical cannot use mrs).
 # Local sources use absolute paths; Windows network shares are not local.
 #
-# [[resource]]
-# id = "cn"
-# kind = "rule-set"
-# format = "yaml"
-# rule_type = "domain"
-# url = "https://example.invalid/reviewed-cn.yaml"
-# enabled = false
-# interval = "12h"
-# sha256 = "" # Optional 64-hex SHA-256 pin; mismatches retain prior bytes.
+[[resource]]
+id = "geoip"
+kind = "geoip.dat"
+format = "dat"
+url = "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat"
+enabled = false
+interval = "24h"
+
+[[resource]]
+id = "geosite"
+kind = "geosite.dat"
+format = "dat"
+url = "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
+enabled = false
+interval = "24h"
+
+[[resource]]
+id = "country"
+kind = "Country.mmdb"
+format = "mmdb"
+url = "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb"
+enabled = false
+interval = "24h"
+
+# Opt-in China-domain rule-set from MetaCubeX's mutable meta branch.
+# Choose a filter target or DNS routing before enabling it.
+[[resource]]
+id = "cn"
+kind = "rule-set"
+format = "mrs"
+rule_type = "domain"
+url = "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"
+enabled = false
+interval = "24h"
 #
 # [[resolver_set]]
 # id = "domestic"

@@ -119,7 +119,7 @@ binary = "system"
 
 [monitor]
 enabled = true
-test_url = "https://example.invalid/generate_204"
+test_url = "http://cp.cloudflare.com/generate_204"
 interval = "5m"
 
 # subscriptions.toml

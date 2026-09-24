@@ -59,8 +59,30 @@ func TestRunAtSeedsPrivateConfigWithoutReplacingUserEdits(t *testing.T) {
 			t.Fatalf("seed %s is not private: %v, %v", name, info, err)
 		}
 	}
-	if snapshot, err := config.Load(configDir); err != nil || len(snapshot.Subscriptions) != 0 || len(snapshot.Resources) != 0 || len(snapshot.Filters) != 0 {
-		t.Fatalf("seed enabled an unreviewed source: %+v, %v", snapshot, err)
+	snapshot, err := config.Load(configDir)
+	if err != nil || len(snapshot.Subscriptions) != 0 || len(snapshot.Filters) != 0 || len(snapshot.Resources) != 4 {
+		t.Fatalf("seed catalog is incomplete or enabled unrelated sources: %+v, %v", snapshot, err)
+	}
+	if snapshot.Monitor.TestURL != "http://cp.cloudflare.com/generate_204" {
+		t.Fatalf("seeded latency URL = %q", snapshot.Monitor.TestURL)
+	}
+	want := map[string]string{
+		"geoip":   "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat",
+		"geosite": "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat",
+		"country": "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb",
+		"cn":      "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs",
+	}
+	for _, resource := range snapshot.Resources {
+		if resource.Enabled || resource.URL != want[resource.ID] || resource.Interval != 24*time.Hour {
+			t.Fatalf("unreviewed or automatically enabled geodata source: %+v", resource)
+		}
+		if resource.ID == "cn" && (resource.Kind != config.ResourceRuleSet || resource.Format != config.FormatMRS || resource.RuleType != config.RuleDomain) {
+			t.Fatalf("CN source cannot generate a domain MRS rule-set: %+v", resource)
+		}
+		delete(want, resource.ID)
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing geodata sources: %+v", want)
 	}
 	custom := []byte("[mihomo]\nbinary = \"system\"\n# user-preserved\n")
 	if err := config.Write(filepath.Join(configDir, "config.toml"), custom); err != nil {

@@ -1685,6 +1685,10 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 		return rows
 	case TabSettings:
 		monitor := snapshot.Monitor
+		testURL := monitor.TestURL
+		if len(testURL) >= 7 && strings.EqualFold(testURL[:7], "http://") {
+			testURL += " | plain HTTP can be intercepted"
+		}
 		rows := []Row{
 			{ID: "setting:binary", Title: "Mihomo binary", Detail: binaryDetail(snapshot.Binary.Desired, snapshot.Binary.ObservedVersion, snapshot.Binary.LastCompatibilityFailure, snapshot.Binary.Capabilities) + " | press Enter or b to change", kind: rowSettingBinary},
 			{ID: "setting:system-proxy", Title: "System proxy", Detail: fmt.Sprintf("requested %t | active %t | e enable, d disable", snapshot.SystemProxy.Enabled, snapshot.SystemProxy.Active)},
@@ -1694,7 +1698,7 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 			id, title, value, key string
 			field                 monitorField
 		}{
-			{"setting:monitor:test-url", "Monitor test URL", monitor.TestURL, "u", monitorTestURL},
+			{"setting:monitor:test-url", "Monitor test URL", testURL, "u", monitorTestURL},
 			{"setting:interval", "Monitor interval", strconv.FormatInt(monitor.IntervalSeconds, 10) + " seconds", "i", monitorInterval},
 			{"setting:monitor:timeout", "Monitor timeout", strconv.FormatInt(monitor.TimeoutMillis, 10) + " ms", "o", monitorTimeout},
 			{"setting:monitor:concurrency", "Monitor concurrency", strconv.Itoa(monitor.Concurrency), "c", monitorConcurrency},

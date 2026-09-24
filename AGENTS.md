@@ -170,9 +170,12 @@ Mihomo `url-test` groups choose within their configured policy. For a managed
 that group is explicitly opted in. Manual selection disables automation for the
 group until the user re-enables it.
 
-A probe policy contains: HTTPS test URL, interval, timeout, bounded
+A probe policy contains an HTTP or HTTPS test URL, interval, timeout, bounded
 concurrency, threshold, required consecutive bad samples, required improvement,
 and switch cooldown. Defaults must be conservative and visible.
+
+The user-approved default is `http://cp.cloudflare.com/generate_204`. Plain
+HTTP can be intercepted; latency is a routing signal, never an integrity check.
 
 - Measure through Mihomo's controller delay endpoint, not direct outbound HTTP;
   a direct request tests the wrong path.

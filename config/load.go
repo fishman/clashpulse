@@ -80,7 +80,7 @@ func applyDefaults(s *Snapshot) {
 		s.Mihomo.Binary = "system"
 	}
 	if s.Monitor.TestURL == "" {
-		s.Monitor.TestURL = "https://www.gstatic.com/generate_204"
+		s.Monitor.TestURL = "http://cp.cloudflare.com/generate_204"
 	}
 	if s.Monitor.Interval == 0 {
 		s.Monitor.Interval = 5 * time.Minute
@@ -301,7 +301,7 @@ func validateSnapshot(s Snapshot) error {
 }
 
 func validateMonitor(m Monitor) error {
-	if err := validateHTTPSURL(m.TestURL); err != nil {
+	if err := validateMonitorTestURL(m.TestURL); err != nil {
 		return fmt.Errorf("config.toml: monitor.test_url: %w", err)
 	}
 	if m.Interval < time.Second || m.Interval > maxMonitorInterval {
@@ -520,19 +520,13 @@ func validateMihomoBinary(binary string) error {
 	return nil
 }
 
-func validateHTTPSURL(raw string) error {
+func validateMonitorTestURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return err
 	}
-	if u.User != nil {
-		return fmt.Errorf("userinfo not allowed")
-	}
-	if u.Fragment != "" {
-		return fmt.Errorf("fragment not allowed")
-	}
-	if u.Scheme != "https" || u.Host == "" || u.Opaque != "" {
-		return fmt.Errorf("must use https")
+	if strings.ContainsAny(raw, "\x00\r\n#") || u.User != nil || u.Fragment != "" || u.Opaque != "" || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return fmt.Errorf("must use an HTTP or HTTPS URL without credentials or fragment")
 	}
 	return nil
 }

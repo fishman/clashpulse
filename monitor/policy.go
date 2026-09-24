@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -24,7 +25,7 @@ type Policy struct {
 
 func DefaultPolicy() Policy {
 	return Policy{
-		TestURL:               "https://www.gstatic.com/generate_204",
+		TestURL:               "http://cp.cloudflare.com/generate_204",
 		Interval:              5 * time.Minute,
 		Timeout:               5 * time.Second,
 		Concurrency:           3,
@@ -41,8 +42,8 @@ func DefaultPolicy() Policy {
 
 func (p Policy) Validate() error {
 	parsed, err := url.Parse(p.TestURL)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" {
-		return fmt.Errorf("monitor policy: test URL must be an HTTPS URL without credentials or fragment")
+	if err != nil || strings.ContainsAny(p.TestURL, "\x00\r\n#") || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" || parsed.Opaque != "" {
+		return fmt.Errorf("monitor policy: test URL must use HTTP or HTTPS without credentials or fragment")
 	}
 	if p.Interval <= 0 {
 		return fmt.Errorf("monitor policy: interval must be positive")

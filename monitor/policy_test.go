@@ -222,3 +222,21 @@ func TestLatencyAlertRecoversWithOneFastProxyDespiteOtherTimeout(t *testing.T) {
 		t.Fatalf("fast measured proxy did not clear all-slow alert: %+v, %+v", next, event)
 	}
 }
+
+func TestDefaultPolicyUsesApprovedHTTPProbeURL(t *testing.T) {
+	policy := DefaultPolicy()
+	if policy.TestURL != "http://cp.cloudflare.com/generate_204" {
+		t.Fatalf("default probe URL = %q", policy.TestURL)
+	}
+	if err := policy.Validate(); err != nil {
+		t.Fatalf("approved HTTP probe rejected: %v", err)
+	}
+	policy.TestURL = "ftp://cp.cloudflare.com/generate_204"
+	if err := policy.Validate(); err == nil {
+		t.Fatal("non-HTTP probe scheme accepted")
+	}
+	policy.TestURL = "http://user:secret@cp.cloudflare.com/generate_204"
+	if err := policy.Validate(); err == nil {
+		t.Fatal("probe URL credentials accepted")
+	}
+}

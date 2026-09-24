@@ -55,7 +55,14 @@ func TestIPCResourceAndFilterEditsPersistCrossFileIntent(t *testing.T) {
 	kind, format, ruleType := "rule-set", "yaml", "domain"
 	interval := uint32(3600)
 	send(ipc.Command{Kind: ipc.CommandPutResource, ResourceID: "cn", Resource: &ipc.ResourceEdit{Kind: &kind, Format: &format, RuleType: &ruleType, URL: &source, Enabled: new(true), IntervalSeconds: &interval}})
-	waitAppSnapshot(t, ctx, client, func(s core.Snapshot) bool { return len(s.Resources) == 1 && s.Resources[0].ID == "cn" })
+	waitAppSnapshot(t, ctx, client, func(s core.Snapshot) bool {
+		for _, resource := range s.Resources {
+			if resource.ID == "cn" && resource.Enabled {
+				return true
+			}
+		}
+		return false
+	})
 	target := "Proxy"
 	send(ipc.Command{Kind: ipc.CommandPutFilter, FilterID: "ads", Filter: &ipc.FilterEdit{ResourceID: new("cn"), Format: &format, Target: &target, Enabled: new(true)}})
 	state := waitAppSnapshot(t, ctx, client, func(s core.Snapshot) bool { return len(s.Filters) == 1 && s.Filters[0].ID == "ads" })
@@ -63,8 +70,19 @@ func TestIPCResourceAndFilterEditsPersistCrossFileIntent(t *testing.T) {
 		t.Fatalf("filter format is absent from client snapshot: %+v", state.Filters[0])
 	}
 	stored, err := config.Load(configDir)
-	if err != nil || len(stored.Resources) != 1 || stored.Resources[0].URL != source || len(stored.Filters) != 1 || stored.Filters[0].Resource != "cn" {
-		t.Fatalf("resource and filter intent not persisted: %+v %+v, %v", stored.Resources, stored.Filters, err)
+	if err != nil || len(stored.Filters) != 1 || stored.Filters[0].Resource != "cn" {
+		t.Fatalf("filter intent not persisted: %+v, %v", stored.Filters, err)
+	}
+	found := false
+	for _, resource := range stored.Resources {
+		if resource.ID == "cn" {
+			found = resource.Enabled && resource.URL == source && resource.Kind == config.ResourceRuleSet && resource.Format == config.FormatYAML
+		} else if resource.Enabled {
+			t.Fatalf("unrelated catalog source was enabled: %+v", resource)
+		}
+	}
+	if !found {
+		t.Fatalf("managed resource edit not persisted: %+v", stored.Resources)
 	}
 	send(ipc.Command{Kind: ipc.CommandPutFilter, FilterID: "ads", Filter: &ipc.FilterEdit{ResourceID: new("unknown")}})
 	state = waitAppSnapshot(t, ctx, client, func(s core.Snapshot) bool {

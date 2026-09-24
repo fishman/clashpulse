@@ -25,4 +25,6 @@ The GUI needs a graphical desktop session (X11 or Wayland on Linux). Its tray us
 
 In the GUI, add an HTTPS subscription, refresh it, then activate the downloaded profile. Open a second terminal for `./clashpulse tui`; the TUI connects to the running desktop service and does not start one itself. On Windows use `.\clashpulse.exe` and `.\clashpulse.exe tui`.
 
-First start seeds `config.toml`, `subscriptions.toml`, `resources.toml`, and `filters.toml` in the platform config directory (`~/.config/clashpulse` on Linux unless `$XDG_CONFIG_HOME` is set). Existing files are never replaced. The seeds come from [`examples/`](examples/); their example URLs are commented out.
+First start seeds `config.toml`, `subscriptions.toml`, `resources.toml`, and `filters.toml` in the platform config directory (`~/.config/clashpulse` on Linux unless `$XDG_CONFIG_HOME` is set). Existing files are never replaced. The seeds come from [`examples/`](examples/); data URLs are disabled until you enable them, and subscription/filter examples remain commented out.
+
+Proxy-delay tests default to Clash Verge's `http://cp.cloudflare.com/generate_204`, through Mihomo. Plain HTTP can be intercepted; change the URL in Settings if that matters.

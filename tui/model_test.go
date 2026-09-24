@@ -770,6 +770,19 @@ func TestSettingsRenderCurrentMonitorAndDNSPolicy(t *testing.T) {
 		}
 	}
 }
+
+func TestSettingsWarnsAboutPlainHTTPProbe(t *testing.T) {
+	model := NewModel().Apply(eventFromJSON(t, `{"Snapshot":{"Monitor":{"TestURL":"http://cp.cloudflare.com/generate_204"}}}`)).selectTab(TabSettings)
+	for _, row := range model.Rows() {
+		if row.ID == "setting:monitor:test-url" {
+			if !strings.Contains(row.Detail, "intercepted") {
+				t.Fatalf("plain HTTP risk is hidden: %q", row.Detail)
+			}
+			return
+		}
+	}
+	t.Fatal("monitor URL setting is missing")
+}
 func dnsPolicyModel(t *testing.T) Model {
 	t.Helper()
 	model := NewModel().Apply(eventFromJSON(t, `{"Snapshot":{"DNS":{"Listen":"127.0.0.1:1053","ResolverSets":[{"ID":"one","Endpoints":["udp://1.1.1.1:53"],"DNSCrypt":false},{"ID":"two","Endpoints":["udp://9.9.9.9:53"],"DNSCrypt":true}],"Routes":[{"Suffix":"example.com","ResolverSet":"one"},{"GeoSite":"geolocation-cn","ResolverSet":"two"}]}}}`))
