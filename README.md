@@ -21,8 +21,8 @@ The source build reports `clashpulse dev`. macOS needs Xcode Command Line Tools;
 ./clashpulse
 ```
 
-The GUI needs a graphical desktop session (X11 or Wayland on Linux).
+The GUI needs a graphical desktop session (X11 or Wayland on Linux). Its tray uses StatusNotifier; GNOME may need the [AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/) to show it.
 
 In the GUI, add an HTTPS subscription, refresh it, then activate the downloaded profile. Open a second terminal for `./clashpulse tui`; the TUI connects to the running desktop service and does not start one itself. On Windows use `.\clashpulse.exe` and `.\clashpulse.exe tui`.
 
-The TOML files in [`examples/`](examples/) show the editable configuration shape; their example URLs are not live sources.
+First start seeds `config.toml`, `subscriptions.toml`, `resources.toml`, and `filters.toml` in the platform config directory (`~/.config/clashpulse` on Linux unless `$XDG_CONFIG_HOME` is set). Existing files are never replaced. The seeds come from [`examples/`](examples/); their example URLs are commented out.

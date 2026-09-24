@@ -99,6 +99,9 @@ func RunAt(ctx context.Context, configDir, stateDir, endpoint string) error {
 	if err := privateDirectory(stateDir); err != nil {
 		return fmt.Errorf("clashpulse: state directory: %w", err)
 	}
+	if err := config.Seed(configDir); err != nil {
+		return fmt.Errorf("clashpulse: seed configuration: %w", err)
+	}
 	initial, err := config.Load(configDir)
 	if err != nil {
 		return err

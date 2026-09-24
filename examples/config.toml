@@ -4,7 +4,7 @@
 binary = "system" # "bundled" is explicit fallback; or an executable path.
 
 [monitor]
-enabled = true # Measures select-group members; automatic switching still needs group opt-in.
+enabled = true # Opted-in select groups are measured; manual probes need no opt-in.
 test_url = "https://www.gstatic.com/generate_204"
 interval = "5m"
 timeout = "5s"
