@@ -57,6 +57,8 @@ func TestLoadRejectsResolverSetMapAndEndpointIssues(t *testing.T) {
 		"[[resource]]",
 		"id = \"domestic\"",
 		"kind = \"rule-set\"",
+		"format = \"yaml\"",
+		"rule_type = \"domain\"",
 		"url = \"https://example.com/rule-set\"",
 		"enabled = true",
 		"",
@@ -83,16 +85,16 @@ func TestLoadRejectsResolverSetMapAndEndpointIssues(t *testing.T) {
 func TestLoadRejectsSchemesAsPathsAndRequiresFilterFormat(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "config.toml", "[mihomo]\nbinary = \"system\"\n")
-	writeFile(t, dir, "resources.toml", "[[resource]]\nid = \"geo\"\nkind = \"geosite.dat\"\nurl = \"http:/broken\"\nenabled = true\n")
+	writeFile(t, dir, "resources.toml", "[[resource]]\nid = \"geo\"\nkind = \"geosite.dat\"\nformat = \"dat\"\nurl = \"http:/broken\"\nenabled = true\n")
 	if _, err := Load(dir); err == nil || !strings.Contains(err.Error(), "url") {
 		t.Fatalf("malformed scheme accepted as path: %v", err)
 	}
 
 	dir = t.TempDir()
 	writeFile(t, dir, "config.toml", "[mihomo]\nbinary = \"system\"\n")
-	writeFile(t, dir, "resources.toml", "[[resource]]\nid = \"ads\"\nkind = \"rule-set\"\nurl = \"https://example.com/ads\"\nenabled = true\n")
-	writeFile(t, dir, "filters.toml", "[[filter]]\nid = \"ads\"\nresource = \"ads\"\nenabled = true\n")
-	if _, err := Load(dir); err == nil || !strings.Contains(err.Error(), "format") {
+	writeFile(t, dir, "resources.toml", "[[resource]]\nid = \"ads\"\nkind = \"rule-set\"\nformat = \"yaml\"\nrule_type = \"domain\"\nurl = \"https://example.com/ads\"\nenabled = true\n")
+	writeFile(t, dir, "filters.toml", "[[filter]]\nid = \"ads\"\nresource = \"ads\"\ntarget = \"Proxy\"\nenabled = true\n")
+	if _, err := Load(dir); err == nil || !strings.Contains(err.Error(), "filter.format") {
 		t.Fatalf("missing filter format accepted: %v", err)
 	}
 }
@@ -127,6 +129,8 @@ func TestLoadRejectsNonpositiveIntervalsAndTimeouts(t *testing.T) {
 		"[[resource]]",
 		"id = \"ads\"",
 		"kind = \"rule-set\"",
+		"format = \"yaml\"",
+		"rule_type = \"domain\"",
 		"url = \"https://example.com/ads\"",
 		"enabled = true",
 		"interval = \"0s\"",
@@ -135,9 +139,9 @@ func TestLoadRejectsNonpositiveIntervalsAndTimeouts(t *testing.T) {
 		"[[filter]]",
 		"id = \"ads\"",
 		"resource = \"ads\"",
-		"format = \"rule-set\"",
+		"format = \"yaml\"",
+		"target = \"Proxy\"",
 		"enabled = true",
-		"interval = \"0s\"",
 	}, "\n"))
 	if _, err := Load(dir); err == nil || !strings.Contains(err.Error(), "must be positive") {
 		t.Fatalf("nonpositive intervals/timeouts accepted: %v", err)

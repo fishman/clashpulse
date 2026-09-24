@@ -1,0 +1,10 @@
+# Filters reference a resource from resources.toml; no second downloader exists.
+# Target must name a proxy or group in the active source profile. Managed rules
+# are rendered before that profile's catch-all rule; the source is immutable.
+#
+# [[filter]]
+# id = "domestic-filter"
+# resource = "cn" # Stable ID of an enabled rule-set or rule-provider resource.
+# format = "yaml" # Must match the referenced resource format.
+# target = "Proxy" # Must exist in the active subscription profile.
+# enabled = false

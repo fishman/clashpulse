@@ -35,6 +35,12 @@ var newWatcher = func() (dirWatcher, error) {
 var loadSnapshotFn = Load
 
 func Watch(ctx context.Context, dir string, store *Store) error {
+	return WatchWithErrors(ctx, dir, store, nil)
+}
+
+// WatchWithErrors keeps the live store unchanged on invalid edits and reports
+// the complete-file validation failure without blocking the watcher.
+func WatchWithErrors(ctx context.Context, dir string, store *Store, onError func(error)) error {
 	if store == nil {
 		return nil
 	}
@@ -56,7 +62,12 @@ func Watch(ctx context.Context, dir string, store *Store) error {
 	workerCtx, cancelWorker := context.WithCancel(ctx)
 	defer cancelWorker()
 	reloadRequests := make(chan struct{}, 1)
-	go watchReloadWorker(workerCtx, dir, store, reloadRequests)
+	workerDone := make(chan struct{})
+	go func() {
+		defer close(workerDone)
+		watchReloadWorker(workerCtx, dir, store, reloadRequests, onError)
+	}()
+	defer func() { cancelWorker(); <-workerDone }()
 
 	var timer *time.Timer
 	var timerC <-chan time.Time
@@ -123,7 +134,7 @@ func Watch(ctx context.Context, dir string, store *Store) error {
 	}
 }
 
-func watchReloadWorker(ctx context.Context, dir string, store *Store, reloadRequests <-chan struct{}) {
+func watchReloadWorker(ctx context.Context, dir string, store *Store, reloadRequests <-chan struct{}, onError func(error)) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -131,6 +142,9 @@ func watchReloadWorker(ctx context.Context, dir string, store *Store, reloadRequ
 		case <-reloadRequests:
 			snap, err := loadSnapshotFn(dir)
 			if err != nil {
+				if onError != nil {
+					onError(err)
+				}
 				continue
 			}
 			store.Replace(snap)

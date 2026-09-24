@@ -25,9 +25,18 @@ type Mihomo struct {
 }
 
 type Monitor struct {
-	Enabled  bool
-	TestURL  string
-	Interval time.Duration
+	Enabled               bool
+	TestURL               string
+	Interval              time.Duration
+	Timeout               time.Duration
+	Concurrency           int
+	Threshold             time.Duration
+	AlertThreshold        time.Duration
+	ConsecutiveBadSamples int
+	MinImprovement        time.Duration
+	Cooldown              time.Duration
+	Jitter                time.Duration
+	AutomatedGroups       []string
 }
 
 type DNS struct {
@@ -48,9 +57,39 @@ type Subscription struct {
 	AllowInvalidTLS bool
 }
 
+type ResourceKind string
+
+const (
+	ResourceGeoIP        ResourceKind = "geoip.dat"
+	ResourceGeoSite      ResourceKind = "geosite.dat"
+	ResourceMMDB         ResourceKind = "Country.mmdb"
+	ResourceRuleSet      ResourceKind = "rule-set"
+	ResourceRuleProvider ResourceKind = "rule-provider"
+)
+
+type ResourceFormat string
+
+const (
+	FormatDAT  ResourceFormat = "dat"
+	FormatMMDB ResourceFormat = "mmdb"
+	FormatYAML ResourceFormat = "yaml"
+	FormatText ResourceFormat = "text"
+	FormatMRS  ResourceFormat = "mrs"
+)
+
+type RuleType string
+
+const (
+	RuleDomain    RuleType = "domain"
+	RuleIPCIDR    RuleType = "ipcidr"
+	RuleClassical RuleType = "classical"
+)
+
 type Resource struct {
 	ID       string
-	Kind     string
+	Kind     ResourceKind
+	Format   ResourceFormat
+	RuleType RuleType
 	URL      string
 	Enabled  bool
 	Interval time.Duration
@@ -60,6 +99,7 @@ type Resource struct {
 type ResolverSet struct {
 	ID        string
 	Endpoints []string
+	DNSCrypt  bool
 }
 
 type DNSRoute struct {
@@ -72,12 +112,9 @@ type DNSRoute struct {
 type Filter struct {
 	ID       string
 	Resource string
-	URL      string
-	Path     string
-	Format   string
+	Format   ResourceFormat
+	Target   string
 	Enabled  bool
-	Interval time.Duration
-	SHA256   string
 }
 
 type Change struct {
@@ -92,6 +129,7 @@ func cloneSnapshot(s Snapshot) Snapshot {
 	out.Subscriptions = cloneSubscriptions(s.Subscriptions)
 	out.Resources = cloneResources(s.Resources)
 	out.Filters = cloneFilters(s.Filters)
+	out.Monitor.AutomatedGroups = cloneStrings(s.Monitor.AutomatedGroups)
 	out.DNS.ResolverSets = cloneResolverSets(s.DNS.ResolverSets)
 	out.DNS.Routes = cloneDNSRoutes(s.DNS.Routes)
 	return out

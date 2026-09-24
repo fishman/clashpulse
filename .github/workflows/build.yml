@@ -1,0 +1,62 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+          - os: macos-latest
+            target: darwin
+          - os: windows-latest
+            target: windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Linux graphics headers
+        if: matrix.target == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev xorg-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libxxf86vm-dev
+      - name: Tests and vet
+        shell: bash
+        run: |
+          go test -tags ci ./...
+          go vet -tags ci ./...
+      - name: Native desktop package
+        shell: bash
+        run: |
+          mkdir -p package dist
+          case "${{ matrix.target }}" in
+            linux)
+              go build -o package/clashpulse ./cmd/clashpulse
+              cp THIRD_PARTY_LICENSES.txt package/
+              tar -czf dist/clashpulse-linux.tar.gz -C package .
+              ;;
+            darwin)
+              bundle=package/ClashPulse.app/Contents
+              mkdir -p "$bundle/MacOS" "$bundle/Resources"
+              go build -o "$bundle/MacOS/clashpulse" ./cmd/clashpulse
+              printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<plist version="1.0"><dict>' '<key>CFBundleIdentifier</key><string>io.github.fishman.clashpulse</string>' '<key>CFBundleName</key><string>ClashPulse</string>' '<key>CFBundleExecutable</key><string>clashpulse</string>' '<key>CFBundlePackageType</key><string>APPL</string>' '</dict></plist>' > "$bundle/Info.plist"
+              cp THIRD_PARTY_LICENSES.txt "$bundle/Resources/"
+              tar -czf dist/clashpulse-darwin.tar.gz -C package ClashPulse.app
+              ;;
+            windows)
+              go build -o package/clashpulse.exe ./cmd/clashpulse
+              cp THIRD_PARTY_LICENSES.txt package/
+              powershell.exe -NoProfile -Command "Compress-Archive -Path 'package/*' -DestinationPath 'dist/clashpulse-windows.zip'"
+              ;;
+          esac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clashpulse-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error

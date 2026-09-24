@@ -119,3 +119,25 @@ func TestProcessStopWaitsForChild(t *testing.T) {
 	t.Cleanup(func() { _ = process.Stop(context.Background()) })
 }
 
+func TestProcessExitedClosesAfterChildStops(t *testing.T) {
+	process := new(Process)
+	if process.Exited() != nil {
+		t.Fatal("idle process has an exit channel")
+	}
+	plan := StartPlan{Capability: Capability{Path: blockingBinary(t, filepath.Join(t.TempDir(), "args"))}, ConfigPath: "/tmp/config.yaml"}
+	if err := process.Start(context.Background(), plan); err != nil {
+		t.Fatal(err)
+	}
+	finished := process.Exited()
+	if finished == nil {
+		t.Fatal("running process has no exit channel")
+	}
+	if err := process.Stop(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-finished:
+	default:
+		t.Fatal("child exit was not published")
+	}
+}

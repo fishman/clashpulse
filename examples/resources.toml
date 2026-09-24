@@ -1,0 +1,28 @@
+# Declare data sources explicitly. No third-party URL is enabled by default.
+# Resource IDs determine private generated filenames; source bytes are not edited.
+# Formats: dat for geoip.dat/geosite.dat; mmdb for Country.mmdb;
+# yaml, text, or mrs for rule-set/rule-provider.
+# Rule types: domain, ipcidr, or classical (classical cannot use mrs).
+# Local sources use absolute paths; Windows network shares are not local.
+#
+# [[resource]]
+# id = "cn"
+# kind = "rule-set"
+# format = "yaml"
+# rule_type = "domain"
+# url = "https://example.invalid/reviewed-cn.yaml"
+# enabled = false
+# interval = "12h"
+# sha256 = "" # Optional 64-hex SHA-256 pin; mismatches retain prior bytes.
+#
+# [[resolver_set]]
+# id = "domestic"
+# endpoints = ["https://dns.example/dns-query"]
+# dnscrypt = false # true requires a reachable loopback UDP/TCP DNSCrypt listener.
+#
+# [[dns_route]]
+# resource = "cn" # Alternatively suffix = "example.cn" or geosite = "cn".
+# resolver_set = "domestic"
+#
+# DNS routing is not enabled until its resource, resolver, and route are
+# deliberately configured. No DNSCrypt process or system DNS redirect is run.

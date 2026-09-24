@@ -31,10 +31,11 @@ type Request struct {
 }
 
 type Response struct {
-	StatusCode   int
-	Body         []byte
-	ETag         string
-	LastModified string
+	StatusCode           int
+	Body                 []byte
+	ETag                 string
+	LastModified         string
+	SubscriptionUserInfo string
 }
 
 type Factory func(Route) (http.RoundTripper, error)
@@ -94,14 +95,13 @@ func (c *Client) Fetch(ctx context.Context, req Request) (Response, error) {
 			continue
 		}
 		if response.StatusCode == http.StatusNotModified {
-			etag := response.Header.Get("ETag")
-			lastModified := response.Header.Get("Last-Modified")
+			etag, lastModified := scopedValidators(response.Header, current, origin)
 			response.Body.Close()
-			return Response{StatusCode: http.StatusNotModified, ETag: etag, LastModified: lastModified}, nil
+			return Response{StatusCode: http.StatusNotModified, ETag: etag, LastModified: lastModified, SubscriptionUserInfo: boundedUsageHeader(response.Header.Get("Subscription-Userinfo"))}, nil
 		}
 		if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 			response.Body.Close()
-			return Response{}, fmt.Errorf("download: unexpected status %s", response.Status)
+			return Response{}, fmt.Errorf("download: unexpected status %d", response.StatusCode)
 		}
 
 		body, err := readBody(ctx, response.Body, req.MaxBytes)
@@ -109,11 +109,13 @@ func (c *Client) Fetch(ctx context.Context, req Request) (Response, error) {
 		if err != nil {
 			return Response{}, err
 		}
+		etag, lastModified := scopedValidators(response.Header, current, origin)
 		return Response{
-			StatusCode:   response.StatusCode,
-			Body:         body,
-			ETag:         response.Header.Get("ETag"),
-			LastModified: response.Header.Get("Last-Modified"),
+			StatusCode:           response.StatusCode,
+			Body:                 body,
+			ETag:                 etag,
+			LastModified:         lastModified,
+			SubscriptionUserInfo: boundedUsageHeader(response.Header.Get("Subscription-Userinfo")),
 		}, nil
 	}
 }
@@ -140,7 +142,7 @@ func (c *Client) transport(route Route) (http.RoundTripper, error) {
 func (c *Client) do(ctx context.Context, client *http.Client, target *url.URL, req Request, origin originKey) (*http.Response, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("download: request: %w", err)
+		return nil, fmt.Errorf("download: invalid request")
 	}
 	if sameOrigin(target, origin) {
 		if req.ETag != "" {
@@ -152,9 +154,19 @@ func (c *Client) do(ctx context.Context, client *http.Client, target *url.URL, r
 	}
 	response, err := client.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("download: request: %w", err)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("download: request failed")
 	}
 	return response, nil
+}
+
+func scopedValidators(headers http.Header, final *url.URL, original originKey) (string, string) {
+	if !sameOrigin(final, original) {
+		return "", ""
+	}
+	return headers.Get("ETag"), headers.Get("Last-Modified")
 }
 
 type originKey struct {
@@ -197,7 +209,7 @@ func parseURL(raw string, allowHTTP bool) (*url.URL, error) {
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("download: invalid url")
 	}
 	return validateURL(u, allowHTTP)
 }
@@ -205,7 +217,7 @@ func parseURL(raw string, allowHTTP bool) (*url.URL, error) {
 func resolveRedirect(base *url.URL, location string, allowHTTP bool) (*url.URL, error) {
 	next, err := url.Parse(location)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("download: invalid redirect url")
 	}
 	if !next.IsAbs() {
 		next = base.ResolveReference(next)
@@ -253,6 +265,9 @@ func readBody(ctx context.Context, body io.Reader, maxBytes int64) ([]byte, erro
 			return nil, err
 		}
 		n, err := body.Read(chunk)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if n > 0 {
 			size += int64(n)
 			if size > maxBytes {
@@ -267,4 +282,11 @@ func readBody(ctx context.Context, body io.Reader, maxBytes int64) ([]byte, erro
 			return nil, fmt.Errorf("download: read body: %w", err)
 		}
 	}
+}
+
+func boundedUsageHeader(value string) string {
+	if len(value) > 1024 {
+		return ""
+	}
+	return value
 }

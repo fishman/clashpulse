@@ -1,0 +1,24 @@
+# ClashPulse user intent. Save all four files together in the private config dir.
+# Defaults: system Mihomo, enabled health monitoring, disabled system proxy, loopback DNS.
+[mihomo]
+binary = "system" # "bundled" is explicit fallback; or an executable path.
+
+[monitor]
+enabled = true # Measures select-group members; automatic switching still needs group opt-in.
+test_url = "https://www.gstatic.com/generate_204"
+interval = "5m"
+timeout = "5s"
+concurrency = 3 # Hard upper bound: 64 concurrent controller probes.
+threshold = "800ms" # Selected proxy latency threshold for automatic switching.
+alert_threshold = "250ms" # Notify only if all measured candidates exceed this.
+consecutive_bad_samples = 3
+min_improvement = "100ms"
+cooldown = "10m"
+jitter = "15s"
+automated_groups = [] # Opaque group IDs shown by IPC/UI; manual selection removes opt-in.
+
+[dns]
+listen = "127.0.0.1:1053" # No privileged port or system DNS redirect is enabled implicitly.
+
+[system_proxy]
+enabled = false # Applied only after Mihomo controller and proxy are ready.

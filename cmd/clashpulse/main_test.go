@@ -78,3 +78,13 @@ func TestRunWithoutArgsUsesAppRun(t *testing.T) {
 		t.Fatalf("stderr = %q, want %q", got, "not initialized\n")
 	}
 }
+
+func TestRunWithoutArgsStartsDesktopClient(t *testing.T) {
+	var desktopCalls, serviceCalls int
+	code := runMainContextWithDesktop(context.Background(), nil, new(bytes.Buffer), new(bytes.Buffer),
+		func(context.Context) error { serviceCalls++; return nil },
+		func(context.Context, func(context.Context) error) error { desktopCalls++; return nil })
+	if code != 0 || desktopCalls != 1 || serviceCalls != 0 {
+		t.Fatalf("exit %d, desktop calls %d, direct service calls %d", code, desktopCalls, serviceCalls)
+	}
+}

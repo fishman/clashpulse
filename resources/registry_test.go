@@ -1,0 +1,387 @@
+package resources
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/fishman/clashpulse/config"
+	"github.com/fishman/clashpulse/download"
+)
+
+func TestPinnedResourceMismatchRetainsPreviousGeneration(t *testing.T) {
+	knownGood := []byte("payload:\n  - +.example.com\n")
+	badUpdate := []byte("payload:\n  - +.other.example\n")
+	body := knownGood
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(body)
+	}))
+	defer server.Close()
+	transport := server.Client().Transport
+	client := download.NewClient(func(download.Route) (http.RoundTripper, error) {
+		return transport, nil
+	})
+	registry, err := NewRegistry(t.TempDir(), client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	goodHash := sha256.Sum256(knownGood)
+	resource := config.Resource{
+		ID: "domain-list", Kind: config.ResourceRuleSet, Format: config.FormatYAML,
+		RuleType: config.RuleDomain, URL: server.URL, Enabled: true,
+		SHA256: hex.EncodeToString(goodHash[:]),
+	}
+	snapshot := config.Snapshot{Resources: []config.Resource{resource}}
+	first, err := registry.Stage(context.Background(), snapshot, download.Direct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.Commit(); !errors.Is(err, ErrPlanUnvalidated) {
+		t.Fatalf("committed unvalidated plan: %v", err)
+	}
+	if err := first.Validate(func(home string, paths map[string]string) error {
+		if home != first.Home() || paths[resource.ID] == "" {
+			t.Fatal("candidate validator received incomplete generation")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	paths, err := first.Commit()
+	if err != nil {
+		t.Fatalf("initial commit: %v", err)
+	}
+	path := paths[resource.ID]
+	before, err := os.ReadFile(path)
+	if err != nil || string(before) != string(knownGood) {
+		t.Fatalf("initial content = %q, err = %v", before, err)
+	}
+	oldHome := filepath.Dir(path)
+
+	body = badUpdate
+	resource.SHA256 = strings.Repeat("0", 64)
+	snapshot.Resources[0] = resource
+	_, err = registry.Stage(context.Background(), snapshot, download.Direct)
+	if !errors.Is(err, ErrPinMismatch) {
+		t.Fatalf("mismatch error = %v", err)
+	}
+	activePaths, err := registry.Paths(config.Snapshot{Resources: []config.Resource{{
+		ID: "domain-list", Kind: config.ResourceRuleSet, Format: config.FormatYAML,
+		RuleType: config.RuleDomain, URL: server.URL, Enabled: true,
+	}}})
+	if err != nil {
+		t.Fatalf("active generation after mismatch: %v", err)
+	}
+	if filepath.Dir(activePaths["domain-list"]) != oldHome {
+		t.Fatalf("active generation changed after pin mismatch: %q -> %q", oldHome, activePaths["domain-list"])
+	}
+	statusResource := resource
+	statusResource.SHA256 = ""
+	statuses, err := registry.Status(config.Snapshot{Resources: []config.Resource{statusResource}})
+	if err != nil {
+		t.Fatalf("resource status: %v", err)
+	}
+	if len(statuses) != 1 || !statuses[0].Validated || statuses[0].SHA256 != hex.EncodeToString(goodHash[:]) || statuses[0].LastSuccess.IsZero() || statuses[0].LastFailure != ErrPinMismatch.Error() {
+		t.Fatalf("resource status = %+v", statuses)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || string(after) != string(knownGood) {
+		t.Fatalf("known-good content after mismatch = %q, err = %v", after, err)
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0o400 {
+		t.Fatalf("committed file mode = %v, err = %v", info, err)
+	}
+}
+
+func TestChangedSourceDoesNotValidatePreviousGeneration(t *testing.T) {
+	knownGood := []byte("payload:\n  - +.example.com\n")
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(knownGood)
+	}))
+	defer server.Close()
+	client := download.NewClient(func(download.Route) (http.RoundTripper, error) {
+		return server.Client().Transport, nil
+	})
+	registry, err := NewRegistry(t.TempDir(), client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resource := config.Resource{
+		ID: "domains", Kind: config.ResourceRuleSet, Format: config.FormatYAML,
+		RuleType: config.RuleDomain, URL: server.URL, Enabled: true,
+	}
+	oldSnapshot := config.Snapshot{Resources: []config.Resource{resource}}
+	plan, err := registry.Stage(context.Background(), oldSnapshot, download.Direct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := plan.Validate(func(string, map[string]string) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	oldPaths, err := plan.Commit()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resource.URL += "/changed-source"
+	changedSnapshot := config.Snapshot{Resources: []config.Resource{resource}}
+	if _, _, err := registry.PathsWithHome(changedSnapshot); err == nil {
+		t.Fatal("resolved previous bytes for a changed source")
+	}
+	statuses, err := registry.Status(changedSnapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(statuses) != 1 || statuses[0].Validated {
+		t.Fatalf("changed-source status = %+v", statuses)
+	}
+
+	oldCurrent, err := registry.Paths(oldSnapshot)
+	if err != nil || oldCurrent[resource.ID] != oldPaths[resource.ID] {
+		t.Fatalf("old active paths = %v, err = %v", oldCurrent, err)
+	}
+	data, err := os.ReadFile(oldPaths[resource.ID])
+	if err != nil || string(data) != string(knownGood) {
+		t.Fatalf("old active bytes = %q, err = %v", data, err)
+	}
+}
+
+func TestCandidateValidationFailurePreservesCommittedGeneration(t *testing.T) {
+	body := []byte("payload:\n  - +.example.com\n")
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(body) }))
+	defer server.Close()
+	client := download.NewClient(func(download.Route) (http.RoundTripper, error) { return server.Client().Transport, nil })
+	registry, err := NewRegistry(t.TempDir(), client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resource := config.Resource{ID: "domains", Kind: config.ResourceRuleSet, Format: config.FormatYAML, RuleType: config.RuleDomain, URL: server.URL, Enabled: true}
+	snapshot := config.Snapshot{Resources: []config.Resource{resource}}
+	first, err := registry.Stage(context.Background(), snapshot, download.Direct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Validate(func(string, map[string]string) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	oldPaths, err := first.Commit()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body = []byte("payload:\n  - +.new.example\n")
+	second, err := registry.Stage(context.Background(), snapshot, download.Direct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := second.Validate(func(string, map[string]string) error { return errors.New("mihomo config rejected") }); err == nil {
+		t.Fatal("accepted failed candidate validation")
+	}
+	if _, err := second.Commit(); !errors.Is(err, ErrPlanUnvalidated) {
+		t.Fatalf("failed validation remained committable: %v", err)
+	}
+	current, err := registry.Paths(snapshot)
+	if err != nil || current[resource.ID] != oldPaths[resource.ID] {
+		t.Fatalf("active paths after validation error = %v, err = %v", current, err)
+	}
+	if err := second.Abort(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRollbackRestoresPreviousGenerationAfterReadinessFailure(t *testing.T) {
+	body := []byte("payload:\n  - +.example.com\n")
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(body) }))
+	defer server.Close()
+	client := download.NewClient(func(download.Route) (http.RoundTripper, error) { return server.Client().Transport, nil })
+	registry, err := NewRegistry(t.TempDir(), client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resource := config.Resource{ID: "domains", Kind: config.ResourceRuleSet, Format: config.FormatYAML, RuleType: config.RuleDomain, URL: server.URL, Enabled: true}
+	snapshot := config.Snapshot{Resources: []config.Resource{resource}}
+	first, err := registry.Stage(context.Background(), snapshot, download.Direct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Validate(func(string, map[string]string) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	oldPaths, err := first.Commit()
+	if err != nil {
+		t.Fatal(err)
+	}
+	body = []byte("payload:\n  - +.other.example\n")
+	second, err := registry.Stage(context.Background(), snapshot, download.Direct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := second.Validate(func(string, map[string]string) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := second.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := second.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	current, err := registry.Paths(snapshot)
+	if err != nil || current[resource.ID] != oldPaths[resource.ID] {
+		t.Fatalf("paths after rollback = %v, err = %v", current, err)
+	}
+}
+
+func TestPromotionsPruneSupersededGenerationsAndRetainRunningHome(t *testing.T) {
+	bodies := [][]byte{
+		[]byte("payload:\n  - +.one.example\n"),
+		[]byte("payload:\n  - +.two.example\n"),
+		[]byte("payload:\n  - +.three.example\n"),
+		[]byte("payload:\n  - +.four.example\n"),
+	}
+	body := bodies[0]
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(body)
+	}))
+	defer server.Close()
+	client := download.NewClient(func(download.Route) (http.RoundTripper, error) {
+		return server.Client().Transport, nil
+	})
+	registry, err := NewRegistry(t.TempDir(), client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreignDirectory := filepath.Join(registry.root, "leave-alone")
+	if err := os.Mkdir(foreignDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	resource := config.Resource{ID: "domains", Kind: config.ResourceRuleSet, Format: config.FormatYAML, RuleType: config.RuleDomain, URL: server.URL, Enabled: true}
+	snapshot := config.Snapshot{Resources: []config.Resource{resource}}
+	var previousPath, firstPath string
+	var release, releaseAgain func()
+	for i, currentBody := range bodies {
+		body = currentBody
+		plan, err := registry.Stage(context.Background(), snapshot, download.Direct)
+		if err != nil {
+			t.Fatalf("stage promotion %d: %v", i, err)
+		}
+		if err := plan.Validate(func(string, map[string]string) error { return nil }); err != nil {
+			t.Fatalf("validate promotion %d: %v", i, err)
+		}
+		paths, err := plan.Commit()
+		if err != nil {
+			t.Fatalf("commit promotion %d: %v", i, err)
+		}
+		activeHome, err := registry.ActiveHome()
+		if err != nil || activeHome != plan.Home() || filepath.Dir(paths[resource.ID]) != activeHome {
+			t.Fatalf("active generation after promotion %d = %q, paths=%v, err=%v", i, activeHome, paths, err)
+		}
+		activeBytes, err := os.ReadFile(paths[resource.ID])
+		if err != nil || string(activeBytes) != string(currentBody) {
+			t.Fatalf("active resource after promotion %d = %q, err=%v", i, activeBytes, err)
+		}
+		if previousPath != "" {
+			previousBytes, err := os.ReadFile(previousPath)
+			if err != nil || string(previousBytes) != string(bodies[i-1]) {
+				t.Fatalf("running generation resource after promotion %d = %q, err=%v", i, previousBytes, err)
+			}
+		}
+		generations, err := os.ReadDir(registry.root)
+		if err != nil || len(generations) > 4 {
+			t.Fatalf("generation count after promotion %d = %d, err=%v", i, len(generations), err)
+		}
+		if i >= 2 {
+			if _, err := os.Stat(firstPath); err != nil {
+				t.Fatalf("pinned running generation was removed: %v", err)
+			}
+		}
+		previousPath = paths[resource.ID]
+		if i == 0 {
+			firstPath = previousPath
+			release, err = registry.AcquireGeneration(activeHome)
+			if err != nil {
+				t.Fatalf("acquire running generation: %v", err)
+			}
+			releaseAgain, err = registry.AcquireGeneration(activeHome)
+			if err != nil {
+				t.Fatalf("acquire second running-generation lease: %v", err)
+			}
+		}
+	}
+	if release == nil {
+		t.Fatal("running generation lease was not acquired")
+	}
+	body = []byte("payload:\n  - +.rollback.example\n")
+	rollbackPlan, err := registry.Stage(context.Background(), snapshot, download.Direct)
+	if err != nil {
+		t.Fatalf("stage rollback candidate: %v", err)
+	}
+	if err := rollbackPlan.Validate(func(string, map[string]string) error { return nil }); err != nil {
+		t.Fatalf("validate rollback candidate: %v", err)
+	}
+	rollbackPaths, err := rollbackPlan.Commit()
+	if err != nil {
+		t.Fatalf("commit rollback candidate: %v", err)
+	}
+	rollbackRelease, err := registry.AcquireGeneration(rollbackPlan.Home())
+	if err != nil {
+		t.Fatalf("acquire rollback candidate: %v", err)
+	}
+	rollbackPath := rollbackPaths[resource.ID]
+	if err := rollbackPlan.Rollback(); err != nil {
+		t.Fatalf("rollback candidate: %v", err)
+	}
+	if err := rollbackPlan.Abort(); err != nil {
+		t.Fatalf("abort pinned rollback candidate: %v", err)
+	}
+	if rollbackBytes, err := os.ReadFile(rollbackPath); err != nil || string(rollbackBytes) != string(body) {
+		t.Fatalf("pinned rollback resource = %q, err=%v", rollbackBytes, err)
+	}
+	rollbackRelease()
+	release()
+	body = []byte("payload:\n  - +.partially-released.example\n")
+	plan, err := registry.Stage(context.Background(), snapshot, download.Direct)
+	if err != nil {
+		t.Fatalf("stage after partial release: %v", err)
+	}
+	if err := plan.Validate(func(string, map[string]string) error { return nil }); err != nil {
+		t.Fatalf("validate after partial release: %v", err)
+	}
+	if _, err := plan.Commit(); err != nil {
+		t.Fatalf("commit after partial release: %v", err)
+	}
+	if _, err := os.Stat(firstPath); err != nil {
+		t.Fatalf("generation removed before all leases released: %v", err)
+	}
+	releaseAgain()
+	body = []byte("payload:\n  - +.released.example\n")
+	plan, err = registry.Stage(context.Background(), snapshot, download.Direct)
+	if err != nil {
+		t.Fatalf("stage after release: %v", err)
+	}
+	if err := plan.Validate(func(string, map[string]string) error { return nil }); err != nil {
+		t.Fatalf("validate after release: %v", err)
+	}
+	if _, err := plan.Commit(); err != nil {
+		t.Fatalf("commit after release: %v", err)
+	}
+	if _, err := os.Stat(firstPath); !os.IsNotExist(err) {
+		t.Fatalf("released generation still exists: err=%v", err)
+	}
+	if _, err := os.Stat(rollbackPath); !os.IsNotExist(err) {
+		t.Fatalf("released rollback generation still exists: err=%v", err)
+	}
+	if generations, err := os.ReadDir(registry.root); err != nil || len(generations) > 3 {
+		t.Fatalf("generation count after release = %d, err=%v", len(generations), err)
+	}
+	if info, err := os.Stat(foreignDirectory); err != nil || !info.IsDir() {
+		t.Fatalf("unmanaged generation-root entry was removed: info=%v, err=%v", info, err)
+	}
+}

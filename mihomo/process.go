@@ -21,6 +21,13 @@ type Process struct {
 	done chan struct{}
 }
 
+// Exited reports the current child's completion; nil means no child is running.
+func (p *Process) Exited() <-chan struct{} {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.done
+}
+
 func (p *Process) Start(ctx context.Context, plan StartPlan) error {
 	if err := ctx.Err(); err != nil {
 		return err

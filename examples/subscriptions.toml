@@ -1,0 +1,14 @@
+# Subscription URLs are secrets. Keep this file 0600 and its directory 0700.
+# Save the latest short-lived URL, then request a refresh before it expires.
+# Activation is separate from refresh; refreshing does not switch Mihomo.
+#
+# [[subscription]]
+# id = "primary"                   # Stable ASCII ID; do not reuse it.
+# name = "Primary"                  # Safe display name.
+# url = "https://provider.example/profile?token=replace-me"
+# enabled = true
+# refresh_interval = "12h"         # Single shared timer schedules refreshes.
+# timeout = "30s"                  # Context bound includes download and validation.
+# route = "direct"                 # direct | system_proxy | mihomo_proxy
+# allow_http = false               # Explicit per-subscription exception only.
+# allow_invalid_tls = false        # Explicit per-subscription exception only.

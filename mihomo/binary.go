@@ -5,7 +5,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type Selection struct {
@@ -14,8 +18,11 @@ type Selection struct {
 }
 
 type Capability struct {
-	Path    string
-	Version string
+	Path               string
+	Version            string
+	SupportsGeoIPDat   bool
+	SupportsGeoSiteDat bool
+	SupportsMMDB       bool
 }
 
 func Resolve(selection Selection) (string, error) {
@@ -39,7 +46,9 @@ func Inspect(ctx context.Context, selection Selection) (Capability, error) {
 		return Capability{}, err
 	}
 
-	output, err := exec.CommandContext(ctx, path, "-v").Output()
+	command := exec.CommandContext(ctx, path, "-v")
+	command.WaitDelay = 200 * time.Millisecond
+	output, err := command.Output()
 	if err != nil {
 		return Capability{}, fmt.Errorf("inspect mihomo: %w", err)
 	}
@@ -47,7 +56,36 @@ func Inspect(ctx context.Context, selection Selection) (Capability, error) {
 	if version == "" {
 		return Capability{}, fmt.Errorf("inspect mihomo: empty version")
 	}
-	return Capability{Path: path, Version: version}, nil
+	dir, err := os.MkdirTemp("", "clashpulse-check-")
+	if err != nil {
+		return Capability{}, fmt.Errorf("inspect mihomo: create private check directory: %w", err)
+	}
+	defer os.RemoveAll(dir)
+	check := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(check, []byte("proxies:\n  - name: DIRECT\n    type: direct\n"), 0600); err != nil {
+		return Capability{}, fmt.Errorf("inspect mihomo: create check configuration: %w", err)
+	}
+	if err := exec.CommandContext(ctx, path, "-t", "-f", check).Run(); err != nil {
+		return Capability{}, fmt.Errorf("inspect mihomo: configuration check unsupported: %w", err)
+	}
+	geo := documentedGeodataVersion(version)
+	return Capability{Path: path, Version: version, SupportsGeoIPDat: geo, SupportsGeoSiteDat: geo, SupportsMMDB: geo}, nil
+}
+
+var mihomoVersion = regexp.MustCompile(`\bv(\d+)\.(\d+)\.(\d+)\b`)
+
+func documentedGeodataVersion(identity string) bool {
+	parts := mihomoVersion.FindStringSubmatch(identity)
+	if len(parts) != 4 {
+		return false
+	}
+	major, errMajor := strconv.Atoi(parts[1])
+	minor, errMinor := strconv.Atoi(parts[2])
+	patch, errPatch := strconv.Atoi(parts[3])
+	if errMajor != nil || errMinor != nil || errPatch != nil {
+		return false
+	}
+	return major == 1 && minor == 19 && patch == 31
 }
 
 func executable(path string) (string, error) {

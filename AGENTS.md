@@ -122,8 +122,9 @@ clients over the same versioned command and snapshot/event protocol.
 - IPC binds only to a per-user Unix domain socket on Unix and a per-user named
   pipe on Windows. Its containing directory is 0700; reject remote/TCP binds.
 - Authenticate peers using OS ownership and restrictive endpoint permissions.
-  Do not expose controller secrets, subscription URLs, or proxy credentials in
-  IPC messages or logs.
+  Controller secrets and proxy credentials never cross IPC. Subscription and
+  resource URLs may appear only in authenticated local edit command requests;
+  never include them in snapshots, events, responses, or logs.
 - Use a small request/response plus coalesced snapshot-event protocol. Commands
   cover lifecycle, configuration changes, manual probes, group selection, and
   automation settings. Events carry immutable state snapshots, never transport
@@ -452,6 +453,10 @@ test without explicit user approval.
   marker or co-author line in code commits.
 - ASCII in code and project prose. Comments explain only a non-obvious
   constraint, security boundary, or tradeoff.
+- After every implementation slice, perform a DRY pass before commit or
+  delivery. Consolidate repeated behavior at its existing owner, remove
+  obsolete paths, and use idiomatic small Go functions; do not abstract one-offs.
+  Re-run the formatter and focused behavioral check after the pass.
 - Do not add telemetry, crash upload, a cloud backend, automatic dependency
   updates, or subscription sharing without explicit user approval.
 - Do not claim a framework, dependency, Mihomo controller endpoint, or

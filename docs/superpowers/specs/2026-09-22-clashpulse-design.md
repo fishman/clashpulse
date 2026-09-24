@@ -293,8 +293,9 @@ child exit. TUN is out of scope.
 IPC uses a per-user Unix socket in a 0700 directory on Unix and a per-user named
 pipe on Windows. TCP listeners are forbidden. Endpoint permissions and OS peer
 ownership authenticate clients. The first message negotiates schema version;
-unsupported versions are rejected. Messages/logs never carry controller secrets,
-subscription URLs, profile content, or proxy credentials.
+unsupported versions are rejected. Controller secrets, profile content, and proxy
+credentials never cross IPC. Subscription and resource URLs may appear only in
+authenticated local edit requests, never snapshots, events, responses, or logs.
 
 Protocol surface is intentionally small:
 

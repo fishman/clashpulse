@@ -1,0 +1,346 @@
+package ui
+
+import (
+	"context"
+	"reflect"
+	"strconv"
+	"strings"
+	"sync/atomic"
+	"time"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/driver/desktop"
+	"fyne.io/fyne/v2/widget"
+
+	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/ipc"
+)
+
+const applicationID = "io.github.fishman.clashpulse"
+
+var viewNames = []string{"Overview", "Proxies", "Subscriptions", "Filter Lists", "Data Resources", "Settings"}
+
+// Run launches the Fyne desktop interface and connects it to the local service.
+// IPC requests and event processing run in background goroutines; the window
+// only receives immutable snapshot copies on Fyne's event loop.
+func Run(ctx context.Context, endpoint string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if ctx.Err() != nil {
+		return nil
+	}
+
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Fyne's default theme follows the operating system, including live desktop
+	// appearance changes. Do not set a fixed light or dark variant here.
+	a := app.NewWithID(applicationID)
+	w := a.NewWindow("ClashPulse")
+	w.Resize(fyne.NewSize(920, 640))
+
+	icon := appIcon()
+	a.SetIcon(icon)
+	desktopUI := newDesktopUI(runCtx, endpoint, w)
+	desktopUI.quit = a.Quit
+	tray, hasTray := a.(desktop.App)
+	if hasTray {
+		desktopUI.tray = tray
+		tray.SetSystemTrayMenu(desktopUI.trayMenu(core.Snapshot{}))
+		desktopUI.traySignature = trayStateSignature(core.Snapshot{}, false)
+		tray.SetSystemTrayIcon(icon)
+		tray.SetSystemTrayWindow(w)
+		w.SetCloseIntercept(w.Hide)
+	}
+
+	done := make(chan struct{})
+	ipcDone := make(chan struct{})
+	go func() { defer close(ipcDone); desktopUI.runIPC() }()
+	go func() {
+		select {
+		case <-runCtx.Done():
+			fyne.Do(a.Quit)
+		case <-done:
+		}
+	}()
+
+	w.Show()
+	a.Run()
+	desktopUI.stopped.Store(true)
+	cancel()
+	<-ipcDone
+	close(done)
+	return nil
+}
+
+type desktopUI struct {
+	ctx      context.Context
+	endpoint string
+
+	actions       chan ipc.Command
+	connected     bool
+	current       core.Snapshot
+	hasSnapshot   bool
+	stopped       atomic.Bool
+	tray          desktop.App
+	traySignature string
+	window        fyne.Window
+	quit          func()
+
+	connection *widget.Label
+	viewSelect *widget.Select
+	viewStack  *fyne.Container
+	views      map[string]fyne.CanvasObject
+
+	snapshotSummary *widget.Label
+	binarySummary   *widget.Label
+	switchSummary   *widget.Label
+	errorSummary    *widget.Label
+	proxyPage       *proxyPage
+	subPage         *subscriptionPage
+	resourcePage    *resourcePage
+	filterPage      *filterPage
+	settingsPage    *settingsPage
+}
+
+func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopUI {
+	d := &desktopUI{
+		window:     w,
+		ctx:        ctx,
+		endpoint:   endpoint,
+		actions:    make(chan ipc.Command, 32),
+		views:      make(map[string]fyne.CanvasObject),
+		connection: widget.NewLabel("Connecting to local service..."),
+	}
+	d.snapshotSummary = widget.NewLabel("Waiting for service snapshot")
+	d.binarySummary = widget.NewLabel("Binary status unavailable")
+	d.binarySummary.Wrapping = fyne.TextWrapWord
+	d.switchSummary = widget.NewLabel("No automatic switches recorded")
+	d.switchSummary.Wrapping = fyne.TextWrapWord
+	d.errorSummary = widget.NewLabel("No service errors")
+	d.errorSummary.Wrapping = fyne.TextWrapWord
+	d.proxyPage = newProxyPage(d.enqueue)
+	d.subPage = newSubscriptionPage(d.enqueue, w)
+	d.resourcePage = newResourcePage(d.enqueue, w)
+	d.filterPage = newFilterPage(d.enqueue, w)
+	d.settingsPage = newSettingsPage(d.enqueue, w)
+
+	d.views["Overview"] = d.overviewView()
+	d.views["Proxies"] = d.proxyPage.view
+	d.views["Subscriptions"] = d.subPage.view
+	d.views["Filter Lists"] = d.filterPage.view
+	d.views["Data Resources"] = d.resourcePage.view
+	d.views["Settings"] = d.settingsPage.view
+
+	d.viewSelect = widget.NewSelect(viewNames, d.showView)
+	d.viewSelect.Selected = viewNames[0]
+	d.viewSelect.PlaceHolder = "Choose a view"
+	d.viewSelect.Refresh()
+	d.viewStack = container.NewStack(d.views[viewNames[0]])
+	header := container.NewBorder(nil, nil, nil, d.connection, d.viewSelect)
+	w.SetContent(container.NewBorder(header, nil, nil, nil, d.viewStack))
+	return d
+}
+
+func (d *desktopUI) overviewView() fyne.CanvasObject {
+	title := widget.NewLabelWithStyle("Service overview", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	controls := container.NewGridWithColumns(2,
+		widget.NewButton("Start service", func() { d.enqueue(ipc.Command{Kind: ipc.CommandStart}) }),
+		widget.NewButton("Stop service", func() { d.enqueue(ipc.Command{Kind: ipc.CommandStop}) }),
+		widget.NewButton("Restart service", func() { d.enqueue(ipc.Command{Kind: ipc.CommandRestart}) }),
+		widget.NewButton("Reload configuration", func() { d.enqueue(ipc.Command{Kind: ipc.CommandReloadConfiguration}) }),
+	)
+	return container.NewVBox(title, d.snapshotSummary, d.binarySummary, d.switchSummary, d.errorSummary, controls)
+}
+
+func (d *desktopUI) showView(name string) {
+	view, ok := d.views[name]
+	if !ok {
+		return
+	}
+	if d.viewSelect.Selected != name {
+		d.viewSelect.Selected = name
+		d.viewSelect.Refresh()
+	}
+	d.viewStack.Objects = []fyne.CanvasObject{view}
+	d.viewStack.Refresh()
+}
+
+func (d *desktopUI) enqueue(command ipc.Command) {
+	if !d.connected {
+		d.connection.SetText("Disconnected")
+		return
+	}
+	select {
+	case d.actions <- command:
+	default:
+		d.connection.SetText("Action queue is busy")
+	}
+}
+
+func (d *desktopUI) runIPC() {
+	client, err := ipc.Dial(d.ctx, d.endpoint)
+	if err != nil {
+		d.postDisconnected()
+		return
+	}
+	defer client.Close()
+	snapshot, err := client.Snapshot(d.ctx)
+	if err != nil {
+		d.postDisconnected()
+		return
+	}
+	d.postSnapshot(snapshot)
+	var timer *time.Timer
+	var flush <-chan time.Time
+	defer func() {
+		if timer != nil {
+			timer.Stop()
+		}
+	}()
+	var latest core.Snapshot
+	for {
+		select {
+		case <-d.ctx.Done():
+			return
+		case event, ok := <-client.Events():
+			if !ok {
+				d.postDisconnected()
+				return
+			}
+			latest = event.Snapshot
+			if flush == nil {
+				if timer == nil {
+					timer = time.NewTimer(35 * time.Millisecond)
+				} else {
+					timer.Reset(35 * time.Millisecond)
+				}
+				flush = timer.C
+			}
+		case <-flush:
+			flush = nil
+			d.postSnapshot(latest)
+		case command := <-d.actions:
+			if _, err := client.Send(d.ctx, command); err != nil {
+				if d.ctx.Err() != nil {
+					return
+				}
+				d.postStatus("Action could not be queued")
+				continue
+			}
+			d.postStatus("Connected | action queued")
+		}
+	}
+}
+
+func (d *desktopUI) postSnapshot(snapshot core.Snapshot) {
+	// IPC clones snapshots before returning or publishing them. Keep that
+	// immutable value captured by the Fyne callback rather than cloning again.
+	immutable := snapshot
+	fyne.Do(func() {
+		if d.stopped.Load() {
+			return
+		}
+		previous := d.current
+		first := !d.hasSnapshot
+		d.connected = true
+		if d.connection.Text != "Connected" {
+			d.connection.SetText("Connected")
+		}
+		summary := snapshotSummary(immutable)
+		if first || summary != d.snapshotSummary.Text {
+			d.snapshotSummary.SetText(summary)
+		}
+		binaryChanged := first || !reflect.DeepEqual(previous.Binary, immutable.Binary)
+		if binaryChanged {
+			d.binarySummary.SetText(binarySummary(immutable.Binary))
+		}
+		if first || !reflect.DeepEqual(previous.Switches, immutable.Switches) {
+			d.switchSummary.SetText(lastSwitchSummary(immutable))
+		}
+		if first || !reflect.DeepEqual(previous.Errors, immutable.Errors) {
+			d.errorSummary.SetText(serviceErrors(immutable.Errors))
+		}
+		if first || !reflect.DeepEqual(previous.Groups, immutable.Groups) || !reflect.DeepEqual(previous.Proxies, immutable.Proxies) {
+			d.proxyPage.update(immutable)
+		}
+		if first || !reflect.DeepEqual(previous.Subscriptions, immutable.Subscriptions) {
+			d.subPage.update(immutable.Subscriptions)
+		}
+		if first || !reflect.DeepEqual(previous.Resources, immutable.Resources) {
+			d.resourcePage.update(immutable.Resources)
+		}
+		if first || !reflect.DeepEqual(previous.Filters, immutable.Filters) {
+			d.filterPage.update(immutable.Filters)
+		}
+		if binaryChanged || previous.Monitor != immutable.Monitor || previous.SystemProxy != immutable.SystemProxy || !reflect.DeepEqual(previous.DNS, immutable.DNS) {
+			d.settingsPage.update(immutable.Binary, immutable.Monitor, immutable.SystemProxy, immutable.DNS)
+		}
+		d.current, d.hasSnapshot = immutable, true
+		d.updateTray(immutable)
+	})
+}
+
+func (d *desktopUI) postDisconnected() {
+	fyne.Do(func() {
+		if d.stopped.Load() {
+			return
+		}
+		d.connected = false
+		d.connection.SetText("Disconnected")
+		d.updateTray(core.Snapshot{})
+	})
+}
+
+func (d *desktopUI) postStatus(status string) {
+	fyne.Do(func() {
+		if d.stopped.Load() {
+			return
+		}
+		d.connection.SetText(status)
+	})
+}
+
+func snapshotSummary(snapshot core.Snapshot) string {
+	return "Proxy groups: " + count(snapshot.Groups) + " | Subscriptions: " + count(snapshot.Subscriptions) +
+		" | Data resources: " + count(snapshot.Resources) + " | Filter lists: " + count(snapshot.Filters) +
+		" | Jobs: " + count(snapshot.Jobs) + " | Reported issues: " + count(snapshot.Errors)
+}
+
+func serviceErrors(issues []core.ErrorSnapshot) string {
+	if len(issues) == 0 {
+		return "No service errors"
+	}
+	lines := make([]string, 0, len(issues))
+	for _, issue := range issues {
+		location := strings.TrimSpace(strings.Join([]string{issue.File, issue.Key}, " "))
+		if location == "" {
+			location = "Service"
+		}
+		lines = append(lines, location+": "+issue.Message)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func binarySummary(binary core.BinarySnapshot) string {
+	desired := binary.Desired
+	if desired == "" {
+		desired = "unspecified"
+	}
+	observed := binary.ObservedVersion
+	if observed == "" {
+		observed = "unknown"
+	}
+	capabilities := "none verified"
+	if len(binary.Capabilities) > 0 {
+		capabilities = strings.Join(binary.Capabilities, ", ")
+	}
+	return "Mihomo binary | desired " + desired + " | observed " + observed + " | capabilities " + capabilities + " | " + compatibilityLabel(binary.LastCompatibilityFailure)
+}
+
+func count[T any](items []T) string {
+	return strconv.Itoa(len(items))
+}

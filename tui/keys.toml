@@ -1,0 +1,301 @@
+[[binding]]
+key = "q"
+action = "quit"
+help = "quit"
+
+[[binding]]
+key = "ctrl+c"
+action = "quit"
+help = "quit"
+
+[[binding]]
+key = "tab"
+action = "next_tab"
+help = "next tab"
+
+[[binding]]
+key = "shift+tab"
+action = "prev_tab"
+help = "previous tab"
+
+[[binding]]
+key = "up"
+action = "move_up"
+help = "move up"
+
+[[binding]]
+key = "k"
+action = "move_up"
+help = "move up"
+
+[[binding]]
+key = "down"
+action = "move_down"
+help = "move down"
+
+[[binding]]
+key = "j"
+action = "move_down"
+help = "move down"
+
+[[binding]]
+key = "enter"
+action = "activate"
+help = "activate"
+
+[[binding]]
+key = "esc"
+action = "cancel_modal"
+help = "close modal"
+
+[[binding]]
+key = "1"
+action = "tab_overview"
+help = "Overview"
+
+[[binding]]
+key = "2"
+action = "tab_proxies"
+help = "Proxies"
+
+[[binding]]
+key = "3"
+action = "tab_subscriptions"
+help = "Subscriptions"
+
+[[binding]]
+key = "4"
+action = "tab_filters"
+help = "Filter Lists"
+
+[[binding]]
+key = "5"
+action = "tab_resources"
+help = "Data Resources"
+
+[[binding]]
+key = "6"
+action = "tab_settings"
+help = "Settings"
+
+[[binding]]
+tab = "overview"
+key = "s"
+action = "start"
+help = "enqueue start"
+
+[[binding]]
+tab = "overview"
+key = "x"
+action = "stop"
+help = "enqueue stop"
+
+[[binding]]
+tab = "overview"
+key = "r"
+action = "reload_configuration"
+help = "reload configuration"
+
+[[binding]]
+tab = "proxies"
+key = "r"
+action = "manual_probe"
+help = "probe focused group"
+
+[[binding]]
+tab = "proxies"
+key = "a"
+action = "toggle_automation"
+help = "toggle focused group automation"
+
+[[binding]]
+tab = "settings"
+key = "e"
+action = "system_proxy_enable"
+help = "enable system proxy"
+
+[[binding]]
+tab = "settings"
+key = "d"
+action = "system_proxy_disable"
+help = "disable system proxy"
+
+[[binding]]
+tab = "settings"
+key = "m"
+action = "monitor_enable"
+help = "enable monitor"
+
+[[binding]]
+tab = "settings"
+key = "n"
+action = "monitor_disable"
+help = "disable monitor"
+
+[[binding]]
+tab = "settings"
+key = "b"
+action = "edit_binary"
+help = "select Mihomo binary"
+
+[[binding]]
+tab = "settings"
+key = "i"
+action = "edit_monitor_interval"
+help = "set monitor interval"
+
+[[binding]]
+tab = "settings"
+key = "t"
+action = "edit_alert_threshold"
+help = "set alert threshold in milliseconds"
+
+[[binding]]
+tab = "settings"
+key = "r"
+action = "reload_configuration"
+help = "reload configuration"
+
+[[binding]]
+tab = "settings"
+key = "u"
+action = "edit_monitor_url"
+help = "set monitor test URL"
+
+[[binding]]
+tab = "settings"
+key = "o"
+action = "edit_monitor_timeout"
+help = "set monitor timeout in milliseconds"
+
+[[binding]]
+tab = "settings"
+key = "c"
+action = "edit_monitor_concurrency"
+help = "set monitor concurrency"
+
+[[binding]]
+tab = "settings"
+key = "h"
+action = "edit_monitor_threshold"
+help = "set monitor latency threshold in milliseconds"
+
+[[binding]]
+tab = "settings"
+key = "s"
+action = "edit_monitor_bad_samples"
+help = "set consecutive bad samples"
+
+[[binding]]
+tab = "settings"
+key = "p"
+action = "edit_monitor_improvement"
+help = "set minimum improvement in milliseconds"
+
+[[binding]]
+tab = "settings"
+key = "z"
+action = "edit_monitor_cooldown"
+help = "set monitor cooldown in seconds"
+
+[[binding]]
+tab = "settings"
+key = "w"
+action = "edit_monitor_jitter"
+help = "set monitor jitter in milliseconds"
+
+[[binding]]
+tab = "settings"
+key = "l"
+action = "edit_dns_listen"
+help = "set DNS listener"
+
+[[binding]]
+tab = "settings"
+key = "v"
+action = "new_dns_resolver"
+help = "add DNS resolver set"
+
+[[binding]]
+tab = "settings"
+key = "a"
+action = "new_dns_route"
+help = "add DNS route"
+
+[[binding]]
+tab = "settings"
+key = "g"
+action = "edit_dns_entry"
+help = "edit selected DNS entry"
+
+[[binding]]
+tab = "settings"
+key = "x"
+action = "delete_dns_entry"
+help = "remove selected DNS entry"
+
+[[binding]]
+tab = "subscriptions"
+key = "r"
+action = "refresh_subscription"
+help = "refresh subscription"
+
+[[binding]]
+tab = "subscriptions"
+key = "a"
+action = "activate_subscription"
+help = "activate subscription"
+
+[[binding]]
+tab = "subscriptions"
+key = "n"
+action = "new_subscription"
+help = "new subscription"
+
+[[binding]]
+tab = "subscriptions"
+key = "e"
+action = "edit_subscription"
+help = "edit subscription"
+
+[[binding]]
+tab = "subscriptions"
+key = "d"
+action = "delete_subscription"
+help = "delete subscription"
+
+[[binding]]
+tab = "filters"
+key = "r"
+action = "refresh_filter"
+help = "refresh filter"
+
+[[binding]]
+tab = "resources"
+key = "r"
+action = "refresh_resource"
+help = "refresh resource"
+
+[[binding]]
+tab = "filters"
+key = "n"
+action = "new_filter"
+help = "new filter"
+
+[[binding]]
+tab = "filters"
+key = "e"
+action = "edit_filter"
+help = "edit filter"
+
+[[binding]]
+tab = "resources"
+key = "n"
+action = "new_resource"
+help = "new resource"
+
+[[binding]]
+tab = "resources"
+key = "e"
+action = "edit_resource"
+help = "edit resource"

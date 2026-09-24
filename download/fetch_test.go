@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -139,6 +140,8 @@ func TestFetchConditionalHeadersStayOnOriginalAndSameOriginOnly(t *testing.T) {
 			if got := r.Header.Get("If-Modified-Since"); got != "" {
 				t.Fatalf("target If-Modified-Since = %q", got)
 			}
+			w.Header().Set("ETag", `"other-origin-secret"`)
+			w.Header().Set("Last-Modified", time.Unix(1700000100, 0).UTC().Format(http.TimeFormat))
 			_, _ = io.WriteString(w, "ok")
 		}))
 		defer target.Close()
@@ -168,6 +171,9 @@ func TestFetchConditionalHeadersStayOnOriginalAndSameOriginOnly(t *testing.T) {
 		}
 		if got.StatusCode != http.StatusOK || string(got.Body) != "ok" {
 			t.Fatalf("response = %+v", got)
+		}
+		if got.ETag != "" || got.LastModified != "" {
+			t.Fatalf("cross-origin validators returned for later forwarding: %+v", got)
 		}
 	})
 }
@@ -258,3 +264,39 @@ func TestFetchFailsOnSixthRedirect(t *testing.T) {
 		t.Fatal("Fetch accepted a sixth redirect")
 	}
 }
+
+func TestFetchErrorsDoNotExposeSensitiveURL(t *testing.T) {
+	const secret = "subscription-token-sensitive"
+	client := NewClient(func(Route) (http.RoundTripper, error) {
+		return roundTripperFunc(func(*http.Request) (*http.Response, error) {
+			return nil, errors.New("connection failed")
+		}), nil
+	})
+	_, err := client.Fetch(context.Background(), Request{URL: "https://example.com/profile?token=" + secret, Route: Direct, MaxBytes: 8})
+	if err == nil || strings.Contains(err.Error(), secret) {
+		t.Fatalf("request error exposed subscription URL: %v", err)
+	}
+}
+
+func TestFetchCancelsOnFinalRead(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	client := NewClient(func(Route) (http.RoundTripper, error) {
+		return roundTripperFunc(func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusOK, Body: &finalCancelBody{cancel: cancel}, Header: make(http.Header)}, nil
+		}), nil
+	})
+	if _, err := client.Fetch(ctx, Request{URL: "https://example.com/list", Route: Direct, MaxBytes: 8}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("final read cancellation = %v", err)
+	}
+}
+
+type finalCancelBody struct{ cancel func() }
+
+func (b *finalCancelBody) Read(p []byte) (int, error) {
+	b.cancel()
+	p[0] = 'a'
+	return 1, io.EOF
+}
+
+func (b *finalCancelBody) Close() error { return nil }
