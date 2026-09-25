@@ -375,6 +375,53 @@ column priority, status segments, stable cursor/modal state, and redaction.
 Smoke-run the real TUI against a disposable local IPC service; no direct
 Mihomo, network, or config I/O belongs in the renderer.
 
+### Session diagnostics and settings presentation
+
+Following notmutt's session-log model, `app` owns one bounded in-memory ring
+of at most 200 sanitized diagnostics. An entry has a finish time, severity,
+operation kind, optional stable source ID, and a short safe message. Emit an
+entry for a failed command or background refresh and for a meaningful
+recovery. The same immutable ring is carried in the authenticated local IPC
+snapshot so GUI and TUI see errors that predate their connection. It is not a
+disk log, telemetry stream, or raw Mihomo subprocess output. No entry may
+contain a subscription/resource URL, token, proxy credential, profile body,
+controller secret, HTTP body, or unchecked `error.Error()` text. Construct
+messages from known stage codes and bounded numeric HTTP status, including
+`HTTP 406` when a subscription server rejects a fetch; never render the
+OpenResty challenge HTML.
+
+Adding this snapshot field increments the negotiated IPC protocol from 2 to 3;
+an older client is rejected rather than silently ignoring diagnostics.
+
+Active `ErrorSnapshot` issues are not the session history. Key issues by
+operation and stable source ID so success resolves only that issue, not an
+unrelated error. A successful `304` or identical-body subscription refresh
+that follows a failure persists and publishes the cleared failure; healthy
+unchanged checks do not write state or redraw. A later success may clear the
+active issue while the diagnostic ring retains the earlier error and the
+recovery event. The Overview issue count reports active issues, not lifetime
+entries.
+
+The TUI uses a default `~` binding for a scrollable session-log overlay,
+with time, severity, source, and message. It preserves underlying tab cursor
+and modal state, closes without dispatching the closing key, and renders only
+on events/keys/resizes. A low-priority last-error segment may appear in its
+bottommost status bar, after connection and active profile. Fyne Overview
+has a `View activity` control showing the same sanitized entries in a
+virtualized `widget.List`; snapshot application stays on the UI thread.
+
+Settings in the TUI is a `Setting | Value | Action` table. Build cells from
+typed snapshot fields, not `strings.Cut` of `" | "` detail strings; the selected
+detail uses plain sentences without pipe separators. GUI Settings shows
+desired binary, observed version, capabilities, and compatibility failure
+as aligned labels/values, not a pipe-delimited summary. Do not display
+resolver credentials or source URLs in a log or an incidental detail row.
+
+Use a local `httptest` 406 gate and redacted fixture to verify error
+classification and issue resolution, then test bounded retention, GUI and
+TUI visibility, stable focus/selection, narrow-width alignment, and no
+credential leakage. No polling or background logfile reader is added.
+
 ### Shared terminal modal primitives
 
 Extract the reusable, mail-independent parts of notmutt's dialogue overlay
