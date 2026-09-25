@@ -428,23 +428,25 @@ credential leakage. No polling or background logfile reader is added.
 
 ### Shared terminal modal primitives
 
-Extract reusable, mail-independent modal behavior into
-`references/notmutt/lib/tui/modal` in the existing nested Go module.
-Shared geometry places bordered boxes above reserved footer rows; Unicode
-text wrapping keeps an edit cursor visible. Notmutt uses those primitives
-for its current dialogue/compose overlays, retaining mail-specific actions,
-lipgloss styling, status/keyhint rows, and existing tests.
+Extract reusable, mail-independent terminal primitives into separate
+packages in the existing `references/notmutt/lib/tui` Go module:
+`modal` owns bottom-anchored bordered-box geometry and display-cell-aware
+text wrapping; `form` owns a declarative configuration field table and
+its view state. `form` can use the sibling `table` package but must not
+depend on `modal`, Notmutt mail state, ClashPulse, IPC, Fyne, filesystem,
+or network. Notmutt uses `modal` for its existing dialogue/compose
+overlays, retaining mail-specific actions and lipgloss styling; it need
+not consume `form` today.
 
-The same package also owns a reusable, declarative configuration form table
-even though Notmutt does not use that form today. A field has a stable ID,
-label, kind (text, toggle, or choice), value, allowed choices, editability,
-and a sensitive-display flag. The form state owns selected field identity,
-scroll position, pending text, and toggle/choice transitions; it accepts
-view actions from its caller and returns changed fields on Save or nothing
-on Cancel. Render aligned Field/Value rows with the shared terminal table
-geometry. Mask sensitive values before rendering, including while typing;
-never log or serialize a partial form. It has no Mihomo, mail, IPC, Fyne,
-configuration schema, filesystem, or network dependency.
+A `form` field has a stable ID, label, kind (text, toggle, or choice),
+value, allowed choices, editability, and a sensitive-display flag. Form
+state owns selected field identity, scroll position, pending text and
+cursor, and toggle/choice transitions; it accepts view actions from its
+caller and returns changed fields on Save or nothing on Cancel. Render
+aligned Field/Value rows with the sibling `table` geometry. Mask
+sensitive values before rendering, including while typing; never log
+or serialize a partial form. `modal` and `form` remain separately
+importable shared primitives under the same versioned `lib/tui` module.
 
 ClashPulse TUI replaces the one-field-at-a-time subscription, resource,
 filter, DNS, and monitor configuration wizards with these bottom-anchored
