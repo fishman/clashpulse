@@ -38,6 +38,38 @@ func TestLogOverlayScrollsWithoutDispatch(t *testing.T) {
 	}
 }
 
+func TestHelpOverlayKeepsContextAndDoesNotDispatch(t *testing.T) {
+	model := NewModel().selectTab(TabProxies)
+	model.Selection[TabProxies] = "proxy:main:alpha"
+	selected := model.Selection[TabProxies]
+	model, intent, quit := model.HandleKey("?")
+	if !model.HelpOpen || intent != nil || quit || model.Selection[TabProxies] != selected {
+		t.Fatal("help opening changed control state")
+	}
+	model, intent, quit = model.HandleKey("q")
+	if model.HelpOpen || intent != nil || quit || model.Tab != TabProxies || model.Selection[TabProxies] != selected {
+		t.Fatal("help close dispatched quit or moved proxy cursor")
+	}
+	model = NewModel().selectTab(TabSubscriptions)
+	model, _, _ = model.HandleKey("n")
+	if model.Modal == nil || model.Modal.Form == nil {
+		t.Fatal("subscription form absent")
+	}
+	model = typeFormText(t, model, "draft")
+	model, intent, quit = model.HandleKey("?")
+	if model.HelpOpen || intent != nil || quit || model.Modal.Form.Changes()[0].Value != "draft?" {
+		t.Fatal("question mark was stolen from form input")
+	}
+	model, intent, quit = model.HandleKey("f1")
+	if !model.HelpOpen || intent != nil || quit || !contains(model.keymap.Help(Tab("form")), "ctrl+s save form") {
+		t.Fatal("form help not available without sending an intent")
+	}
+	model, intent, quit = model.HandleKey("q")
+	if model.HelpOpen || model.Modal == nil || model.Modal.Form == nil || intent != nil || quit || len(model.Modal.Form.Changes()) != 1 || model.Modal.Form.Changes()[0].Value != "draft?" {
+		t.Fatal("help overlay destroyed pending form edits")
+	}
+}
+
 func TestApplyKeepsStableProxyCursorAndModalFocus(t *testing.T) {
 	model := NewModel()
 	model.Tab = TabProxies
@@ -70,11 +102,8 @@ func TestApplyFallsBackWhenSelectedIDDisappears(t *testing.T) {
 }
 
 func TestKeyHelpAndDispatchUseParsedBindings(t *testing.T) {
-	keymap, err := NewKeymap([]byte(`[[binding]]
-tab = "proxies"
-key = "z"
-action = "manual_probe"
-help = "custom probe"
+	keymap, err := NewKeymap([]byte(`[schemes.default.proxies]
+"z" = { fun = "manual_probe", desc = "custom probe", show = true }
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -315,12 +344,15 @@ func TestDeleteSubscriptionRequiresModalConfirmation(t *testing.T) {
 	model := NewModel().Apply(eventFromJSON(t, `{"Snapshot":{"Subscriptions":[{"ID":"sub-delete","Name":"Work profile"}]}}`))
 	model.Tab = TabSubscriptions
 	model.Selection[TabSubscriptions] = "subscription:sub-delete"
+	if !contains(model.Help(), "d delete subscription") {
+		t.Fatalf("subscription list help omits delete binding: %v", model.Help())
+	}
 	model, command, _ := model.HandleKey("d")
 	if command != nil || model.Modal == nil || model.Focus != FocusModal {
 		t.Fatalf("delete did not request confirmation: model=%#v command=%#v", model, command)
 	}
-	if !contains(model.Help(), "d delete subscription") {
-		t.Fatalf("subscription help omits delete binding: %v", model.Help())
+	if !contains(model.Help(), "enter apply") {
+		t.Fatalf("confirmation help omits apply binding: %v", model.Help())
 	}
 	model, command, _ = model.HandleKey("enter")
 	if command == nil || command.Kind != ipc.CommandDeleteSubscription || command.SubscriptionID != "sub-delete" {
@@ -708,11 +740,11 @@ func TestBinaryModalPreservesExecutablePathCase(t *testing.T) {
 	if model.Modal == nil {
 		t.Fatal("binary action did not open input modal")
 	}
-	for _, key := range "/tmp/Mihomo" {
+	for _, key := range "/tmp/Mihomo?custom" {
 		model, _, _ = model.HandleKey(string(key))
 	}
 	model, command, _ := model.HandleKey("enter")
-	if command == nil || command.Config == nil || command.Config.Binary == nil || *command.Config.Binary != "/tmp/Mihomo" {
+	if command == nil || command.Config == nil || command.Config.Binary == nil || *command.Config.Binary != "/tmp/Mihomo?custom" {
 		t.Fatalf("binary path case lost: %+v", command)
 	}
 	model, _, _ = model.HandleKey("b")

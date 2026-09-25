@@ -30,11 +30,33 @@ func TestEmbeddedKeymapContainsEveryViewAndActionHelp(t *testing.T) {
 	}
 }
 
+func TestNotmuttStyleKeymapPreservesUppercaseAndShownHints(t *testing.T) {
+	keys, err := NewKeymap([]byte(`[schemes.default.global]
+"?" = { fun = "toggle_help", desc = "Show help", show = true, inherit = true }
+[schemes.default.proxies]
+"J" = { fun = "manual_probe", desc = "Probe now", show = true }
+"j" = { fun = "move_down", desc = "Move down" }
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action, ok := keys.Action(TabProxies, "J"); !ok || action != "manual_probe" {
+		t.Fatalf("uppercase action = %q, %t", action, ok)
+	}
+	if action, ok := keys.Action(TabProxies, "j"); !ok || action != "move_down" {
+		t.Fatalf("lowercase action = %q, %t", action, ok)
+	}
+	if !contains(keys.Help(TabProxies), "J Probe now") || !contains(keys.Hints(TabProxies), "J Probe now") || contains(keys.Hints(TabProxies), "j Move down") {
+		t.Fatalf("help/hints did not honor show flag: %v / %v", keys.Help(TabProxies), keys.Hints(TabProxies))
+	}
+}
+
 func TestKeymapRejectsDuplicateAndUnknownBindings(t *testing.T) {
 	for _, source := range []string{
-		"[[binding]]\nkey='z'\naction='quit'\nhelp='quit'\n[[binding]]\nkey='z'\naction='quit'\nhelp='quit'\n",
-		"[[binding]]\ntab='unknown'\nkey='z'\naction='quit'\nhelp='quit'\n",
-		"[[binding]]\nkey='z'\naction='run_shell'\nhelp='run'\n",
+		"[schemes.default.proxies]\n\"z\" = { fun = \"quit\", desc = \"quit\" }\n\"z\" = { fun = \"quit\", desc = \"quit\" }\n",
+		"[schemes.default.unknown]\n\"z\" = { fun = \"quit\", desc = \"quit\" }\n",
+		"[schemes.default.proxies]\n\"z\" = { fun = \"run_shell\", desc = \"run\" }\n",
+		"[[binding]]\nkey='z'\naction='quit'\nhelp='quit'\n",
 	} {
 		if _, err := NewKeymap([]byte(source)); err == nil {
 			t.Errorf("accepted invalid keymap %q", source)
@@ -47,7 +69,7 @@ func TestEventKeyNamesMatchDeclarativeBindings(t *testing.T) {
 		event *tcell.EventKey
 		want  string
 	}{
-		{tcell.NewEventKey(tcell.KeyRune, "J", tcell.ModNone), "j"},
+		{tcell.NewEventKey(tcell.KeyRune, "J", tcell.ModNone), "J"},
 		{tcell.NewEventKey(tcell.KeyCtrlC, "", tcell.ModNone), "ctrl+c"},
 		{tcell.NewEventKey(tcell.KeyBacktab, "", tcell.ModNone), "shift+tab"},
 		{tcell.NewEventKey(tcell.KeyEnter, "", tcell.ModNone), "enter"},

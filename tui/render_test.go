@@ -88,7 +88,7 @@ func TestSettingsTableAlignedWithoutPipes(t *testing.T) {
 }
 
 func TestSettingsActionUsesKeymap(t *testing.T) {
-	keys, err := NewKeymap([]byte("[[binding]]\ntab = \"settings\"\nkey = \"v\"\naction = \"edit_binary\"\nhelp = \"choose Mihomo\"\n"))
+	keys, err := NewKeymap([]byte("[schemes.default.settings]\n\"v\" = { fun = \"edit_binary\", desc = \"choose Mihomo\", show = true }\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestRenderStatusIsBottommost(t *testing.T) {
 	model := NewModel()
 	model.Notice = "Configuration updated"
 	rows := mockRender(t, model, 80, 12)
-	if !strings.Contains(rows[11], "IPC connected") || !strings.Contains(rows[10], "quit") || !strings.Contains(rows[9], "Configuration updated") {
+	if !strings.Contains(rows[11], "IPC connected") || strings.TrimSpace(rows[10]) == "" || !strings.Contains(rows[9], "Configuration updated") {
 		t.Fatalf("footer order: notice=%q hotkeys=%q status=%q", rows[9], rows[10], rows[11])
 	}
 }
@@ -173,6 +173,21 @@ func TestRenderLogKeepsBottomStatus(t *testing.T) {
 		}
 		if !strings.Contains(rows[size.height-1], "IPC connected") {
 			t.Fatalf("%d-column activity covered connection status: %q", size.width, rows[size.height-1])
+		}
+	}
+}
+
+func TestRenderHelpOverlayKeepsBottomStatus(t *testing.T) {
+	model := NewModel().selectTab(TabSettings)
+	model, _, _ = model.HandleKey("?")
+	for _, size := range []struct{ width, height int }{{80, 14}, {32, 9}} {
+		rows := mockRender(t, model, size.width, size.height)
+		text := strings.Join(rows[:size.height-1], "\n")
+		if !strings.Contains(text, "Keyboard help") || !strings.Contains(text, "close help") {
+			t.Fatalf("%d-column help is missing: %q", size.width, text)
+		}
+		if !strings.Contains(rows[size.height-1], "IPC connected") {
+			t.Fatalf("help covered bottom status: %q", rows[size.height-1])
 		}
 	}
 }

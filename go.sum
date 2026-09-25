@@ -41,6 +41,8 @@ github.com/fishman/notmutt/lib/tui v0.1.0 h1:ck/1WCBurqebzHdYwPb7qu/x4uguNP5FvNZ
 github.com/fishman/notmutt/lib/tui v0.1.0/go.mod h1:6G9LoSFDsyo1qTJ9jABhRZzCbtj7hQ71a/ebgaoMs+I=
 github.com/fishman/notmutt/lib/tui v0.1.1 h1:XPdfGBS9Bs8DphP8okp8uThAZs5jsR3SmLjccbcJwQo=
 github.com/fishman/notmutt/lib/tui v0.1.1/go.mod h1:6G9LoSFDsyo1qTJ9jABhRZzCbtj7hQ71a/ebgaoMs+I=
+github.com/fishman/notmutt/lib/tui v0.1.2 h1:Gq4FrBSfQFEKBIsL7g3W5UF0KpcfWGlHrr/rqo4wBhE=
+github.com/fishman/notmutt/lib/tui v0.1.2/go.mod h1:6G9LoSFDsyo1qTJ9jABhRZzCbtj7hQ71a/ebgaoMs+I=
 github.com/fishman/notmutt/lib/xdg v0.1.0 h1:5uJW3AB0bTS6hC6gXfkIo8QGtwbsB8S7akRksWuuhAU=
 github.com/fishman/notmutt/lib/xdg v0.1.0/go.mod h1:Qt4UI9q5BCyqu9TTucJflreL/6CMnqDlFYM/g9bovD8=
 github.com/fsnotify/fsnotify v1.9.0 h1:2Ml+OJNzbYCTzsxtv8vKSFD9PbJjmhYF14k/jKC7S9k=

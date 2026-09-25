@@ -182,6 +182,9 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 	if model.Modal != nil {
 		drawModal(cache.current, width, height, model.Modal)
 	}
+	if model.HelpOpen {
+		drawHelp(cache.current, height, model)
+	}
 	changed := invalidate
 	for y, line := range cache.current {
 		previous := cache.previous[y]
@@ -241,6 +244,26 @@ func drawLog(lines []renderLine, width, height int, model Model) {
 		setLine(lines, y, time.Unix(diagnostic.At, 0).UTC().Format("15:04:05Z")+" "+diagnostic.Severity, role)
 		setLine(lines, y+1, diagnostic.Kind+" "+diagnostic.SourceID+" "+diagnostic.Message, role)
 		y += 2
+	}
+}
+
+func drawHelp(lines []renderLine, height int, model Model) {
+	for y := 1; y < height-3; y++ {
+		setLine(lines, y, "", roleBase)
+	}
+	title := "Keyboard help"
+	for _, binding := range model.keymap.Help(Tab("help")) {
+		if strings.HasSuffix(binding, "close help") {
+			title += " (" + binding + ")"
+			break
+		}
+	}
+	setLine(lines, 1, title, roleAccent)
+	entries := model.helpEntries()
+	visible := max(0, height-5)
+	start := min(model.HelpOffset, max(0, len(entries)-visible))
+	for i := 0; i < visible && start+i < len(entries); i++ {
+		setLine(lines, 2+i, entries[start+i], roleBase)
 	}
 }
 

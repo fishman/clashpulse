@@ -119,14 +119,16 @@ const (
 // Model is local view state for the remote IPC client. IPC snapshots are
 // immutable by contract and replaced on Apply; no domain control state is kept.
 type Model struct {
-	Tab       Tab
-	Focus     Focus
-	Selection map[Tab]string
-	Modal     *Modal
-	Pending   int
-	Notice    string
-	LogOpen   bool
-	LogOffset int
+	Tab        Tab
+	Focus      Focus
+	Selection  map[Tab]string
+	Modal      *Modal
+	Pending    int
+	Notice     string
+	LogOpen    bool
+	LogOffset  int
+	HelpOpen   bool
+	HelpOffset int
 
 	keymap   Keymap
 	snapshot ipc.Event
@@ -221,43 +223,65 @@ func (m Model) Rows() []Row {
 	for i := range rows {
 		rows[i].Selected = rows[i].ID == selected
 		if rows[i].action != "" {
-			rows[i].Cells[2] = settingActionKey(m.keymap, rows[i].action)
+			rows[i].Cells[2] = m.keymap.KeyFor(TabSettings, rows[i].action)
 		}
 	}
 	return rows
 }
 
-func settingActionKey(keymap Keymap, action string) string {
-	var global string
-	for _, binding := range keymap.bindings {
-		if binding.Action != action {
-			continue
-		}
-		if binding.Tab == string(TabSettings) {
-			return binding.Key
-		}
-		if binding.Tab == "" && global == "" {
-			global = binding.Key
-		}
-	}
-	return global
-}
-
 func (m Model) CurrentGroupID() string { return m.groupID }
 
-func (m Model) Help() []string {
+func (m Model) bindingContext() Tab {
 	if m.LogOpen {
-		return m.keymap.Help(Tab("log"))
+		return Tab("log")
 	}
-	if m.Modal != nil && m.Modal.Form != nil {
-		return m.keymap.Help(Tab("form"))
+	if m.Modal != nil {
+		if m.Modal.Form != nil {
+			return Tab("form")
+		}
+		return Tab("dialog")
 	}
-	return m.keymap.Help(m.Tab)
+	return m.Tab
+}
+
+func (m Model) helpEntries() []string { return m.keymap.Help(m.bindingContext()) }
+
+func (m Model) Help() []string {
+	if m.HelpOpen {
+		return m.keymap.Hints(Tab("help"))
+	}
+	return m.keymap.Hints(m.bindingContext())
 }
 
 // HandleKey applies one normalized key name and optionally returns one IPC
 // intent. It performs no I/O.
 func (m Model) HandleKey(key string) (Model, *ipc.Command, bool) {
+	if m.HelpOpen {
+		action, _ := m.keymap.Action(Tab("help"), key)
+		maxOffset := max(0, len(m.helpEntries())-1)
+		switch action {
+		case "help_up":
+			m.HelpOffset = max(0, m.HelpOffset-1)
+		case "help_down":
+			m.HelpOffset = min(maxOffset, m.HelpOffset+1)
+		case "help_page_up":
+			m.HelpOffset = max(0, m.HelpOffset-10)
+		case "help_page_down":
+			m.HelpOffset = min(maxOffset, m.HelpOffset+10)
+		case "help_home":
+			m.HelpOffset = 0
+		case "help_end":
+			m.HelpOffset = maxOffset
+		default:
+			m.HelpOpen = false
+		}
+		return m, nil, false
+	}
+	context := m.bindingContext()
+	if action, _ := m.keymap.Action(context, key); action == "toggle_help" {
+		m.HelpOpen, m.HelpOffset = true, 0
+		return m, nil, false
+	}
 	if m.LogOpen {
 		action, _ := m.keymap.Action(Tab("log"), key)
 		maxOffset := len(m.snapshot.Snapshot.Diagnostics)

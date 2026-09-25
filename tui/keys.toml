@@ -1,420 +1,111 @@
-[[binding]]
-key = "q"
-action = "quit"
-help = "quit"
-
-[[binding]]
-key = "ctrl+c"
-action = "quit"
-help = "quit"
-
-[[binding]]
-key = "tab"
-action = "next_tab"
-help = "next tab"
-
-[[binding]]
-key = "shift+tab"
-action = "prev_tab"
-help = "previous tab"
-
-[[binding]]
-key = "up"
-action = "move_up"
-help = "move up"
-
-[[binding]]
-key = "k"
-action = "move_up"
-help = "move up"
-
-[[binding]]
-key = "down"
-action = "move_down"
-help = "move down"
-
-[[binding]]
-key = "j"
-action = "move_down"
-help = "move down"
-
-[[binding]]
-key = "enter"
-action = "activate"
-help = "activate"
-
-[[binding]]
-key = "esc"
-action = "cancel_modal"
-help = "close modal"
-
-[[binding]]
-key = "1"
-action = "tab_overview"
-help = "Overview"
-
-[[binding]]
-key = "2"
-action = "tab_proxies"
-help = "Proxies"
-
-[[binding]]
-key = "3"
-action = "tab_subscriptions"
-help = "Subscriptions"
-
-[[binding]]
-key = "4"
-action = "tab_filters"
-help = "Filter Lists"
-
-[[binding]]
-key = "5"
-action = "tab_resources"
-help = "Data Resources"
-
-[[binding]]
-key = "6"
-action = "tab_settings"
-help = "Settings"
-
-[[binding]]
-tab = "overview"
-key = "s"
-action = "start"
-help = "enqueue start"
-
-[[binding]]
-tab = "overview"
-key = "x"
-action = "stop"
-help = "enqueue stop"
-
-[[binding]]
-tab = "overview"
-key = "r"
-action = "reload_configuration"
-help = "reload configuration"
-
-[[binding]]
-tab = "proxies"
-key = "r"
-action = "manual_probe"
-help = "probe focused group"
-
-[[binding]]
-tab = "proxies"
-key = "a"
-action = "toggle_automation"
-help = "toggle focused group automation"
-
-[[binding]]
-tab = "settings"
-key = "e"
-action = "system_proxy_enable"
-help = "enable system proxy"
-
-[[binding]]
-tab = "settings"
-key = "d"
-action = "system_proxy_disable"
-help = "disable system proxy"
-
-[[binding]]
-tab = "settings"
-key = "m"
-action = "monitor_enable"
-help = "enable monitor"
-
-[[binding]]
-tab = "settings"
-key = "n"
-action = "monitor_disable"
-help = "disable monitor"
-
-[[binding]]
-tab = "settings"
-key = "b"
-action = "edit_binary"
-help = "select Mihomo binary"
-
-[[binding]]
-tab = "settings"
-key = "i"
-action = "edit_monitor_interval"
-help = "set monitor interval"
-
-[[binding]]
-tab = "settings"
-key = "t"
-action = "edit_alert_threshold"
-help = "set alert threshold in milliseconds"
-
-[[binding]]
-tab = "settings"
-key = "r"
-action = "reload_configuration"
-help = "reload configuration"
-
-[[binding]]
-tab = "settings"
-key = "u"
-action = "edit_monitor_url"
-help = "set monitor test URL"
-
-[[binding]]
-tab = "settings"
-key = "o"
-action = "edit_monitor_timeout"
-help = "set monitor timeout in milliseconds"
-
-[[binding]]
-tab = "settings"
-key = "c"
-action = "edit_monitor_concurrency"
-help = "set monitor concurrency"
-
-[[binding]]
-tab = "settings"
-key = "h"
-action = "edit_monitor_threshold"
-help = "set monitor latency threshold in milliseconds"
-
-[[binding]]
-tab = "settings"
-key = "s"
-action = "edit_monitor_bad_samples"
-help = "set consecutive bad samples"
-
-[[binding]]
-tab = "settings"
-key = "p"
-action = "edit_monitor_improvement"
-help = "set minimum improvement in milliseconds"
-
-[[binding]]
-tab = "settings"
-key = "z"
-action = "edit_monitor_cooldown"
-help = "set monitor cooldown in seconds"
-
-[[binding]]
-tab = "settings"
-key = "w"
-action = "edit_monitor_jitter"
-help = "set monitor jitter in milliseconds"
-
-[[binding]]
-tab = "settings"
-key = "l"
-action = "edit_dns_listen"
-help = "set DNS listener"
-
-[[binding]]
-tab = "settings"
-key = "v"
-action = "new_dns_resolver"
-help = "add DNS resolver set"
-
-[[binding]]
-tab = "settings"
-key = "a"
-action = "new_dns_route"
-help = "add DNS route"
-
-[[binding]]
-tab = "settings"
-key = "g"
-action = "edit_dns_entry"
-help = "edit selected DNS entry"
-
-[[binding]]
-tab = "settings"
-key = "x"
-action = "delete_dns_entry"
-help = "remove selected DNS entry"
-
-[[binding]]
-tab = "subscriptions"
-key = "r"
-action = "refresh_subscription"
-help = "refresh subscription"
-
-[[binding]]
-tab = "subscriptions"
-key = "a"
-action = "activate_subscription"
-help = "activate subscription"
-
-[[binding]]
-tab = "subscriptions"
-key = "n"
-action = "new_subscription"
-help = "new subscription"
-
-[[binding]]
-tab = "subscriptions"
-key = "e"
-action = "edit_subscription"
-help = "edit subscription"
-
-[[binding]]
-tab = "subscriptions"
-key = "d"
-action = "delete_subscription"
-help = "delete subscription"
-
-[[binding]]
-tab = "filters"
-key = "r"
-action = "refresh_filter"
-help = "refresh filter"
-
-[[binding]]
-tab = "resources"
-key = "r"
-action = "refresh_resource"
-help = "refresh resource"
-
-[[binding]]
-tab = "filters"
-key = "n"
-action = "new_filter"
-help = "new filter"
-
-[[binding]]
-tab = "filters"
-key = "e"
-action = "edit_filter"
-help = "edit filter"
-
-[[binding]]
-tab = "resources"
-key = "n"
-action = "new_resource"
-help = "new resource"
-
-[[binding]]
-tab = "resources"
-key = "e"
-action = "edit_resource"
-help = "edit resource"
-
-[[binding]]
-tab = "form"
-key = "up"
-action = "form_up"
-help = "previous field"
-
-[[binding]]
-tab = "form"
-key = "down"
-action = "form_down"
-help = "next field"
-
-[[binding]]
-tab = "form"
-key = "space"
-action = "form_toggle"
-help = "toggle field"
-
-[[binding]]
-tab = "form"
-key = "enter"
-action = "form_edit"
-help = "edit field"
-
-[[binding]]
-tab = "form"
-key = "left"
-action = "form_left"
-help = "previous choice or character"
-
-[[binding]]
-tab = "form"
-key = "right"
-action = "form_right"
-help = "next choice or character"
-
-[[binding]]
-tab = "form"
-key = "backspace"
-action = "form_backspace"
-help = "delete character"
-
-[[binding]]
-tab = "form"
-key = "ctrl+s"
-action = "form_save"
-help = "save form"
-
-[[binding]]
-tab = "form"
-key = "f2"
-action = "form_save"
-help = "save form"
-
-[[binding]]
-tab = "form"
-key = "esc"
-action = "form_cancel"
-help = "cancel form"
-
-[[binding]]
-key = "~"
-action = "toggle_log"
-help = "toggle session log"
-
-[[binding]]
-tab = "log"
-key = "up"
-action = "log_older"
-help = "older diagnostic"
-
-[[binding]]
-tab = "log"
-key = "k"
-action = "log_older"
-help = "older diagnostic"
-
-[[binding]]
-tab = "log"
-key = "down"
-action = "log_newer"
-help = "newer diagnostic"
-
-[[binding]]
-tab = "log"
-key = "j"
-action = "log_newer"
-help = "newer diagnostic"
-
-[[binding]]
-tab = "log"
-key = "pageup"
-action = "log_page_older"
-help = "older page"
-
-[[binding]]
-tab = "log"
-key = "pagedown"
-action = "log_page_newer"
-help = "newer page"
-
-[[binding]]
-tab = "log"
-key = "home"
-action = "log_oldest"
-help = "oldest diagnostic"
-
-[[binding]]
-tab = "log"
-key = "end"
-action = "log_newest"
-help = "newest diagnostic"
-
-[[binding]]
-tab = "log"
-key = "q"
-action = "log_close"
-help = "close log"
+# Default ClashPulse keymap: one context table per TUI surface.
+# Only show=true entries appear in the compact keyhint; help lists all.
+
+[schemes.default.global]
+"q" = { fun = "quit", desc = "quit", show = true, inherit = true }
+"ctrl+c" = { fun = "quit", desc = "quit", show = true, inherit = true }
+"?" = { fun = "toggle_help", desc = "show keyboard help", show = true, inherit = true }
+"tab" = { fun = "next_tab", desc = "next tab", inherit = true }
+"shift+tab" = { fun = "prev_tab", desc = "previous tab", inherit = true }
+"up" = { fun = "move_up", desc = "move up", inherit = true }
+"k" = { fun = "move_up", desc = "move up", inherit = true }
+"down" = { fun = "move_down", desc = "move down", inherit = true }
+"j" = { fun = "move_down", desc = "move down", inherit = true }
+"enter" = { fun = "activate", desc = "activate", show = true, inherit = true }
+"esc" = { fun = "cancel_modal", desc = "close modal", inherit = true }
+"1" = { fun = "tab_overview", desc = "Overview", inherit = true }
+"2" = { fun = "tab_proxies", desc = "Proxies", inherit = true }
+"3" = { fun = "tab_subscriptions", desc = "Subscriptions", inherit = true }
+"4" = { fun = "tab_filters", desc = "Filter Lists", inherit = true }
+"5" = { fun = "tab_resources", desc = "Data Resources", inherit = true }
+"6" = { fun = "tab_settings", desc = "Settings", inherit = true }
+"~" = { fun = "toggle_log", desc = "toggle session log", show = true, inherit = true }
+
+[schemes.default.overview]
+"s" = { fun = "start", desc = "enqueue start", show = true }
+"x" = { fun = "stop", desc = "enqueue stop", show = true }
+"r" = { fun = "reload_configuration", desc = "reload configuration", show = true }
+
+[schemes.default.proxies]
+"r" = { fun = "manual_probe", desc = "probe focused group", show = true }
+"a" = { fun = "toggle_automation", desc = "toggle focused group automation", show = true }
+
+[schemes.default.subscriptions]
+"r" = { fun = "refresh_subscription", desc = "refresh subscription", show = true }
+"a" = { fun = "activate_subscription", desc = "activate subscription", show = true }
+"n" = { fun = "new_subscription", desc = "new subscription", show = true }
+"e" = { fun = "edit_subscription", desc = "edit subscription", show = true }
+"d" = { fun = "delete_subscription", desc = "delete subscription", show = true }
+
+[schemes.default.filters]
+"r" = { fun = "refresh_filter", desc = "refresh filter", show = true }
+"n" = { fun = "new_filter", desc = "new filter", show = true }
+"e" = { fun = "edit_filter", desc = "edit filter", show = true }
+
+[schemes.default.resources]
+"r" = { fun = "refresh_resource", desc = "refresh resource", show = true }
+"n" = { fun = "new_resource", desc = "new resource", show = true }
+"e" = { fun = "edit_resource", desc = "edit resource", show = true }
+
+[schemes.default.settings]
+"e" = { fun = "system_proxy_enable", desc = "enable system proxy", show = true }
+"d" = { fun = "system_proxy_disable", desc = "disable system proxy", show = true }
+"m" = { fun = "monitor_enable", desc = "enable monitor", show = true }
+"n" = { fun = "monitor_disable", desc = "disable monitor", show = true }
+"b" = { fun = "edit_binary", desc = "select Mihomo binary", show = true }
+"i" = { fun = "edit_monitor_interval", desc = "set monitor interval", show = true }
+"t" = { fun = "edit_alert_threshold", desc = "set alert threshold in milliseconds", show = true }
+"r" = { fun = "reload_configuration", desc = "reload configuration", show = true }
+"u" = { fun = "edit_monitor_url", desc = "set monitor test URL", show = true }
+"o" = { fun = "edit_monitor_timeout", desc = "set monitor timeout in milliseconds", show = true }
+"c" = { fun = "edit_monitor_concurrency", desc = "set monitor concurrency", show = true }
+"h" = { fun = "edit_monitor_threshold", desc = "set monitor latency threshold in milliseconds", show = true }
+"s" = { fun = "edit_monitor_bad_samples", desc = "set consecutive bad samples", show = true }
+"p" = { fun = "edit_monitor_improvement", desc = "set minimum improvement in milliseconds", show = true }
+"z" = { fun = "edit_monitor_cooldown", desc = "set monitor cooldown in seconds", show = true }
+"w" = { fun = "edit_monitor_jitter", desc = "set monitor jitter in milliseconds", show = true }
+"l" = { fun = "edit_dns_listen", desc = "set DNS listener", show = true }
+"v" = { fun = "new_dns_resolver", desc = "add DNS resolver set", show = true }
+"a" = { fun = "new_dns_route", desc = "add DNS route", show = true }
+"g" = { fun = "edit_dns_entry", desc = "edit selected DNS entry", show = true }
+"x" = { fun = "delete_dns_entry", desc = "remove selected DNS entry", show = true }
+
+[schemes.default.form]
+"up" = { fun = "form_up", desc = "previous field" }
+"down" = { fun = "form_down", desc = "next field" }
+"space" = { fun = "form_toggle", desc = "toggle field", show = true }
+"enter" = { fun = "form_edit", desc = "edit field" }
+"left" = { fun = "form_left", desc = "previous choice or character" }
+"right" = { fun = "form_right", desc = "next choice or character" }
+"backspace" = { fun = "form_backspace", desc = "delete character" }
+"ctrl+s" = { fun = "form_save", desc = "save form", show = true }
+"f2" = { fun = "form_save", desc = "save form" }
+"esc" = { fun = "form_cancel", desc = "cancel form" }
+"f1" = { fun = "toggle_help", desc = "show form help", show = true }
+
+[schemes.default.dialog]
+"enter" = { fun = "activate", desc = "apply", show = true }
+"esc" = { fun = "cancel_modal", desc = "cancel", show = true }
+"f1" = { fun = "toggle_help", desc = "show dialog help", show = true }
+
+[schemes.default.log]
+"up" = { fun = "log_older", desc = "older diagnostic" }
+"k" = { fun = "log_older", desc = "older diagnostic" }
+"down" = { fun = "log_newer", desc = "newer diagnostic" }
+"j" = { fun = "log_newer", desc = "newer diagnostic" }
+"pageup" = { fun = "log_page_older", desc = "older page" }
+"pagedown" = { fun = "log_page_newer", desc = "newer page" }
+"home" = { fun = "log_oldest", desc = "oldest diagnostic" }
+"end" = { fun = "log_newest", desc = "newest diagnostic" }
+"q" = { fun = "log_close", desc = "close log", show = true }
+"?" = { fun = "toggle_help", desc = "show log help", show = true }
+
+[schemes.default.help]
+"up" = { fun = "help_up", desc = "previous binding" }
+"down" = { fun = "help_down", desc = "next binding" }
+"pageup" = { fun = "help_page_up", desc = "previous page" }
+"pagedown" = { fun = "help_page_down", desc = "next page" }
+"home" = { fun = "help_home", desc = "first binding" }
+"end" = { fun = "help_end", desc = "last binding" }
+"q" = { fun = "help_close", desc = "close help", show = true }
+"esc" = { fun = "help_close", desc = "close help", show = true }

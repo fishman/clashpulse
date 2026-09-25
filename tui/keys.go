@@ -4,8 +4,10 @@ import (
 	_ "embed"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/BurntSushi/toml"
+	sharedkeymap "github.com/fishman/notmutt/lib/tui/keymap"
 	"github.com/gdamore/tcell/v3"
 )
 
@@ -13,94 +15,82 @@ import (
 var defaultKeyData []byte
 
 type keyFile struct {
-	Bindings []keyBinding `toml:"binding"`
+	Schemes map[string]map[string]map[string]sharedkeymap.Binding `toml:"schemes"`
 }
 
-type keyBinding struct {
-	Tab    string `toml:"tab"`
-	Key    string `toml:"key"`
-	Action string `toml:"action"`
-	Help   string `toml:"help"`
-}
+type Keymap struct{ table sharedkeymap.Table }
 
-// Keymap contains the parsed, immutable keybinding table used by both key
-// dispatch and the rendered help line.
-type Keymap struct {
-	bindings []keyBinding
-	lookup   map[string]string
-}
+func DefaultKeymap() (Keymap, error) { return NewKeymap(defaultKeyData) }
 
-// DefaultKeymap parses the embedded declarative TOML bindings.
-func DefaultKeymap() (Keymap, error) {
-	return NewKeymap(defaultKeyData)
-}
-
-// NewKeymap parses TOML keybindings. An empty tab applies in every view.
+// NewKeymap accepts one Notmutt-style context scheme; all actions remain client-owned.
 func NewKeymap(data []byte) (Keymap, error) {
 	var file keyFile
-	if _, err := toml.Decode(string(data), &file); err != nil {
+	meta, err := toml.Decode(string(data), &file)
+	if err != nil {
 		return Keymap{}, fmt.Errorf("decode TUI keybindings: %w", err)
 	}
-
-	keymap := Keymap{
-		bindings: append([]keyBinding(nil), file.Bindings...),
-		lookup:   make(map[string]string, len(file.Bindings)),
+	if len(meta.Undecoded()) != 0 {
+		return Keymap{}, fmt.Errorf("unknown TUI keybinding section %q", meta.Undecoded()[0])
 	}
-	for i := range keymap.bindings {
-		binding := &keymap.bindings[i]
-		binding.Key = normalizeKey(binding.Key)
-		if binding.Key == "" || binding.Action == "" || binding.Help == "" {
-			return Keymap{}, fmt.Errorf("TUI keybinding %d requires key, action, and help", i+1)
-		}
-		if binding.Tab != "" && binding.Tab != "form" && binding.Tab != "log" && !knownTab(Tab(binding.Tab)) {
-			return Keymap{}, fmt.Errorf("TUI keybinding %d has unknown tab %q", i+1, binding.Tab)
-		}
-		if !knownAction(binding.Action) {
-			return Keymap{}, fmt.Errorf("TUI keybinding %d has unknown action %q", i+1, binding.Action)
-		}
-		lookupKey := binding.Tab + "\x00" + binding.Key
-		if _, exists := keymap.lookup[lookupKey]; exists {
-			return Keymap{}, fmt.Errorf("duplicate TUI keybinding %q on tab %q", binding.Key, binding.Tab)
-		}
-		keymap.lookup[lookupKey] = binding.Action
+	if len(file.Schemes) != 1 || file.Schemes["default"] == nil {
+		return Keymap{}, fmt.Errorf("TUI requires one default keybinding scheme")
 	}
-	return keymap, nil
+	scheme := file.Schemes["default"]
+	parents := make(map[string]string, len(scheme))
+	for context, bindings := range scheme {
+		switch context {
+		case "global", "form", "dialog", "log", "help":
+		default:
+			if !knownTab(Tab(context)) {
+				return Keymap{}, fmt.Errorf("unknown TUI keybinding context %q", context)
+			}
+			if scheme["global"] != nil {
+				parents[context] = "global"
+			}
+		}
+		for key, binding := range bindings {
+			if key == "" || normalizeKey(key) != key || !knownAction(binding.Fun) {
+				return Keymap{}, fmt.Errorf("invalid TUI binding %q in context %q", key, context)
+			}
+		}
+	}
+	compiled, err := sharedkeymap.Compile(scheme, parents)
+	if err != nil {
+		return Keymap{}, err
+	}
+	return Keymap{table: compiled}, nil
 }
 
-// Action resolves a key for the current tab, preferring a view-specific
-// binding to a global binding.
 func (k Keymap) Action(tab Tab, key string) (string, bool) {
-	key = normalizeKey(key)
-	if action, ok := k.lookup[string(tab)+"\x00"+key]; ok {
-		return action, true
-	}
-	action, ok := k.lookup["\x00"+key]
-	return action, ok
+	return k.table.Action(string(tab), normalizeKey(key))
 }
 
-// Help returns the human-readable help entries directly from the bindings
-// shown for the given view.
-func (k Keymap) Help(tab Tab) []string {
-	entries := make([]string, 0, len(k.bindings))
-	for _, binding := range k.bindings {
-		if (tab == "form" || tab == "log") && binding.Tab != string(tab) {
-			continue
+func (k Keymap) Help(tab Tab) []string                { return formatBindings(k.table.Entries(string(tab))) }
+func (k Keymap) Hints(tab Tab) []string               { return formatBindings(k.table.Hints(string(tab))) }
+func (k Keymap) KeyFor(tab Tab, action string) string { return k.table.KeyFor(string(tab), action) }
+
+func formatBindings(entries []sharedkeymap.Entry) []string {
+	labels := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		description := entry.Desc
+		if description == "" {
+			description = entry.Fun
 		}
-		if binding.Tab != "" && binding.Tab != string(tab) {
-			continue
-		}
-		entries = append(entries, binding.Key+" "+binding.Help)
+		labels = append(labels, entry.Key+" "+description)
 	}
-	return entries
+	return labels
 }
 
 func normalizeKey(key string) string {
+	if utf8.RuneCountInString(key) == 1 && key != " " {
+		return key
+	}
 	return strings.ToLower(strings.TrimSpace(key))
 }
 
 func knownAction(action string) bool {
 	switch action {
-	case "quit", "next_tab", "prev_tab", "move_up", "move_down", "activate", "cancel_modal", "toggle_log", "log_older", "log_newer", "log_page_older", "log_page_newer", "log_oldest", "log_newest", "log_close",
+	case "quit", "next_tab", "prev_tab", "move_up", "move_down", "activate", "cancel_modal", "toggle_log", "log_older", "log_newer", "log_page_older", "log_page_newer", "log_oldest", "log_newest", "log_close", "toggle_help", "help_up", "help_down", "help_page_up", "help_page_down", "help_home", "help_end", "help_close",
 		"tab_overview", "tab_proxies", "tab_subscriptions", "tab_filters", "tab_resources", "tab_settings",
 		"start", "stop", "reload_configuration", "manual_probe", "toggle_automation",
 		"refresh_subscription", "activate_subscription", "new_subscription", "edit_subscription", "delete_subscription", "refresh_filter", "refresh_resource", "new_filter", "edit_filter", "new_resource", "edit_resource",
@@ -119,12 +109,12 @@ func eventKeyName(event *tcell.EventKey) string {
 		return ""
 	}
 	if event.Key() == tcell.KeyRune {
-		key := strings.ToLower(event.Str())
+		key := event.Str()
 		if event.Str() == " " {
 			return "space"
 		}
 		if event.Modifiers()&tcell.ModCtrl != 0 && key != "" {
-			return "ctrl+" + key
+			return "ctrl+" + strings.ToLower(key)
 		}
 		return key
 	}
