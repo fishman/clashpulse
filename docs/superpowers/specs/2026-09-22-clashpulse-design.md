@@ -412,10 +412,14 @@ virtualized `widget.List`; snapshot application stays on the UI thread.
 
 Settings in the TUI is a `Setting | Value | Action` table. Build cells from
 typed snapshot fields, not `strings.Cut` of `" | "` detail strings; the selected
-detail uses plain sentences without pipe separators. GUI Settings shows
-desired binary, observed version, capabilities, and compatibility failure
-as aligned labels/values, not a pipe-delimited summary. Do not display
-resolver credentials or source URLs in a log or an incidental detail row.
+detail uses plain sentences without pipe separators. All visible Fyne
+pipe-concatenated summaries and list rows become aligned native fields:
+Overview counts and binary identity, Proxies name/state/latency, subscription
+name/source host/state, resource name/source host/state, filter name/format/
+state, and Settings binary desired/observed/capabilities/compatibility.
+Keep `widget.List` virtualization, the responsive Settings sidebar, and
+existing action controls. Truncate or wrap at narrow window widths; never
+render resolver credentials or source URLs in a log or incidental detail row.
 
 Use a local `httptest` 406 gate and redacted fixture to verify error
 classification and issue resolution, then test bounded retention, GUI and
@@ -424,26 +428,46 @@ credential leakage. No polling or background logfile reader is added.
 
 ### Shared terminal modal primitives
 
-Extract the reusable, mail-independent parts of notmutt's dialogue overlay
-into its existing `github.com/fishman/notmutt/lib/tui` module as a small
-`modal` package: bottom-anchored bordered-box geometry that reserves footer
-rows, and display-cell-aware text-entry wrapping with a visible cursor. The
-functions own neither model state, key dispatch, commands, styling, nor
-secrets. Notmutt keeps its mail-specific `dialogue` actions and lipgloss
-border styling; its existing dialogue/compose overlays and text prompts call
-the shared geometry/wrapping functions without changing frame height or
-dropping the bottom keyhint/status rows.
+Extract reusable, mail-independent modal behavior into
+`references/notmutt/lib/tui/modal` in the existing nested Go module.
+Shared geometry places bordered boxes above reserved footer rows; Unicode
+text wrapping keeps an edit cursor visible. Notmutt uses those primitives
+for its current dialogue/compose overlays, retaining mail-specific actions,
+lipgloss styling, status/keyhint rows, and existing tests.
 
-ClashPulse uses the same bottom-anchored geometry for its text, confirmation,
-and wizard modals. The tcell renderer draws its Catppuccin border and rows
-above the notice, key-help, and bottommost status rows, even on a full list.
-On a terminal too short or narrow for the border plus one content row, keep
-the existing modal input state but do not draw outside the screen. A long
-Unicode input wraps on display cells and windows to keep its cursor visible.
-ClashPulse must mask source URLs and resolver credentials before handing
-display text to the shared modal renderer; the shared package never receives
-controller credentials or IPC objects. Modal focus, field validation, wizard
-transitions, and intent dispatch remain client-owned.
+The same package also owns a reusable, declarative configuration form table
+even though Notmutt does not use that form today. A field has a stable ID,
+label, kind (text, toggle, or choice), value, allowed choices, editability,
+and a sensitive-display flag. The form state owns selected field identity,
+scroll position, pending text, and toggle/choice transitions; it accepts
+view actions from its caller and returns changed fields on Save or nothing
+on Cancel. Render aligned Field/Value rows with the shared terminal table
+geometry. Mask sensitive values before rendering, including while typing;
+never log or serialize a partial form. It has no Mihomo, mail, IPC, Fyne,
+configuration schema, filesystem, or network dependency.
+
+ClashPulse TUI replaces the one-field-at-a-time subscription, resource,
+filter, DNS, and monitor configuration wizards with these bottom-anchored
+scrollable form tables. Existing binary selection and confirmation modals
+use the shared box geometry. Declarative TOML keybindings select a row,
+toggle a boolean, edit a text/choice value, save, or cancel; help derives
+from the same bindings. ClashPulse alone validates typed commands and
+constructs authenticated IPC intents. An edit retains private source URL
+and User-Agent unless explicitly replaced or cleared; both are masked.
+Expose safe current route, HTTP/TLS opt-ins, refresh interval, and timeout
+in authenticated subscription snapshots so toggles show their actual
+values. Full URLs, custom User-Agent, credentials, and proxy bodies never
+enter snapshots. On a terminal too short or narrow for a border and one
+field row, retain pending modal state without drawing outside the screen.
+The bottommost status and the hotkey row remain visible.
+
+Verify form-table selection, toggles, choices, cancellation, masked input,
+and narrow-width scrolling in `lib/tui` without requiring Notmutt to use
+the form. Existing Notmutt dialogue tests stay green after geometry
+extraction. In ClashPulse, test each editor's typed IPC command, unchanged
+secret fields, and modal focus after unrelated snapshots. Headless Fyne
+tests and screenshots verify aligned GUI rows at wide and narrow widths;
+no visible ` | ` delimiter remains in those views.
 
 The user authorized publishing the new shared module version. After
 Notmutt's library and TUI tests pass, tag and push `lib/tui/v0.1.1` in the
