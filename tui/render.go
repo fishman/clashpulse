@@ -6,7 +6,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/fishman/notmutt/lib/tui/chrome"
-	"github.com/fishman/notmutt/lib/tui/table"
 	"github.com/fishman/notmutt/lib/tui/theme"
 	"github.com/gdamore/tcell/v3"
 	"github.com/gdamore/tcell/v3/color"
@@ -14,18 +13,21 @@ import (
 )
 
 var styles = theme.Resolve(theme.Palette{Base: map[string]string{
-	"fg": "#ffffff", "bg": "#000000", "muted": "#c0c0c0", "accent": "#00ffff", "error": "#ff0000", "modal": "#00008b",
+	"base": "#1e1e2e", "text": "#cdd6f4", "surface": "#313244", "muted": "#7f849c",
+	"blue": "#89b4fa", "green": "#a6e3a1", "yellow": "#f9e2af", "red": "#f38ba8",
 }}, "dark", map[string]theme.Style{
-	"normal":        {Fg: "fg", Bg: "bg"},
+	"normal":        {Fg: "text", Bg: "base"},
 	"muted":         {Fg: "muted"},
-	"accent":        {Fg: "accent", Attrs: []string{"bold"}},
-	"selected":      {Fg: "bg", Bg: "accent", Attrs: []string{"bold"}},
-	"error":         {Fg: "error"},
-	"modal":         {Bg: "modal"},
-	"tabbar":        {Fg: "muted"},
-	"tabbar.active": {Fg: "accent", Attrs: []string{"bold"}},
-	"status":        {Fg: "muted"},
-	"progress":      {Fg: "accent", Attrs: []string{"bold"}},
+	"accent":        {Fg: "blue", Attrs: []string{"bold"}},
+	"selected":      {Fg: "base", Bg: "blue", Attrs: []string{"bold"}},
+	"error":         {Fg: "red"},
+	"modal":         {Bg: "surface"},
+	"tabbar":        {Fg: "text", Bg: "surface"},
+	"tabbar.active": {Fg: "base", Bg: "blue", Attrs: []string{"bold"}},
+	"status":        {Fg: "text", Bg: "surface"},
+	"connection":    {Fg: "base", Bg: "green", Attrs: []string{"bold"}},
+	"profile":       {Fg: "base", Bg: "blue"},
+	"progress":      {Fg: "base", Bg: "yellow"},
 })
 
 var compiledStyles = func() map[string]tcell.Style {
@@ -43,7 +45,6 @@ var (
 	selectedStyle = styleForName("selected")
 	errorStyle    = styleForName("error")
 	modalStyle    = styleForName("modal")
-	headerLayout  = lipgloss.NewStyle().Align(lipgloss.Center)
 	statusLayout  = lipgloss.NewStyle().Align(lipgloss.Left)
 )
 
@@ -85,7 +86,6 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 	for i := range cache.current {
 		cache.current[i] = renderLine{}
 	}
-	setLine(cache.current, 0, headerLayout.Width(width).Render("ClashPulse - "+viewTitle(model.Tab)), roleAccent)
 	labels := make([]string, len(tabs))
 	active := 0
 	for i, tab := range tabs {
@@ -94,10 +94,14 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 			active = i
 		}
 	}
-	setRuns(cache.current, 1, chrome.Tabs(labels, active, width, "tabbar", "tabbar.active"))
-	layout := table.Layout{Cols: []table.Col{{Floor: 12, Cap: 24}}, Sep: "  "}
-	sizes := layout.Sizes(width, true)
-	setLine(cache.current, 2, layout.Line([]string{"Name", "Details"}, sizes), roleMuted)
+	setRuns(cache.current, 0, chrome.Tabs(labels, active, width, "tabbar", "tabbar.active"))
+	columns := tableColumns(model.Tab)
+	indexes, layout, sizes := fitTable(columns, width)
+	headings := make([]string, len(indexes))
+	for i, index := range indexes {
+		headings[i] = columns[index].heading
+	}
+	setLine(cache.current, 1, layout.Line(headings, sizes), roleMuted)
 	rows := model.Rows()
 	contentHeight := height - 6
 	if contentHeight < 0 {
@@ -108,26 +112,58 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 		if row.Selected {
 			role = roleSelected
 		}
-		setLine(cache.current, 3+i, layout.Line([]string{row.Title, row.Detail}, sizes), role)
+		values := row.Cells
+		if values == nil {
+			values = []string{row.Title, row.Detail}
+		}
+		var cells [7]string
+		for j, index := range indexes {
+			if index < len(values) {
+				cells[j] = values[index]
+			}
+		}
+		setLine(cache.current, 2+i, layout.Line(cells[:len(indexes)], sizes), role)
 	}
 	if len(rows) == 0 && contentHeight > 0 {
-		setLine(cache.current, 3, " No items are currently reported by the service.", roleMuted)
+		setLine(cache.current, 2, " No items are currently reported by the service.", roleMuted)
 	}
-	if height >= 4 {
-		progress := []chrome.Segment{{Runs: []chrome.Run{{Text: model.Progress(), Style: "progress"}}, Priority: 10}}
+	if height >= 6 && model.Tab != TabOverview {
+		for _, row := range rows {
+			if row.Selected {
+				setLine(cache.current, height-4, row.Detail, roleMuted)
+				break
+			}
+		}
+	}
+	if height >= 6 {
+		profile := "profile not reported"
+		for _, subscription := range model.snapshot.Snapshot.Subscriptions {
+			if subscription.Active {
+				profile = "profile " + subscription.Name
+				if subscription.Name == "" {
+					profile = "profile " + subscription.ID
+				}
+				break
+			}
+		}
+		left := []chrome.Segment{
+			{Runs: []chrome.Run{{Text: "IPC connected", Style: "connection"}}, Priority: 10},
+			{Runs: []chrome.Run{{Text: profile, Style: "profile"}}, Priority: 9},
+			{Runs: []chrome.Run{{Text: model.Progress(), Style: "progress"}}, Priority: 2},
+		}
 		var pending []chrome.Segment
 		if model.Pending > 0 {
-			pending = append(pending, chrome.Segment{Runs: []chrome.Run{{Text: "sending " + itoa(model.Pending), Style: "status"}}, Priority: 5})
+			pending = append(pending, chrome.Segment{Runs: []chrome.Run{{Text: "sending " + itoa(model.Pending), Style: "status"}}, Priority: 3})
 		}
-		setRuns(cache.current, height-3, chrome.Status(width, "status", progress, pending))
+		setRuns(cache.current, height-1, chrome.Status(width, "status", left, pending))
 		if model.Notice != "" {
 			style := "status"
 			if strings.HasPrefix(model.Notice, "Command failed:") || strings.HasPrefix(model.Notice, "Managed source command failed") {
 				style = "error"
 			}
-			setRuns(cache.current, height-2, chrome.Status(width, "status", []chrome.Segment{{Runs: []chrome.Run{{Text: model.Notice, Style: style}}, Priority: 10}}, nil))
+			setRuns(cache.current, height-3, chrome.Status(width, "status", []chrome.Segment{{Runs: []chrome.Run{{Text: model.Notice, Style: style}}, Priority: 10}}, nil))
 		}
-		setRuns(cache.current, height-1, chrome.Status(width, "status", []chrome.Segment{{Runs: []chrome.Run{{Text: strings.Join(model.Help(), "   "), Style: "muted"}}, Priority: 10}}, nil))
+		setRuns(cache.current, height-2, chrome.Status(width, "status", []chrome.Segment{{Runs: []chrome.Run{{Text: strings.Join(model.Help(), "   "), Style: "muted"}}, Priority: 10}}, nil))
 	}
 	if model.Modal != nil {
 		message := modalPrompt(model.Modal.Kind)

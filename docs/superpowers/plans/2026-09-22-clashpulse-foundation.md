@@ -728,19 +728,284 @@ git add ui .github/workflows/build.yml docs/dependencies.md go.mod go.sum
 git commit -m "feat(ui): add fyne ipc client"
 ```
 
+## Task 11: Catppuccin TUI chrome and status segments
+
+**State:** Tasks 1-10 describe the original foundation; this task updates the
+already-shipped TUI against the approved `### TUI chrome and tables` spec.
+
+**Files:** Modify `tui/render.go`, `tui/render_test.go`; leave `tui/app.go`,
+`core/snapshot.go`, `ipc/`, and the read-only `references/notmutt/` untouched.
+
+**Interfaces:** Consume `Model.Tab`, `Model.Pending`, `Model.Progress()`,
+`Model.snapshot.Snapshot.Subscriptions`, `chrome.Tabs`, `chrome.Status`, and
+`theme.Resolve`. Produce the existing `render(tcell.Screen, Model, *renderCache)`;
+Task 12 consumes its row 0 tabs, row 1 header, rows 2 onward data, and last
+three rows notice, key-help, status (status is bottommost).
+
+- [ ] **Step 1: Write renderer regressions before changing code**
+
+In `tui/render_test.go`, use the existing `mockRender` helper and import `core`
+and `ipc`:
+
+```go
+func TestRenderTabsOccupyFirstRow(t *testing.T) {
+    model := NewModel()
+    model.Tab = TabResources
+    rows := mockRender(t, model, 80, 12)
+    if !strings.Contains(rows[0], "Resources") || strings.Contains(rows[0], "ClashPulse") {
+        t.Fatalf("top tab row = %q", rows[0])
+    }
+    if !strings.Contains(rows[1], "Name") { t.Fatalf("table header = %q", rows[1]) }
+}
+func TestRenderStatusIdentifiesConnectionAndActiveProfile(t *testing.T) {
+    model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{
+        Subscriptions: []core.SubscriptionSnapshot{{ID: "primary", Name: "Primary", Active: true}},
+    }})
+    model.Pending = 2
+    rows := mockRender(t, model, 80, 12)
+    if !strings.Contains(rows[11], "IPC connected") || !strings.Contains(rows[11], "Primary") || !strings.Contains(rows[11], "sending 2") {
+        t.Fatalf("status segments = %q", rows[11])
+    }
+    model = NewModel()
+    if row := mockRender(t, model, 80, 12)[11]; !strings.Contains(row, "profile not reported") {
+        t.Fatalf("unknown profile was invented: %q", row)
+    }
+}
+func TestRenderCatppuccinMochaPalette(t *testing.T) {
+    if styles["normal"].Bg != "#1e1e2e" || styles["normal"].Fg != "#cdd6f4" || styles["tabbar.active"].Bg != "#89b4fa" {
+        t.Fatalf("theme = %#v", styles)
+    }
+}
+```
+
+Run: `go test -tags ci ./tui -run '^TestRender(TabsOccupyFirstRow|StatusIdentifiesConnectionAndActiveProfile|CatppuccinMochaPalette)$' -count=1`.
+Expect failures on the old title row, absent status segments, and black/cyan
+palette. Existing renderer tests with hard-coded row numbers must be updated to
+the new geometry, not weakened or removed.
+
+- [ ] **Step 2: Replace chrome styles and remove the title row**
+
+Use `theme.Resolve` once with the spec's Mocha base/text/surface/muted/blue/
+green/yellow/red colors; map semantic normal, muted, accent, selected, error,
+modal, tabbar, tabbar.active, status, connection, profile, and progress styles
+to named palette entries. Use filled blue text-on-accent for the active tab and
+selected row; keep low-contrast text on surface for inactive tabs/status.
+Delete `headerLayout`, its lipgloss-only title render, and its first-row call.
+Render `chrome.Tabs(labels, active, width, ...)` at y=0, existing Name/Details
+header at y=1, data from y=2, with `contentHeight := max(0, height-5)`.
+Do not add a title row, redraw timer, or theme dependency.
+
+- [ ] **Step 3: Populate one status row with typed segments**
+
+At y=`height-1`, call `chrome.Status` with left segments `IPC connected`
+(priority 10), `profile <active subscription Name>` (priority 9, use ID when
+Name is blank, else `profile not reported`), and job progress (priority 2).
+Put pending command count on the right (priority 3). Keep the notice/error row
+at `height-3` and key-help immediately above status at `height-2`. Use only
+sanitized subscription display metadata from the IPC snapshot; no URL or
+profile YAML.
+Do not add reconnect: `tui.Run` still exits with its existing clear error if
+IPC closes.
+Use `chrome.Status`' existing priority fitting rather than a second width
+calculation; keep the changed-row cache and short-height bounds.
+
+- [ ] **Step 4: Verify the chrome slice**
+
+Run `gofmt -w tui/render.go tui/render_test.go`, then
+`go test -tags ci ./tui -count=1`. Review the changed files for duplicated
+formatting or state; no new server/client contract is needed.
+
+## Task 12: Snapshot-backed tables for each TUI tab
+
+**Files:** Modify `tui/model.go`, `tui/render.go`, `tui/model_test.go`,
+`tui/render_test.go`; create `tui/table.go` for per-tab column definitions
+and priority fitting. Do not change IPC snapshots, the shared Notmutt library,
+or the existing command/key dispatch.
+
+**Interfaces:** Extend `Row` with `Cells []string` built from its snapshot in
+`rowsForSnapshot`, preserving `ID`, `Title`, `Detail`, `kind`, and selected
+identity. `render` consumes those cells, existing `table.Layout` and
+`visibleRows`; status and tab positions are Task 11's contract. Per-tab
+headings/widths/priorities are one local typed table definition, not a second
+model or generic widget framework.
+
+In `tui/table.go`, use these concrete local types (no new public API):
+
+```go
+type tableColumn struct {
+    heading string
+    width table.Col
+    dropRank int // smaller drops first; 10 means mandatory if it fits
+}
+func tableColumns(tab Tab) []tableColumn
+func fitTable(columns []tableColumn, width int) ([]int, table.Layout, []int)
+```
+
+Resource floors/caps in display order: Name 12/24, Type 12/18,
+Format 6/8, Source 14/24, Enabled 7/8, Validated 9/10, Next 12/18;
+separator `"  "`. Drop order at narrow widths: Next, Source, Format,
+Type, Validated, Enabled, Name; retain Enabled with Name whenever the
+terminal accommodates both. Other tab drop orders: Subscriptions Usage,
+Next, Last, Source, State, Name; Filters Next, Source, Format, Target,
+Validated, Enabled, Name; Proxies Outcome, Automation, Latency, Selected,
+Group, Proxy. Settings uses Setting/Value only; Overview keeps its summary.
+
+- [ ] **Step 1: Write full-width and narrow-width table regressions**
+
+In `tui/render_test.go`, use `mockRender` and immutable `ipc.Event` fixtures:
+
+```go
+func TestRenderResourceTableAlignsAndUsesSourceHost(t *testing.T) {
+    model := NewModel()
+    model.Tab = TabResources
+    model = model.Apply(ipc.Event{Snapshot: core.Snapshot{Resources: []core.ResourceSnapshot{
+        {ID: "geo", Kind: "geosite.dat", Format: "dat", SourceHost: "mirror.example", Enabled: true, Validated: true},
+    }}})
+    wide := mockRender(t, model, 120, 12)
+    for _, label := range []string{"Name", "Type", "Format", "Source", "Enabled", "Validated"} {
+        if !strings.Contains(wide[1], label) { t.Fatalf("missing %s: %q", label, wide[1]) }
+    }
+    if !strings.Contains(wide[2], "mirror.example") || !strings.Contains(wide[2], "geosite.dat") {
+        t.Fatalf("resource cells = %q", wide[2])
+    }
+    narrow := mockRender(t, model, 30, 12)
+    if !strings.Contains(narrow[1], "Name") || !strings.Contains(narrow[1], "Enabled") || strings.Contains(narrow[1], "Source") {
+        t.Fatalf("narrow resource columns = %q", narrow[1])
+    }
+}
+```
+
+Add a table-driven test for the remaining tab contracts using literal fixture
+snapshots and consumer-visible headers/cells:
+
+```go
+func TestRenderTabTables(t *testing.T) {
+    cases := []struct {
+        tab Tab
+        snapshot core.Snapshot
+        header, row string
+    }{
+        {TabSubscriptions, core.Snapshot{Subscriptions: []core.SubscriptionSnapshot{{ID: "primary", Name: "Primary", SourceHost: "provider.example", Enabled: true}}}, "Source", "provider.example"},
+        {TabFilters, core.Snapshot{Filters: []core.FilterSnapshot{{ID: "ads", Format: "yaml", Target: "REJECT", SourceHost: "rules.example", Enabled: true}}}, "Target", "REJECT"},
+        {TabProxies, core.Snapshot{Groups: []core.GroupSnapshot{{ID: "main", Label: "Main", Selected: "alpha", Proxies: []string{"alpha"}}}, Proxies: []core.ProxySnapshot{{GroupID: "main", ID: "alpha", Outcome: "success", LatencyMillis: 45}}}, "Latency", "alpha"},
+        {TabSettings, core.Snapshot{Binary: core.BinarySnapshot{Desired: "system"}}, "Value", "system"},
+    }
+    for _, tc := range cases {
+        t.Run(string(tc.tab), func(t *testing.T) {
+            model := NewModel()
+            model.Tab = tc.tab
+            model = model.Apply(ipc.Event{Snapshot: tc.snapshot})
+            lines := mockRender(t, model, 120, 12)
+            if !strings.Contains(lines[1], tc.header) || !strings.Contains(strings.Join(lines[2:8], " "), tc.row) {
+                t.Fatalf("tab %s: header %q, rows %q", tc.tab, lines[1], lines[2:8])
+            }
+        })
+    }
+}
+```
+
+At width 20, keep the identifying cells and drop optional columns:
+
+```go
+func TestRenderNarrowTable(t *testing.T) {
+    model := NewModel()
+    model.Tab = TabResources
+    model = model.Apply(ipc.Event{Snapshot: core.Snapshot{Resources: []core.ResourceSnapshot{
+        {ID: "geo-active", Kind: "geosite.dat", SourceHost: "mirror.example", Enabled: true},
+    }}})
+    rows := mockRender(t, model, 20, 12)
+    if !strings.Contains(rows[1], "Name") || strings.Contains(rows[1], "Source") || !strings.Contains(rows[2], "geo-active") {
+        t.Fatalf("narrow table lost identity: header %q, row %q", rows[1], rows[2])
+    }
+}
+```
+
+Use a separate long multibyte ID fixture to verify the last visible glyph
+does not straddle its name cell; the shared `table.Layout.Line` already pads
+and clips by display width. Preserve `TestApplyKeepsStableProxyCursorAndModalFocus`
+and `TestPrivateSourceModalNeverDisplaysEnteredURL`. Update
+`TestRenderAlignsSettingsDetails` to assert new Setting/Value alignment rather
+than the obsolete Details label. Overview retains its status summary rows.
+Only `SourceHost` exists in snapshots: test the host is rendered; do not
+write a tautological test that an absent URL field is absent.
+
+Run: `go test -tags ci ./tui -run '^TestRender(ResourceTableAlignsAndUsesSourceHost|TabTables|NarrowTable)$' -count=1`.
+Expect failure against the two-column renderer.
+
+- [ ] **Step 2: Build cells from each snapshot once**
+
+In `rowsForSnapshot`, set `Row.Cells` alongside each existing stable `Row.ID`:
+Proxies `[group, proxy, selected, latency, outcome, automation]`; subscription
+`[name, source host, state, last check, next refresh, usage]`; filter `[ID,
+format, target, source host, enabled, validated, next update]`; resource `[ID,
+kind, format, source host, enabled, validated, next update]`; Settings `[setting,
+current value]`. Keep Overview's current summary rows. Derive active/disabled
+and validated flags from typed booleans and preserve `Detail` for selected-row
+hashes, destination, failure, usage, timestamps, and other secondary data.
+Never put full source URLs, credentials, or profile contents into a cell,
+detail, event, or error. Keep `Model.Apply`'s stable-ID selection and diff
+logic unchanged; no new snapshot traversal on every painted row.
+
+- [ ] **Step 3: Render prioritized columns and selected-row detail**
+
+Use the per-tab headings and `table.Col{Floor,Cap}` widths above in display
+order. `fitTable` removes the lowest-rank optional index while column floors
+plus two-cell separators exceed available width; retain surviving indexes
+in display order, then call the shared `table.Layout.Sizes(width, false)`.
+If only the identity column remains, allow its width to shrink to the terminal
+width and use `table.Layout.Line` for safe rune-width clipping. Header and
+every row use exactly those same indexes and sizes. Keep Name/Enabled at
+30 columns for the resource fixture; the 20-column case may show Name alone.
+Place the selected `Row.Detail` in one sanitized detail line at `height-4`;
+reserve it above the existing three footer rows, with visible data rows
+`max(0, height-6)` starting at y=2. Keep inactive tab selections, focus,
+modal, and bounded changed-row rendering intact. No horizontal scroll state,
+per-cell goroutines, or list widget abstraction.
+
+- [ ] **Step 4: Verify UI behavior and integrate**
+
+Run `gofmt -w tui/model.go tui/render.go tui/table.go tui/model_test.go tui/render_test.go`,
+then `go test -tags ci ./tui -count=1`,
+`go test -tags ci -count=1 ./...`, and `go vet -tags ci ./...`. Exercise a real
+`clashpulse tui` session on a PTY against a disposable local IPC server,
+resize from wide to narrow, switch tabs, and observe the rendered status and
+resource columns; do not use production subscriptions or credentials. Perform
+the project DRY pass, rerun formatter and focused test, then commit only the
+TUI files with `feat(tui): add catppuccin chrome and tables` if the user
+authorizes a commit.
+
+## TUI redesign review focus
+
+- Narrow terminal with a selected resource: preserve its identity and enabled
+  state before source/format/next-update columns. `TestRenderNarrowTable`.
+- Long multibyte resource ID: truncate on display-cell boundaries; no partial
+  wide rune in the last cell. `TestRenderNarrowTable`.
+- Missing active subscription: show `profile not reported`, not the first
+  enabled subscription. `TestRenderStatusIdentifiesConnectionAndActiveProfile`.
+- Short height with a modal: no negative layout/row overlap or panic; preserve
+  modal focus. Extend `TestRenderKeepsActiveTabVisible` with 3-row input.
+- Secret in an edit modal: mask input while showing safe source hosts in table
+  rows. Preserve `TestPrivateSourceModalNeverDisplaysEnteredURL` and use
+  `SourceHost` in `TestRenderResourceTableAlignsAndUsesSourceHost`.
+
 ## Plan self-review
 
-- Spec coverage: Tasks 1-10 cover strict TOML, module dependencies, Mihomo binary selection, subscriptions, resources/filter/DNS/DNSCrypt, monitoring, System Proxy, local IPC, TUI, Fyne, and packaging. TUN, core download, remote control, editor features, telemetry, and subscription pools stay excluded.
-- Placeholder scan: no implementation placeholders; every task names files, interfaces, a concrete red test, green command, and commit.
-- Type consistency: `config.Snapshot` is the user-intent input to renderer/planners; `core.Snapshot` is the immutable client event output. `mihomo.Manager` is consumed by monitor/app. IPC events carry `core.Snapshot`; UI/TUI consume only IPC client contracts.
+- Spec coverage: original Tasks 1-10 are shipped; Tasks 11-12 implement the
+  approved TUI chrome and tables section without changing transport or
+  lifecycle. The Mocha palette, top tabs, safe status, each tab's columns,
+  narrow layout, stable cursor, selected details, and PTY smoke each have an
+  owner above.
+- Placeholder scan: both new tasks name real files, existing interfaces,
+  failing renderer checks, focused green commands, and whole-project checks.
+- Type consistency: `Row.Cells` adds rendering data but retains `Row.ID`,
+  `Detail`, and action fields. `core.Snapshot` remains an authenticated IPC
+  event payload; source URLs are still absent. `chrome` and `table` remain
+  shared primitives, not model owners.
 
 ## Execution Handoff
 
-Plan complete and saved to `docs/superpowers/plans/2026-09-22-clashpulse-foundation.md`.
-
-Two execution options:
-
-1. **Subagent-Driven (recommended)** - dispatch a fresh subagent per task and review between tasks.
-2. **Inline Execution** - execute tasks in this session with checkpoints.
-
-Which approach?
+Review Tasks 11-12 in this updated existing plan before implementation. Both
+tasks depend on the same `tui/render.go` geometry and should execute in order;
+no parallel same-file edits. Choose native in-session execution (recommended)
+or subagent-driven implementation and review. Do not execute the original
+completed foundation tasks again.

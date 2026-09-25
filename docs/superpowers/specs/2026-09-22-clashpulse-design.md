@@ -366,9 +366,9 @@ profile name comes from the authenticated snapshot; absent an active
 subscription, display `profile not reported` rather than inventing one.
 ClashPulse currently exits with a clear error when IPC closes; this visual
 change does not add reconnect behavior or claim a disconnected live state.
-Existing notice/error and key-help rows remain below the status row. The
-status layout drops lower-priority segments as width shrinks, keeping IPC
-connection and profile identity when they fit.
+The status bar is the bottommost terminal row. Key-help sits directly above
+it, with notice/error above key-help. Lower-priority status segments drop as
+width shrinks, keeping IPC connection and profile identity when they fit.
 
 Verify wide and narrow tcell renders for tab position, exact table alignment,
 column priority, status segments, stable cursor/modal state, and redaction.

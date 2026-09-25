@@ -127,6 +127,7 @@ type Row struct {
 	ID       string
 	Title    string
 	Detail   string
+	Cells    []string
 	Selected bool
 
 	kind           rowKind
@@ -1556,17 +1557,23 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 		return rows
 	case TabProxies:
 		rows := make([]Row, 0)
-		proxyInfo := make(map[string]string, len(snapshot.Proxies))
-		proxyLabels := make(map[string]string, len(snapshot.Proxies))
+		proxyInfo := make(map[string]struct{ label, detail, outcome, latency string }, len(snapshot.Proxies))
 		for _, proxy := range snapshot.Proxies {
 			key := proxy.GroupID + "\x00" + proxy.ID
-			proxyInfo[key] = proxyDetail(proxy.LatencyMillis, proxy.Outcome)
-			proxyLabels[key] = proxy.Label
+			info := struct{ label, detail, outcome, latency string }{
+				label: proxy.Label, detail: proxyDetail(proxy.LatencyMillis, proxy.Outcome), outcome: proxy.Outcome,
+			}
+			if proxy.LatencyMillis > 0 && proxy.Outcome == "success" {
+				info.latency = fmt.Sprintf("%d ms", proxy.LatencyMillis)
+			}
+			proxyInfo[key] = info
 		}
 		for _, group := range snapshot.Groups {
+			groupName := fallback(group.Label, group.ID)
+			automation := enabledLabel(group.AutomationEnabled)
 			detail := group.Type
 			if group.Selected != "" {
-				selectedLabel := fallback(proxyLabels[group.ID+"\x00"+group.Selected], group.Selected)
+				selectedLabel := fallback(proxyInfo[group.ID+"\x00"+group.Selected].label, group.Selected)
 				detail = appendDetail(detail, "selected "+selectedLabel)
 			}
 			if group.AutomationEnabled {
@@ -1574,21 +1581,35 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 			} else {
 				detail = appendDetail(detail, "automation off")
 			}
-			rows = append(rows, Row{ID: "group:" + group.ID, Title: fallback(group.Label, group.ID), Detail: detail, kind: rowGroup, groupID: group.ID})
+			rows = append(rows, Row{ID: "group:" + group.ID, Title: groupName, Detail: detail,
+				Cells: []string{groupName, groupName, fallback(proxyInfo[group.ID+"\x00"+group.Selected].label, group.Selected), "", "", automation},
+				kind:  rowGroup, groupID: group.ID})
 			for _, proxyID := range group.Proxies {
 				proxyKey := group.ID + "\x00" + proxyID
-				proxyDetailText := proxyInfo[proxyKey]
+				info := proxyInfo[proxyKey]
+				proxyDetailText := info.detail
 				if proxyID == group.Selected {
 					proxyDetailText = appendDetail("active", proxyDetailText)
 				}
-				proxyTitle := fallback(proxyLabels[proxyKey], proxyID)
-				rows = append(rows, Row{ID: "proxy:" + group.ID + ":" + proxyID, Title: "  " + proxyTitle, Detail: proxyDetailText, kind: rowProxy, groupID: group.ID, choiceID: proxyID})
+				proxyTitle := fallback(info.label, proxyID)
+				selected := ""
+				if proxyID == group.Selected {
+					selected = "yes"
+				}
+				rows = append(rows, Row{ID: "proxy:" + group.ID + ":" + proxyID, Title: "  " + proxyTitle, Detail: proxyDetailText,
+					Cells: []string{groupName, proxyTitle, selected, info.latency, info.outcome, automation},
+					kind:  rowProxy, groupID: group.ID, choiceID: proxyID})
 			}
 		}
 		return rows
 	case TabSubscriptions:
 		rows := make([]Row, 0, len(snapshot.Subscriptions))
 		for _, subscription := range snapshot.Subscriptions {
+			state := enabledLabel(subscription.Enabled)
+			if subscription.Active {
+				state = "active"
+			}
+			checked, next, usage := "", "", ""
 			detail := appendDetail(subscription.SourceHost, enabledLabel(subscription.Enabled))
 			if subscription.Active {
 				detail = appendDetail(detail, "active")
@@ -1597,13 +1618,15 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 				}
 			}
 			if subscription.LastCheck > 0 {
-				detail = appendDetail(detail, "checked "+timeLabel(subscription.LastCheck))
+				checked = timeLabel(subscription.LastCheck)
+				detail = appendDetail(detail, "checked "+checked)
 			}
 			if subscription.LastSuccess > 0 {
 				detail = appendDetail(detail, "success "+timeLabel(subscription.LastSuccess))
 			}
 			if subscription.NextDue > 0 {
-				detail = appendDetail(detail, "next "+timeLabel(subscription.NextDue))
+				next = timeLabel(subscription.NextDue)
+				detail = appendDetail(detail, "next "+next)
 			}
 			if subscription.HashPrefix != "" {
 				detail = appendDetail(detail, "hash "+subscription.HashPrefix)
@@ -1615,17 +1638,21 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 				detail = appendDetail(detail, "needs attention")
 			}
 			if subscription.Usage != nil {
+				usage = fmt.Sprintf("%d up %d down", subscription.Usage.UploadedBytes, subscription.Usage.DownloadedBytes)
 				detail = appendDetail(detail, fmt.Sprintf("usage up %d down %d total %d bytes", subscription.Usage.UploadedBytes, subscription.Usage.DownloadedBytes, subscription.Usage.TotalBytes))
 				if subscription.Usage.ExpiresAt > 0 {
 					detail = appendDetail(detail, "expires "+timeLabel(subscription.Usage.ExpiresAt))
 				}
 			}
-			rows = append(rows, Row{ID: "subscription:" + subscription.ID, Title: fallback(subscription.Name, subscription.ID), Detail: detail, kind: rowSubscription, subscriptionID: subscription.ID})
+			rows = append(rows, Row{ID: "subscription:" + subscription.ID, Title: fallback(subscription.Name, subscription.ID), Detail: detail,
+				Cells: []string{fallback(subscription.Name, subscription.ID), subscription.SourceHost, state, checked, next, usage},
+				kind:  rowSubscription, subscriptionID: subscription.ID})
 		}
 		return rows
 	case TabFilters:
 		rows := make([]Row, 0, len(snapshot.Filters))
 		for _, filter := range snapshot.Filters {
+			validated, next := yesNo(filter.Validated), ""
 			detail := appendDetail("resource "+filter.ResourceID, "format "+filter.Format)
 			detail = appendDetail(detail, "target "+filter.Target)
 			detail = appendDetail(detail, appendDetail(filter.SourceHost, enabledLabel(filter.Enabled)))
@@ -1642,17 +1669,21 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 				detail = appendDetail(detail, "success "+timeLabel(filter.LastSuccess))
 			}
 			if filter.NextDue > 0 {
-				detail = appendDetail(detail, "next "+timeLabel(filter.NextDue))
+				next = timeLabel(filter.NextDue)
+				detail = appendDetail(detail, "next "+next)
 			}
 			if filter.LastFailure != "" {
 				detail = appendDetail(detail, "needs attention")
 			}
-			rows = append(rows, Row{ID: "filter:" + filter.ID, Title: filter.ID, Detail: detail, kind: rowFilter, filterID: filter.ID})
+			rows = append(rows, Row{ID: "filter:" + filter.ID, Title: filter.ID, Detail: detail,
+				Cells: []string{filter.ID, filter.Format, filter.Target, filter.SourceHost, enabledLabel(filter.Enabled), validated, next},
+				kind:  rowFilter, filterID: filter.ID})
 		}
 		return rows
 	case TabResources:
 		rows := make([]Row, 0, len(snapshot.Resources))
 		for _, resource := range snapshot.Resources {
+			validated, next := yesNo(resource.Validated), ""
 			detail := appendDetail(resource.Kind, "format "+resource.Format)
 			detail = appendDetail(detail, "rule type "+resource.RuleType)
 			detail = appendDetail(detail, resource.SourceHost)
@@ -1675,12 +1706,15 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 				detail = appendDetail(detail, "success "+timeLabel(resource.LastSuccess))
 			}
 			if resource.NextDue > 0 {
-				detail = appendDetail(detail, "next "+timeLabel(resource.NextDue))
+				next = timeLabel(resource.NextDue)
+				detail = appendDetail(detail, "next "+next)
 			}
 			if resource.LastResult != "" {
 				detail = appendDetail(detail, "needs attention")
 			}
-			rows = append(rows, Row{ID: "resource:" + resource.ID, Title: resource.ID, Detail: detail, kind: rowResource, resourceID: resource.ID})
+			rows = append(rows, Row{ID: "resource:" + resource.ID, Title: resource.ID, Detail: detail,
+				Cells: []string{resource.ID, resource.Kind, resource.Format, resource.SourceHost, enabledLabel(resource.Enabled), validated, next},
+				kind:  rowResource, resourceID: resource.ID})
 		}
 		return rows
 	case TabSettings:
@@ -1719,6 +1753,10 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 			matcher, value := dnsRouteMatcherFields(route.Suffix, route.GeoSite, route.Resource)
 			id := dnsRouteIdentity(route.Suffix, route.GeoSite, route.Resource)
 			rows = append(rows, Row{ID: id, Title: "DNS route " + matcher + " " + value, Detail: "resolver " + route.ResolverSet + " | press Enter or g to edit, x to remove", kind: rowDNSRoute, dnsID: id})
+		}
+		for i := range rows {
+			value, _, _ := strings.Cut(rows[i].Detail, " | ")
+			rows[i].Cells = []string{rows[i].Title, value}
 		}
 		return rows
 	default:
