@@ -7,16 +7,32 @@ import (
 
 func TestPrivateSourceModalNeverDisplaysEnteredURL(t *testing.T) {
 	secret := "https://provider.invalid/profile?token=private"
-	for _, item := range []*Modal{
-		{Kind: ModalResource, Input: secret, managed: managedForm{step: resourceFieldURL}},
-		{Kind: ModalDNSResolver, Input: secret, dns: dnsForm{step: dnsSetEndpoints}},
-	} {
-		text := modalDisplayInput(item)
-		if strings.Contains(text, "private") || strings.Contains(text, "provider.invalid") {
-			t.Fatal("private URL shown in modal")
+	resource := NewModel().Apply(eventFromJSON(t, `{"Snapshot":{"Resources":[{"ID":"geo","Kind":"rule-set","Format":"yaml","RuleType":"domain","Enabled":true}]}}`))
+	resource.Tab = TabResources
+	resource.Selection[TabResources] = "resource:geo"
+	resource, _, _ = resource.HandleKey("e")
+	dns := dnsPolicyModel(t)
+	dns.Selection[TabSettings] = "dns:set:one"
+	dns, _, _ = dns.HandleKey("g")
+	for _, item := range []struct {
+		model Model
+		field string
+	}{{resource, "url"}, {dns, "endpoints"}} {
+		model := item.model
+		if model.Modal == nil || model.Modal.Form == nil {
+			t.Fatal("private source form missing")
+		}
+		model = moveToFormField(t, model, item.field)
+		model, _, _ = model.HandleKey("enter")
+		model = typeFormText(t, model, secret)
+		text := strings.Join(mockRender(t, model, 80, 20), "\n")
+		if strings.Contains(text, "provider.invalid") || strings.Contains(text, "token=private") {
+			t.Fatalf("private source rendered in form: %q", text)
 		}
 	}
-	if got := modalDisplayInput(&Modal{Kind: ModalBinary, Input: "system"}); got != "system" {
-		t.Fatalf("nonsecret binary selection hidden: %q", got)
+	binary := NewModel().selectTab(TabSettings)
+	binary, _, _ = binary.HandleKey("b")
+	if binary.Modal == nil || binary.Modal.Form != nil {
+		t.Fatal("binary selector must remain simple")
 	}
 }

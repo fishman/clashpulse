@@ -124,6 +124,15 @@ func TestRenderStatusIsBottommost(t *testing.T) {
 	}
 }
 
+func TestRenderMonitorPolicyTitle(t *testing.T) {
+	model := NewModel().selectTab(TabSettings)
+	model, _, _ = model.HandleKey("i")
+	rows := strings.Join(mockRender(t, model, 80, 20), "\n")
+	if !strings.Contains(rows, "Monitor policy") || strings.Contains(rows, "setting settings") {
+		t.Fatalf("monitor form title is unclear: %q", rows)
+	}
+}
+
 func TestRenderTabsOccupyFirstRow(t *testing.T) {
 	model := NewModel()
 	model.Tab = TabResources

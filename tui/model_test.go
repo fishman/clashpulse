@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -42,13 +43,13 @@ func TestApplyKeepsStableProxyCursorAndModalFocus(t *testing.T) {
 	model.Tab = TabProxies
 	model.Selection[TabProxies] = "proxy:g:beta"
 	model.Focus = FocusModal
-	model.Modal = &Modal{Kind: ModalMonitorInterval, Input: "60"}
+	model.Modal = &Modal{Kind: ModalBinary, Input: "system"}
 	model = model.Apply(eventFromJSON(t, `{"Snapshot":{"Groups":[{"ID":"g","Proxies":["beta","alpha"]}],"Subscriptions":[{"ID":"sub","Name":"before"}]}}`))
 
 	if got := model.Selection[TabProxies]; got != "proxy:g:beta" {
 		t.Fatalf("proxy cursor = %q, want stable proxy ID", got)
 	}
-	if model.Focus != FocusModal || model.Modal == nil || model.Modal.Input != "60" {
+	if model.Focus != FocusModal || model.Modal == nil || model.Modal.Input != "system" {
 		t.Fatalf("modal focus did not survive snapshot: focus=%q modal=%#v", model.Focus, model.Modal)
 	}
 
@@ -330,22 +331,122 @@ func TestDeleteSubscriptionRequiresModalConfirmation(t *testing.T) {
 	}
 }
 
+func TestResourceFormToggleRetainsPrivateSource(t *testing.T) {
+	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Resources: []core.ResourceSnapshot{{ID: "geo", Kind: "geosite.dat", Format: "dat", Enabled: true}}}})
+	model.Tab = TabResources
+	model.Selection[TabResources] = "resource:geo"
+	model, _, _ = model.HandleKey("e")
+	if model.Modal == nil || model.Modal.Form == nil {
+		t.Fatal("resource form absent")
+	}
+	model = moveToFormField(t, model, "enabled")
+	model, _, _ = model.HandleKey("space")
+	model = model.Apply(ipc.Event{Snapshot: core.Snapshot{Resources: []core.ResourceSnapshot{{ID: "geo", Kind: "geosite.dat", Format: "dat", Enabled: true}}, Jobs: []core.JobSnapshot{{ID: "job-1", Kind: "refresh", State: "running"}}}})
+	model, command, _ := model.HandleKey("ctrl+s")
+	if command == nil || command.Kind != ipc.CommandPutResource || command.ResourceID != "geo" || command.Resource == nil || command.Resource.URL != nil || command.Resource.Enabled == nil || *command.Resource.Enabled {
+		t.Fatalf("resource edit changed private source or ignored toggle: %#v", command)
+	}
+}
+
+func TestFilterFormToggleRetainsSource(t *testing.T) {
+	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Filters: []core.FilterSnapshot{{ID: "ads", ResourceID: "geo", Format: "yaml", Target: "DIRECT", Enabled: true}}}})
+	model.Tab = TabFilters
+	model.Selection[TabFilters] = "filter:ads"
+	model, _, _ = model.HandleKey("e")
+	if model.Modal == nil || model.Modal.Form == nil {
+		t.Fatal("filter form absent")
+	}
+	model = moveToFormField(t, model, "enabled")
+	model, _, _ = model.HandleKey("space")
+	model, command, _ := model.HandleKey("ctrl+s")
+	if command == nil || command.Kind != ipc.CommandPutFilter || command.FilterID != "ads" || command.Filter == nil || command.Filter.Enabled == nil || *command.Filter.Enabled || command.Filter.ResourceID != nil {
+		t.Fatalf("filter toggle altered linked resource: %#v", command)
+	}
+}
+
+func moveToFormField(t *testing.T, model Model, id string) Model {
+	t.Helper()
+	rows := model.Modal.Form.Rows(100, 64)
+	selected, target := -1, -1
+	for i, row := range rows {
+		if row.Selected {
+			selected = i
+		}
+		if row.ID == id {
+			target = i
+		}
+	}
+	if selected < 0 || target < 0 {
+		t.Fatalf("form field %q not found", id)
+	}
+	for selected != target {
+		key := "down"
+		if selected > target {
+			key = "up"
+			selected--
+		} else {
+			selected++
+		}
+		model, _, _ = model.HandleKey(key)
+	}
+	return model
+}
+
+func TestDNSFormPreservesOtherRoutes(t *testing.T) {
+	model := dnsPolicyModel(t)
+	model.Selection[TabSettings] = "dns:set:one"
+	model, _, _ = model.HandleKey("g")
+	if model.Modal == nil || model.Modal.Form == nil {
+		t.Fatal("DNS resolver form absent")
+	}
+	model = moveToFormField(t, model, "endpoints")
+	model, _, _ = model.HandleKey("enter")
+	model = typeFormText(t, model, "udp://8.8.8.8:53")
+	model = moveToFormField(t, model, "dnscrypt")
+	model, _, _ = model.HandleKey("space")
+	model, command, _ := model.HandleKey("ctrl+s")
+	if command == nil || command.Kind != ipc.CommandSetDNSRouting || command.DNSRouting == nil || len(command.DNSRouting.ResolverSets) != 2 || len(command.DNSRouting.Routes) != 2 || command.DNSRouting.ResolverSets[0].Endpoints[0] != "udp://8.8.8.8:53" || !command.DNSRouting.ResolverSets[0].DNSCrypt || command.DNSRouting.ResolverSets[1].ID != "two" || command.DNSRouting.Routes[1].GeoSite != "geolocation-cn" {
+		t.Fatalf("DNS edit dropped unrelated policy: %#v", command)
+	}
+}
+
+func TestMonitorFormSubmitsPolicy(t *testing.T) {
+	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Monitor: core.MonitorSnapshot{Enabled: true, IntervalSeconds: 30, TimeoutMillis: 750, ThresholdMillis: 500}}})
+	model.Tab = TabSettings
+	model, _, _ = model.HandleKey("i")
+	if model.Modal == nil || model.Modal.Form == nil {
+		t.Fatal("monitor policy form absent")
+	}
+	model = moveToFormField(t, model, "enabled")
+	model, _, _ = model.HandleKey("space")
+	model = moveToFormField(t, model, "interval")
+	model, _, _ = model.HandleKey("enter")
+	model = typeFormText(t, model, "60")
+	model = moveToFormField(t, model, "timeout")
+	model, _, _ = model.HandleKey("enter")
+	model = typeFormText(t, model, "900")
+	model, command, _ := model.HandleKey("ctrl+s")
+	if command == nil || command.Kind != ipc.CommandUpdateConfiguration || command.Config == nil || command.Config.MonitorEnabled == nil || *command.Config.MonitorEnabled || command.Config.MonitorIntervalSeconds == nil || *command.Config.MonitorIntervalSeconds != 60 || command.Config.MonitorTimeoutMillis == nil || *command.Config.MonitorTimeoutMillis != 900 {
+		t.Fatalf("monitor policy was not one typed command: %#v", command)
+	}
+}
+
 func TestResourceCreateEmitsTypedPrivateIntent(t *testing.T) {
 	model := NewModel().Apply(eventFromJSON(t, `{"Snapshot":{"Resources":[{"ID":"keep"}]}}`))
 	model.Tab = TabResources
 	model.Selection[TabResources] = "resource:keep"
 	model, command, _ := model.HandleKey("n")
-	if model.Modal == nil || model.Focus != FocusModal || !contains(model.Help(), "n new resource") {
-		t.Fatalf("new resource did not open from its binding: %#v", model)
+	if model.Modal == nil || model.Modal.Form == nil || model.Focus != FocusModal {
+		t.Fatal("new resource form did not open")
 	}
 	url := "https://lists.example/rules.yaml?token=secret"
 	sha := strings.Repeat("ab", 32)
-	for i, value := range []string{"resource-new", "rule-set", "yaml", "domain", url, "no", "3600", sha} {
-		model, command = fillModalField(t, model, value)
-		if i < 7 && command != nil {
-			t.Fatalf("field %d unexpectedly emitted intent: %#v", i, command)
-		}
+	for _, field := range []struct{ id, value string }{{"id", "resource-new"}, {"kind", "rule-set"}, {"format", "yaml"}, {"rule_type", "domain"}, {"url", url}, {"interval", "3600"}, {"sha256", sha}} {
+		model = setFormText(t, model, field.id, field.value)
 	}
+	model = moveToFormField(t, model, "enabled")
+	model, _, _ = model.HandleKey("space")
+	model, command, _ = model.HandleKey("ctrl+s")
 	if command == nil || command.Kind != ipc.CommandPutResource || command.ResourceID != "resource-new" || command.Resource == nil {
 		t.Fatalf("resource create intent = %#v", command)
 	}
@@ -370,16 +471,15 @@ func TestResourceEditTargetsStableIDAndOmitsPrivateURL(t *testing.T) {
 	model.Tab = TabResources
 	model.Selection[TabResources] = "resource:resource-7"
 	model, _, _ = model.HandleKey("e")
-	if model.Modal == nil || model.Focus != FocusModal || !contains(model.Help(), "e edit resource") {
-		t.Fatalf("edit resource did not open from its binding: %#v", model)
+	if model.Modal == nil || model.Modal.Form == nil || model.Focus != FocusModal {
+		t.Fatal("resource edit form did not open")
 	}
-	var command *ipc.Command
-	for i, value := range []string{"rule-provider", "text", "classical", "", "no", "", "-"} {
-		model, command = replaceModalField(t, model, value)
-		if i < 6 && command != nil {
-			t.Fatalf("field %d unexpectedly emitted intent: %#v", i, command)
-		}
+	for _, field := range []struct{ id, value string }{{"kind", "rule-provider"}, {"format", "text"}, {"rule_type", "classical"}, {"sha256", "-"}} {
+		model = setFormText(t, model, field.id, field.value)
 	}
+	model = moveToFormField(t, model, "enabled")
+	model, _, _ = model.HandleKey("space")
+	model, command, _ := model.HandleKey("ctrl+s")
 	if command == nil || command.Kind != ipc.CommandPutResource || command.ResourceID != "resource-7" || command.Resource == nil {
 		t.Fatalf("resource edit intent = %#v", command)
 	}
@@ -397,14 +497,8 @@ func TestResourceEditCanReplacePrivateURL(t *testing.T) {
 	model.Tab = TabResources
 	model.Selection[TabResources] = "resource:resource-url"
 	model, _, _ = model.HandleKey("e")
-	var command *ipc.Command
-	for i, value := range []string{"", "", "", "https://new.example/geoip?token=private", "", "", ""} {
-		if i == 3 {
-			model, command = replaceModalField(t, model, value)
-		} else {
-			model, command = fillModalField(t, model, value)
-		}
-	}
+	model = setFormText(t, model, "url", "https://new.example/geoip?token=private")
+	model, command, _ := model.HandleKey("ctrl+s")
 	if command == nil || command.Kind != ipc.CommandPutResource || command.ResourceID != "resource-url" || command.Resource == nil || command.Resource.URL == nil || *command.Resource.URL != "https://new.example/geoip?token=private" {
 		t.Fatalf("resource URL replacement intent = %#v", command)
 	}
@@ -415,16 +509,13 @@ func TestFilterCreateEmitsTypedIntent(t *testing.T) {
 	model.Tab = TabFilters
 	model.Selection[TabFilters] = "filter:keep-filter"
 	model, _, _ = model.HandleKey("n")
-	if model.Modal == nil || model.Focus != FocusModal || !contains(model.Help(), "n new filter") {
-		t.Fatalf("new filter did not open from its binding: %#v", model)
+	if model.Modal == nil || model.Modal.Form == nil || model.Focus != FocusModal {
+		t.Fatal("new filter form did not open")
 	}
-	var command *ipc.Command
-	for i, value := range []string{"filter-new", "resource-rules", "text", "DIRECT", "yes"} {
-		model, command = fillModalField(t, model, value)
-		if i < 4 && command != nil {
-			t.Fatalf("field %d unexpectedly emitted intent: %#v", i, command)
-		}
+	for _, field := range []struct{ id, value string }{{"id", "filter-new"}, {"resource_id", "resource-rules"}, {"format", "text"}, {"target", "DIRECT"}} {
+		model = setFormText(t, model, field.id, field.value)
 	}
+	model, command, _ := model.HandleKey("ctrl+s")
 	if command == nil || command.Kind != ipc.CommandPutFilter || command.FilterID != "filter-new" || command.Filter == nil {
 		t.Fatalf("filter create intent = %#v", command)
 	}
@@ -442,13 +533,11 @@ func TestFilterEditTargetsStableIDAndCanDisable(t *testing.T) {
 	model.Tab = TabFilters
 	model.Selection[TabFilters] = "filter:filter-9"
 	model, _, _ = model.HandleKey("e")
-	var command *ipc.Command
-	for i, value := range []string{"resource-new", "text", "DIRECT", "no"} {
-		model, command = replaceModalField(t, model, value)
-		if i < 3 && command != nil {
-			t.Fatalf("field %d unexpectedly emitted intent: %#v", i, command)
-		}
-	}
+	model = setFormText(t, model, "resource_id", "resource-new")
+	model = setFormText(t, model, "format", "text")
+	model = moveToFormField(t, model, "enabled")
+	model, _, _ = model.HandleKey("space")
+	model, command, _ := model.HandleKey("ctrl+s")
 	if command == nil || command.Kind != ipc.CommandPutFilter || command.FilterID != "filter-9" || command.Filter == nil {
 		t.Fatalf("filter edit intent = %#v", command)
 	}
@@ -456,7 +545,7 @@ func TestFilterEditTargetsStableIDAndCanDisable(t *testing.T) {
 		t.Fatal("filter edit result was not marked private")
 	}
 	patch := command.Filter
-	if patch.ResourceID == nil || *patch.ResourceID != "resource-new" || patch.Format == nil || *patch.Format != "text" || patch.Target == nil || *patch.Target != "DIRECT" || patch.Enabled == nil || *patch.Enabled {
+	if patch.ResourceID == nil || *patch.ResourceID != "resource-new" || patch.Format == nil || *patch.Format != "text" || patch.Target != nil || patch.Enabled == nil || *patch.Enabled {
 		t.Fatalf("filter edit fields = %#v", patch)
 	}
 	if model.Modal != nil || model.Focus != FocusContent || model.Selection[TabFilters] != "filter:filter-9" {
@@ -533,76 +622,46 @@ func TestSettingsShowSanitizedMonitorConfiguration(t *testing.T) {
 }
 
 func TestSettingsIntervalModalProducesBoundedConfigurationIntent(t *testing.T) {
-	model := NewModel()
-	model, _, _ = model.HandleKey("6")
+	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Monitor: core.MonitorSnapshot{IntervalSeconds: 30}}}).selectTab(TabSettings)
 	model, _, _ = model.HandleKey("i")
-	if model.Focus != FocusModal || model.Modal == nil {
-		t.Fatalf("interval binding did not focus modal: %#v", model)
+	if model.Modal == nil || model.Modal.Form == nil || model.Focus != FocusModal {
+		t.Fatal("interval key did not open monitor form")
 	}
-	for _, key := range []string{"6", "0", "0", "enter"} {
-		var command *ipc.Command
-		model, command, _ = model.HandleKey(key)
-		if key == "enter" {
-			if command == nil || command.Kind != ipc.CommandUpdateConfiguration || command.Config == nil || command.Config.MonitorIntervalSeconds == nil || *command.Config.MonitorIntervalSeconds != 600 {
-				t.Fatalf("interval command = %#v", command)
-			}
-		}
+	model = setFormText(t, model, "interval", "600")
+	model, command, _ := model.HandleKey("ctrl+s")
+	if command == nil || command.Kind != ipc.CommandUpdateConfiguration || command.Config == nil || command.Config.MonitorIntervalSeconds == nil || *command.Config.MonitorIntervalSeconds != 600 || model.Modal != nil {
+		t.Fatalf("interval command = %#v", command)
 	}
-	if model.Modal != nil || model.Focus != FocusContent {
-		t.Fatalf("modal did not close after valid interval: %#v", model)
-	}
-
 	model, _, _ = model.HandleKey("i")
-	for _, key := range []string{"0", "enter"} {
-		var command *ipc.Command
-		model, command, _ = model.HandleKey(key)
-		if command != nil {
-			t.Fatal("accepted out-of-range interval")
-		}
-	}
-	if model.Modal == nil || !strings.Contains(model.Notice, "between 1 and 86400") {
-		t.Fatalf("invalid interval did not remain visible: %#v", model)
+	model = setFormText(t, model, "interval", "0")
+	model, command, _ = model.HandleKey("ctrl+s")
+	if command != nil || model.Modal == nil || !strings.Contains(model.Notice, "between 1 and 86400") {
+		t.Fatalf("invalid interval was accepted: %#v", command)
 	}
 }
 
 func TestAlertThresholdSettingEmitsExplicitBoundedIntent(t *testing.T) {
-	model := NewModel()
-	model, _, _ = model.HandleKey("6")
-	model, _, _ = model.HandleKey("t")
-	if model.Modal == nil || model.Modal.Kind != ModalAlertThreshold || model.Focus != FocusModal {
-		t.Fatalf("alert-threshold key did not open its modal: %#v", model)
-	}
-	for _, key := range []string{"2", "5", "0"} {
-		var command *ipc.Command
-		model, command, _ = model.HandleKey(key)
-		if command != nil {
-			t.Fatalf("digit unexpectedly emitted intent: %#v", command)
+	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Monitor: core.MonitorSnapshot{AlertThresholdMillis: 100}}}).selectTab(TabSettings)
+	for _, example := range []struct {
+		value    string
+		accepted bool
+	}{{"250", true}, {"60000", true}, {"60001", false}} {
+		model, _, _ = model.HandleKey("t")
+		if model.Modal == nil || model.Modal.Form == nil || model.Focus != FocusModal {
+			t.Fatal("alert-threshold key did not open monitor form")
 		}
-	}
-	model, command, _ := model.HandleKey("enter")
-	if command == nil || command.Kind != ipc.CommandUpdateConfiguration || command.Config == nil || command.Config.AlertThresholdMillis == nil || *command.Config.AlertThresholdMillis != 250 || command.Config.MonitorIntervalSeconds != nil {
-		t.Fatalf("alert-threshold intent = %#v", command)
-	}
-	if model.Modal != nil || model.Focus != FocusContent {
-		t.Fatalf("successful threshold edit left modal open: %#v", model)
-	}
-
-	model, _, _ = model.HandleKey("t")
-	for _, key := range []string{"6", "0", "0", "0", "0"} {
-		model, _, _ = model.HandleKey(key)
-	}
-	model, command, _ = model.HandleKey("enter")
-	if command == nil || command.Config.AlertThresholdMillis == nil || *command.Config.AlertThresholdMillis != 60000 {
-		t.Fatalf("inclusive upper threshold intent = %#v", command)
-	}
-
-	model, _, _ = model.HandleKey("t")
-	for _, key := range []string{"6", "0", "0", "0", "1"} {
-		model, _, _ = model.HandleKey(key)
-	}
-	model, command, _ = model.HandleKey("enter")
-	if command != nil || model.Modal == nil || !strings.Contains(model.Notice, "1 and 60000 milliseconds") {
-		t.Fatalf("threshold above IPC bound was not rejected: model=%#v command=%#v", model, command)
+		model = setFormText(t, model, "alert_threshold", example.value)
+		model, command, _ := model.HandleKey("ctrl+s")
+		if !example.accepted {
+			if command != nil || model.Modal == nil || !strings.Contains(model.Notice, "1 and 60000") {
+				t.Fatalf("above-bound threshold accepted: %#v", command)
+			}
+			break
+		}
+		value, _ := strconv.ParseUint(example.value, 10, 32)
+		if command == nil || command.Config == nil || command.Config.AlertThresholdMillis == nil || *command.Config.AlertThresholdMillis != uint32(value) || command.Config.MonitorIntervalSeconds != nil || model.Modal != nil {
+			t.Fatalf("alert-threshold command = %#v", command)
+		}
 	}
 }
 
@@ -678,51 +737,22 @@ func typeFormText(t *testing.T, model Model, value string) Model {
 	return model
 }
 
-func fillModalField(t *testing.T, model Model, value string) (Model, *ipc.Command) {
+func setFormText(t *testing.T, model Model, id, value string) Model {
 	t.Helper()
-	for _, char := range value {
-		var command *ipc.Command
-		model, command, _ = model.HandleKey(string(char))
-		if command != nil {
-			t.Fatalf("typing field unexpectedly emitted intent: %#v", command)
-		}
-	}
-	model, command, _ := model.HandleKey("enter")
-	return model, command
-}
-func replaceModalField(t *testing.T, model Model, value string) (Model, *ipc.Command) {
-	t.Helper()
-	for range []rune(model.Modal.Input) {
-		model, _, _ = model.HandleKey("backspace")
-	}
-	return fillModalField(t, model, value)
+	model = moveToFormField(t, model, id)
+	model, _, _ = model.HandleKey("enter")
+	return typeFormText(t, model, value)
 }
 
 func TestMonitorPolicyEditsKeepSubsecondUnitsAndAllowZero(t *testing.T) {
-	model := NewModel().Apply(eventFromJSON(t, `{"Snapshot":{"Monitor":{"TimeoutMillis":750,"CooldownSeconds":30,"JitterMillis":120}}}`))
-	model, _, _ = model.HandleKey("6")
+	model := NewModel().Apply(eventFromJSON(t, `{"Snapshot":{"Monitor":{"TimeoutMillis":750,"CooldownSeconds":30,"JitterMillis":120}}}`)).selectTab(TabSettings)
 	model, _, _ = model.HandleKey("o")
-	for _, key := range "750" {
-		model, _, _ = model.HandleKey(string(key))
+	for _, field := range []struct{ id, value string }{{"timeout", "900"}, {"cooldown", "0"}, {"jitter", "0"}} {
+		model = setFormText(t, model, field.id, field.value)
 	}
-	model, command, _ := model.HandleKey("enter")
-	if command == nil || command.Kind != ipc.CommandUpdateConfiguration || command.Config == nil || command.Config.MonitorTimeoutMillis == nil || *command.Config.MonitorTimeoutMillis != 750 {
-		t.Fatalf("timeout command = %#v", command)
-	}
-	model, _, _ = model.HandleKey("z")
-	model, command, _ = model.HandleKey("0")
-	if command != nil {
-		t.Fatalf("cooldown input emitted early: %#v", command)
-	}
-	model, command, _ = model.HandleKey("enter")
-	if command == nil || command.Config.MonitorCooldownSeconds == nil || *command.Config.MonitorCooldownSeconds != 0 {
-		t.Fatalf("zero cooldown command = %#v", command)
-	}
-	model, _, _ = model.HandleKey("w")
-	model, _, _ = model.HandleKey("0")
-	model, command, _ = model.HandleKey("enter")
-	if command == nil || command.Config.MonitorJitterMillis == nil || *command.Config.MonitorJitterMillis != 0 {
-		t.Fatalf("zero jitter command = %#v", command)
+	model, command, _ := model.HandleKey("ctrl+s")
+	if command == nil || command.Kind != ipc.CommandUpdateConfiguration || command.Config == nil || command.Config.MonitorTimeoutMillis == nil || *command.Config.MonitorTimeoutMillis != 900 || command.Config.MonitorCooldownSeconds == nil || *command.Config.MonitorCooldownSeconds != 0 || command.Config.MonitorJitterMillis == nil || *command.Config.MonitorJitterMillis != 0 {
+		t.Fatalf("subsecond and zero policy values lost: %#v", command)
 	}
 }
 
@@ -739,12 +769,10 @@ func TestDNSSetAndRouteEditsPreserveFullPolicyUntilSnapshot(t *testing.T) {
 		t.Fatal("selected DNS row missing")
 	}
 	model, _, _ = model.HandleKey("g")
-	model, command, _ := model.HandleKey("enter")
-	if command != nil || model.Modal.dns.step != dnsSetEndpoints {
-		t.Fatalf("resolver edit did not advance: modal=%#v command=%#v", model.Modal, command)
-	}
-	model, _ = replaceModalField(t, model, "udp://8.8.8.8:53")
-	model, command = replaceModalField(t, model, "yes")
+	model = setFormText(t, model, "endpoints", "udp://8.8.8.8:53")
+	model = moveToFormField(t, model, "dnscrypt")
+	model, _, _ = model.HandleKey("space")
+	model, command, _ := model.HandleKey("ctrl+s")
 	if command == nil || command.Kind != ipc.CommandSetDNSRouting || command.DNSRouting == nil {
 		t.Fatalf("resolver edit command = %#v", command)
 	}
@@ -760,12 +788,9 @@ func TestDNSSetAndRouteEditsPreserveFullPolicyUntilSnapshot(t *testing.T) {
 	model = dnsPolicyModel(t)
 	model.Selection[TabSettings] = "dns:route:suffix:example.com"
 	model, _, _ = model.HandleKey("g")
-	model, command, _ = model.HandleKey("enter")
-	if command != nil {
-		t.Fatalf("matcher input emitted early: %#v", command)
-	}
-	model, _ = replaceModalField(t, model, "changed.example.com")
-	model, command = replaceModalField(t, model, "two")
+	model = setFormText(t, model, "value", "changed.example.com")
+	model = setFormText(t, model, "resolver", "two")
+	model, command, _ = model.HandleKey("ctrl+s")
 	if command == nil || len(command.DNSRouting.ResolverSets) != 2 || len(command.DNSRouting.Routes) != 2 {
 		t.Fatalf("route replacement command = %#v", command)
 	}
@@ -825,18 +850,20 @@ func TestDNSFormsAddRemoveCancelAndRetainSelection(t *testing.T) {
 
 	model = dnsPolicyModel(t)
 	model, _, _ = model.HandleKey("v")
-	model, _ = fillModalField(t, model, "newset")
-	model, _ = fillModalField(t, model, "udp://127.0.0.1:5353")
-	model, command = replaceModalField(t, model, "yes")
+	model = setFormText(t, model, "id", "newset")
+	model = setFormText(t, model, "endpoints", "udp://127.0.0.1:5353")
+	model = moveToFormField(t, model, "dnscrypt")
+	model, _, _ = model.HandleKey("space")
+	model, command, _ = model.HandleKey("ctrl+s")
 	if command == nil || len(command.DNSRouting.ResolverSets) != 3 || command.DNSRouting.ResolverSets[2].ID != "newset" || !command.DNSRouting.ResolverSets[2].DNSCrypt || len(command.DNSRouting.Routes) != 2 {
 		t.Fatalf("resolver create replacement = %#v", command)
 	}
 
 	model = dnsPolicyModel(t)
 	model, _, _ = model.HandleKey("a")
-	model, _, _ = model.HandleKey("enter")
-	model, _ = fillModalField(t, model, "new.example.com")
-	model, command = fillModalField(t, model, "one")
+	model = setFormText(t, model, "value", "new.example.com")
+	model = setFormText(t, model, "resolver", "one")
+	model, command, _ = model.HandleKey("ctrl+s")
 	if command == nil || len(command.DNSRouting.Routes) != 3 || command.DNSRouting.Routes[2].Suffix != "new.example.com" || command.DNSRouting.Routes[2].ResolverSet != "one" || command.DNSRouting.Routes[2].GeoSite != "" || command.DNSRouting.Routes[2].Resource != "" {
 		t.Fatalf("route create replacement = %#v", command)
 	}
@@ -846,9 +873,10 @@ func TestDNSCredentialsAreRejectedWithoutLeakingURL(t *testing.T) {
 	secretURL := "https://user:secret@resolver.example/dns-query"
 	model := dnsPolicyModel(t)
 	model, _, _ = model.HandleKey("v")
-	model, _ = fillModalField(t, model, "private-set")
-	model, _ = fillModalField(t, model, secretURL)
-	if model.Modal == nil || strings.Contains(model.Notice, secretURL) || strings.Contains(model.Notice, "secret") {
+	model = setFormText(t, model, "id", "private-set")
+	model = setFormText(t, model, "endpoints", secretURL)
+	model, intent, _ := model.HandleKey("ctrl+s")
+	if intent != nil || model.Modal == nil || strings.Contains(model.Notice, secretURL) || strings.Contains(model.Notice, "secret") {
 		t.Fatalf("credential endpoint was accepted or leaked: modal=%#v notice=%q", model.Modal, model.Notice)
 	}
 	command := ipc.Command{Kind: ipc.CommandSetDNSRouting, DNSRouting: &ipc.DNSRoutingEdit{ResolverSets: []ipc.DNSResolverSet{{ID: "private-set", Endpoints: []string{secretURL}}}}}

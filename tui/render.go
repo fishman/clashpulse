@@ -250,7 +250,11 @@ func drawModal(lines []renderLine, width, height int, item *Modal) {
 	}
 	var body []renderLine
 	if item.Form != nil {
-		body = append(body, renderLine{text: strings.ReplaceAll(string(item.Kind), "_", " ") + " settings", role: roleAccent})
+		title := strings.ReplaceAll(string(item.Kind), "_", " ") + " settings"
+		if item.Kind == ModalMonitorSetting {
+			title = "Monitor policy"
+		}
+		body = append(body, renderLine{text: title, role: roleAccent})
 		for _, row := range item.Form.Rows(max(1, width-4), max(1, height-7)) {
 			role := roleModal
 			if row.Selected {
@@ -260,21 +264,14 @@ func drawModal(lines []renderLine, width, height int, item *Modal) {
 		}
 	} else {
 		message := modalPrompt(item.Kind)
-		if item.Kind == ModalMonitorSetting || item.Kind == ModalMonitorInterval || item.Kind == ModalAlertThreshold {
-			message = monitorPrompt(item.monitor)
-		} else if item.Kind == ModalDeleteSubscription || item.Kind == ModalDeleteDNS {
+		if item.Kind == ModalDeleteSubscription || item.Kind == ModalDeleteDNS {
 			message = "Remove " + item.Input + "?"
-		} else if item.Kind == ModalResource || item.Kind == ModalFilter {
-			message = managedModalPrompt(item)
-		} else if item.Kind == ModalDNSResolver || item.Kind == ModalDNSRoute {
-			message = dnsModalPrompt(item)
 		}
 		body = append(body, renderLine{text: message, role: roleAccent})
 		if item.Kind == ModalDeleteSubscription || item.Kind == ModalDeleteDNS {
 			body = append(body, renderLine{text: "Enter remove  Esc cancel", role: roleModal})
 		} else {
-			input := modalDisplayInput(item)
-			wrapped, _, _ := modal.Wrap(input, len(input), max(1, width-10), max(1, height-8))
+			wrapped, _, _ := modal.Wrap(item.Input, len(item.Input), max(1, width-10), max(1, height-8))
 			for i, line := range wrapped {
 				prefix := "       "
 				if i == 0 {
@@ -282,16 +279,7 @@ func drawModal(lines []renderLine, width, height int, item *Modal) {
 				}
 				body = append(body, renderLine{text: prefix + line, role: roleModal})
 			}
-			action := "Enter apply  Esc cancel"
-			wizard := item.Kind == ModalResource || item.Kind == ModalFilter || item.Kind == ModalDNSResolver || item.Kind == ModalDNSRoute
-			if wizard {
-				more := (item.Kind == ModalResource || item.Kind == ModalFilter) && item.managed.step+1 < managedFieldCount(item.Kind) ||
-					(item.Kind == ModalDNSResolver || item.Kind == ModalDNSRoute) && item.dns.step < 2
-				if more {
-					action = "Enter next  Shift+Tab back  Esc cancel"
-				}
-			}
-			body = append(body, renderLine{text: action, role: roleMuted})
+			body = append(body, renderLine{text: "Enter apply  Esc cancel", role: roleMuted})
 		}
 	}
 	box, ok := modal.Bottom(width, height, len(body), 3)
@@ -308,20 +296,6 @@ func drawModal(lines []renderLine, width, height int, item *Modal) {
 		setLine(lines, box.Y+i+1, "\u2502"+text+"\u2502", row.role)
 	}
 	setLine(lines, box.Y+box.Height-1, "\u2570"+strings.Repeat("\u2500", width-2)+"\u256f", roleModal)
-}
-
-func modalDisplayInput(modal *Modal) string {
-	if modal == nil {
-		return ""
-	}
-	if modal.Kind == ModalResource && modal.managed.step == resourceFieldURL ||
-		modal.Kind == ModalDNSResolver && modal.dns.step == dnsSetEndpoints ||
-		modal.Kind == ModalMonitorSetting && modal.monitor == monitorTestURL {
-		if modal.Input != "" {
-			return "[hidden]"
-		}
-	}
-	return modal.Input
 }
 
 func setLine(lines []renderLine, y int, text string, role uint8) {

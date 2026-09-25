@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -37,8 +38,6 @@ const (
 type ModalKind string
 
 const (
-	ModalMonitorInterval    ModalKind = "monitor_interval"
-	ModalAlertThreshold     ModalKind = "alert_threshold"
 	ModalBinary             ModalKind = "binary"
 	ModalDeleteSubscription ModalKind = "delete_subscription"
 	ModalSubscription       ModalKind = "subscription"
@@ -66,18 +65,7 @@ const (
 	monitorJitter
 )
 
-type dnsForm struct {
-	edit     bool
-	targetID string
-	step     int
-	values   [3]string
-}
-
-const (
-	dnsSetID = iota
-	dnsSetEndpoints
-	dnsSetDNSCrypt
-)
+type dnsForm struct{ values [3]string }
 
 const (
 	dnsRouteMatcher = iota
@@ -85,21 +73,11 @@ const (
 	dnsRouteResolver
 )
 
-type managedForm struct {
-	edit     bool
-	targetID string
-	step     int
-	values   [resourceFieldCount]string
-}
-
 type Modal struct {
 	Kind     ModalKind
 	Input    string
 	TargetID string
 	Form     *form.Form
-	monitor  monitorField
-	dns      dnsForm
-	managed  managedForm
 }
 
 // Row is a stable, render-ready item. ID remains unchanged when unrelated
@@ -524,17 +502,8 @@ func (m Model) handleModalKey(key string) (Model, *ipc.Command, bool) {
 		m.Notice = ""
 		return m, nil, false
 	}
-	if m.Modal.Kind == ModalMonitorSetting || m.Modal.Kind == ModalMonitorInterval || m.Modal.Kind == ModalAlertThreshold {
-		return m.handleMonitorSettingKey(key)
-	}
 	if m.Modal.Kind == ModalDNSListen {
 		return m.handleDNSListenKey(key)
-	}
-	if m.Modal.Kind == ModalDNSResolver || m.Modal.Kind == ModalDNSRoute {
-		return m.handleDNSFormKey(key)
-	}
-	if m.Modal.Kind == ModalResource || m.Modal.Kind == ModalFilter {
-		return m.handleManagedKey(key)
 	}
 	if m.Modal.Kind == ModalDeleteSubscription {
 		if key != "enter" || m.Modal.TargetID == "" {
@@ -589,44 +558,29 @@ func (m Model) handleModalKey(key string) (Model, *ipc.Command, bool) {
 	return m, nil, false
 }
 
-func (m Model) openMonitorModal(field monitorField) Model {
-	kind := ModalMonitorSetting
-	if field == monitorInterval {
-		kind = ModalMonitorInterval
-	} else if field == monitorAlertThreshold {
-		kind = ModalAlertThreshold
+func (m Model) openMonitorModal(_ monitorField) Model {
+	monitor := m.snapshot.Snapshot.Monitor
+	editor, err := form.New([]form.Field{
+		{ID: "enabled", Label: "Enabled", Kind: form.Toggle, Value: strconv.FormatBool(monitor.Enabled)},
+		{ID: "test_url", Label: "Test URL", Kind: form.Text, Sensitive: true},
+		{ID: "interval", Label: "Interval seconds", Kind: form.Text, Value: strconv.FormatInt(monitor.IntervalSeconds, 10)},
+		{ID: "timeout", Label: "Timeout milliseconds", Kind: form.Text, Value: strconv.FormatInt(monitor.TimeoutMillis, 10)},
+		{ID: "concurrency", Label: "Concurrency", Kind: form.Text, Value: strconv.Itoa(monitor.Concurrency)},
+		{ID: "threshold", Label: "Threshold milliseconds", Kind: form.Text, Value: strconv.FormatInt(monitor.ThresholdMillis, 10)},
+		{ID: "alert_threshold", Label: "Alert threshold milliseconds", Kind: form.Text, Value: strconv.FormatInt(monitor.AlertThresholdMillis, 10)},
+		{ID: "bad_samples", Label: "Consecutive bad samples", Kind: form.Text, Value: strconv.Itoa(monitor.ConsecutiveBadSamples)},
+		{ID: "improvement", Label: "Minimum improvement milliseconds", Kind: form.Text, Value: strconv.FormatInt(monitor.MinImprovementMillis, 10)},
+		{ID: "cooldown", Label: "Cooldown seconds", Kind: form.Text, Value: strconv.FormatInt(monitor.CooldownSeconds, 10)},
+		{ID: "jitter", Label: "Jitter milliseconds", Kind: form.Text, Value: strconv.FormatInt(monitor.JitterMillis, 10)},
+	})
+	if err != nil {
+		m.Notice = "Monitor settings form unavailable."
+		return m
 	}
-	m.Modal = &Modal{Kind: kind, monitor: field}
+	m.Modal = &Modal{Kind: ModalMonitorSetting, Form: editor}
 	m.Focus = FocusModal
-	m.Notice = "Enter " + monitorPrompt(field) + "."
+	m.Notice = "Edit monitor settings; the test URL stays hidden unless changed."
 	return m
-}
-
-func monitorPrompt(field monitorField) string {
-	switch field {
-	case monitorTestURL:
-		return "monitor test URL"
-	case monitorInterval:
-		return "monitor interval in seconds (1-86400)"
-	case monitorTimeout:
-		return "monitor timeout in milliseconds (1-86400000)"
-	case monitorConcurrency:
-		return "monitor concurrency (1-64)"
-	case monitorThreshold:
-		return "monitor latency threshold in milliseconds"
-	case monitorAlertThreshold:
-		return "alert threshold in milliseconds (1-60000)"
-	case monitorBadSamples:
-		return "consecutive bad samples (1-5)"
-	case monitorImprovement:
-		return "minimum improvement in milliseconds"
-	case monitorCooldown:
-		return "monitor cooldown in seconds (0 or more)"
-	case monitorJitter:
-		return "monitor jitter in milliseconds (0 or more)"
-	default:
-		return "monitor setting"
-	}
 }
 
 func monitorSettingPatch(field monitorField, input string) (*ipc.ConfigPatch, string) {
@@ -711,36 +665,79 @@ func monitorRangeNotice(field monitorField) string {
 		return "Monitor setting is out of range."
 	}
 }
-func (m Model) handleMonitorSettingKey(key string) (Model, *ipc.Command, bool) {
-	modal := *m.Modal
-	if key == "backspace" {
-		input := []rune(modal.Input)
-		if len(input) > 0 {
-			modal.Input = string(input[:len(input)-1])
-			m.Modal = &modal
+func monitorFormIntent(modal *Modal) (*ipc.Command, string) {
+	patch := &ipc.ConfigPatch{}
+	for _, change := range modal.Form.Changes() {
+		switch change.ID {
+		case "enabled":
+			if change.Value != "true" && change.Value != "false" {
+				return nil, "Monitor enabled must be true or false."
+			}
+			patch.MonitorEnabled = new(change.Value == "true")
+		case "test_url":
+			setting, notice := monitorSettingPatch(monitorTestURL, change.Value)
+			if notice != "" {
+				return nil, notice
+			}
+			parsed, err := url.Parse(change.Value)
+			if err != nil || strings.ContainsAny(change.Value, "\x00\r\n#") || parsed.User != nil || parsed.Fragment != "" || parsed.Opaque != "" || parsed.Host == "" || parsed.Scheme != "http" && parsed.Scheme != "https" {
+				return nil, "Monitor test URL must use HTTP or HTTPS without credentials or fragment."
+			}
+			patch.MonitorTestURL = setting.MonitorTestURL
+		default:
+			field := monitorField(0)
+			switch change.ID {
+			case "interval":
+				field = monitorInterval
+			case "timeout":
+				field = monitorTimeout
+			case "concurrency":
+				field = monitorConcurrency
+			case "threshold":
+				field = monitorThreshold
+			case "alert_threshold":
+				field = monitorAlertThreshold
+			case "bad_samples":
+				field = monitorBadSamples
+			case "improvement":
+				field = monitorImprovement
+			case "cooldown":
+				field = monitorCooldown
+			case "jitter":
+				field = monitorJitter
+			default:
+				return nil, "Unsupported monitor setting."
+			}
+			setting, notice := monitorSettingPatch(field, change.Value)
+			if notice != "" {
+				return nil, notice
+			}
+			switch field {
+			case monitorInterval:
+				patch.MonitorIntervalSeconds = setting.MonitorIntervalSeconds
+			case monitorTimeout:
+				patch.MonitorTimeoutMillis = setting.MonitorTimeoutMillis
+			case monitorConcurrency:
+				patch.MonitorConcurrency = setting.MonitorConcurrency
+			case monitorThreshold:
+				patch.MonitorThresholdMillis = setting.MonitorThresholdMillis
+			case monitorAlertThreshold:
+				patch.AlertThresholdMillis = setting.AlertThresholdMillis
+			case monitorBadSamples:
+				patch.MonitorConsecutiveBadSamples = setting.MonitorConsecutiveBadSamples
+			case monitorImprovement:
+				patch.MonitorMinImprovementMillis = setting.MonitorMinImprovementMillis
+			case monitorCooldown:
+				patch.MonitorCooldownSeconds = setting.MonitorCooldownSeconds
+			case monitorJitter:
+				patch.MonitorJitterMillis = setting.MonitorJitterMillis
+			}
 		}
-		return m, nil, false
 	}
-	if key == "enter" {
-		patch, notice := monitorSettingPatch(modal.monitor, modal.Input)
-		if notice != "" {
-			m.Notice = notice
-			return m, nil, false
-		}
-		m.Modal = nil
-		m.Focus = FocusContent
-		return m, configCommand(patch), false
+	if patch.MonitorEnabled == nil && patch.MonitorTestURL == nil && patch.MonitorIntervalSeconds == nil && patch.MonitorTimeoutMillis == nil && patch.MonitorConcurrency == nil && patch.MonitorThresholdMillis == nil && patch.AlertThresholdMillis == nil && patch.MonitorConsecutiveBadSamples == nil && patch.MonitorMinImprovementMillis == nil && patch.MonitorCooldownSeconds == nil && patch.MonitorJitterMillis == nil {
+		return nil, ""
 	}
-	if modal.monitor == monitorTestURL {
-		if utf8.ValidString(key) && utf8.RuneCountInString(key) == 1 && unicode.IsPrint([]rune(key)[0]) && len(modal.Input)+len(key) <= 2048 {
-			modal.Input += key
-			m.Modal = &modal
-		}
-	} else if len(key) == 1 && key[0] >= '0' && key[0] <= '9' && len(modal.Input) < 10 {
-		modal.Input += key
-		m.Modal = &modal
-	}
-	return m, nil, false
+	return configCommand(patch), ""
 }
 
 func (m Model) openDNSListenModal() Model {
@@ -781,16 +778,12 @@ func (m Model) openDNSResolverModal(edit bool, targetID string) Model {
 		m.Notice = "DNS policy already has 256 resolver sets."
 		return m
 	}
-	form := dnsForm{edit: edit, targetID: targetID}
-	form.values[dnsSetDNSCrypt] = "no"
+	id, dnscrypt := "", false
 	if edit {
 		found := false
 		for _, set := range m.snapshot.Snapshot.DNS.ResolverSets {
 			if set.ID == targetID {
-				form.values[dnsSetID] = set.ID
-				form.values[dnsSetEndpoints] = strings.Join(set.Endpoints, ", ")
-				form.values[dnsSetDNSCrypt] = yesNo(set.DNSCrypt)
-				found = true
+				id, dnscrypt, found = set.ID, set.DNSCrypt, true
 				break
 			}
 		}
@@ -799,9 +792,18 @@ func (m Model) openDNSResolverModal(edit bool, targetID string) Model {
 			return m
 		}
 	}
-	m.Modal = &Modal{Kind: ModalDNSResolver, TargetID: targetID, dns: form, Input: form.values[0]}
+	editor, err := form.New([]form.Field{
+		{ID: "id", Label: "Stable ID", Kind: form.Text, Value: id},
+		{ID: "endpoints", Label: "Endpoints", Kind: form.Text, Sensitive: true},
+		{ID: "dnscrypt", Label: "DNSCrypt", Kind: form.Toggle, Value: strconv.FormatBool(dnscrypt)},
+	})
+	if err != nil {
+		m.Notice = "DNS resolver form unavailable."
+		return m
+	}
+	m.Modal = &Modal{Kind: ModalDNSResolver, TargetID: targetID, Form: editor}
 	m.Focus = FocusModal
-	m.Notice = "Resolver endpoints are comma-separated; credentials are not allowed."
+	m.Notice = "Endpoints accept 1-16 comma-separated values; credentials are not allowed."
 	return m
 }
 
@@ -810,15 +812,13 @@ func (m Model) openDNSRouteModal(edit bool, targetID string) Model {
 		m.Notice = "DNS policy already has 1024 routes."
 		return m
 	}
-	form := dnsForm{edit: edit, targetID: targetID}
-	form.values[dnsRouteMatcher] = "suffix"
+	matcher, value, resolver := "suffix", "", ""
 	if edit {
 		found := false
 		for _, route := range m.snapshot.Snapshot.DNS.Routes {
 			if dnsRouteIdentity(route.Suffix, route.GeoSite, route.Resource) == targetID {
-				form.values[dnsRouteMatcher], form.values[dnsRouteValue] = dnsRouteMatcherFields(route.Suffix, route.GeoSite, route.Resource)
-				form.values[dnsRouteResolver] = route.ResolverSet
-				found = true
+				matcher, value = dnsRouteMatcherFields(route.Suffix, route.GeoSite, route.Resource)
+				resolver, found = route.ResolverSet, true
 				break
 			}
 		}
@@ -827,10 +827,142 @@ func (m Model) openDNSRouteModal(edit bool, targetID string) Model {
 			return m
 		}
 	}
-	m.Modal = &Modal{Kind: ModalDNSRoute, TargetID: targetID, dns: form, Input: form.values[0]}
+	editor, err := form.New([]form.Field{
+		{ID: "matcher", Label: "Matcher", Kind: form.Choice, Value: matcher, Choices: []string{"suffix", "geosite", "resource"}},
+		{ID: "value", Label: "Matcher value", Kind: form.Text, Value: value},
+		{ID: "resolver", Label: "Resolver set ID", Kind: form.Text, Value: resolver},
+	})
+	if err != nil {
+		m.Notice = "DNS route form unavailable."
+		return m
+	}
+	m.Modal = &Modal{Kind: ModalDNSRoute, TargetID: targetID, Form: editor}
 	m.Focus = FocusModal
-	m.Notice = "Choose exactly one suffix, GeoSite, or resource matcher."
+	m.Notice = "Choose a suffix, GeoSite, or resource matcher."
 	return m
+}
+
+func (m Model) dnsFormIntent(modal *Modal) (*ipc.Command, string) {
+	changes := modal.Form.Changes()
+	editing := modal.TargetID != ""
+	if editing && len(changes) == 0 {
+		return nil, ""
+	}
+	if modal.Kind == ModalDNSResolver {
+		set := ipc.DNSResolverSet{ID: modal.TargetID}
+		index := -1
+		if editing {
+			for i, existing := range m.dnsResolverSets() {
+				if existing.ID == modal.TargetID {
+					set, index = existing, i
+					break
+				}
+			}
+			if index < 0 {
+				return nil, "DNS resolver set is no longer available."
+			}
+		}
+		endpointsChanged := false
+		for _, change := range changes {
+			switch change.ID {
+			case "id":
+				set.ID = strings.TrimSpace(change.Value)
+			case "endpoints":
+				endpoints, err := parseDNSEndpoints(change.Value)
+				if err != nil {
+					return nil, err.Error()
+				}
+				set.Endpoints, endpointsChanged = endpoints, true
+			case "dnscrypt":
+				if change.Value != "true" && change.Value != "false" {
+					return nil, "DNSCrypt must be enabled or disabled."
+				}
+				set.DNSCrypt = change.Value == "true"
+			}
+		}
+		if !editing && !endpointsChanged {
+			return nil, "Enter between 1 and 16 DNS endpoints."
+		}
+		if !validSubscriptionID(set.ID) {
+			return nil, "Resolver ID must be a stable ID (max 64 characters)."
+		}
+		sets, routes := m.dnsResolverSets(), m.dnsRoutes()
+		if !editing && len(sets) >= 256 {
+			return nil, "DNS policy reached its command limit."
+		}
+		for i, existing := range sets {
+			if existing.ID == set.ID && i != index {
+				return nil, "Resolver ID already exists."
+			}
+		}
+		if editing {
+			sets[index] = set
+		} else {
+			sets = append(sets, set)
+		}
+		if editing && set.ID != modal.TargetID {
+			for i := range routes {
+				if routes[i].ResolverSet == modal.TargetID {
+					routes[i].ResolverSet = set.ID
+				}
+			}
+		}
+		return dnsRoutingCommand(sets, routes), ""
+	}
+
+	form := dnsForm{}
+	form.values[dnsRouteMatcher] = "suffix"
+	routes := m.dnsRoutes()
+	index := -1
+	if editing {
+		for i, route := range routes {
+			if dnsRouteID(route) == modal.TargetID {
+				form.values[dnsRouteMatcher], form.values[dnsRouteValue] = dnsRouteMatcherFields(route.Suffix, route.GeoSite, route.Resource)
+				form.values[dnsRouteResolver] = route.ResolverSet
+				index = i
+				break
+			}
+		}
+		if index < 0 {
+			return nil, "DNS route is no longer available."
+		}
+	}
+	for _, change := range changes {
+		switch change.ID {
+		case "matcher":
+			form.values[dnsRouteMatcher] = change.Value
+		case "value":
+			form.values[dnsRouteValue] = strings.TrimSpace(change.Value)
+		case "resolver":
+			form.values[dnsRouteResolver] = strings.TrimSpace(change.Value)
+		}
+	}
+	for field := dnsRouteMatcher; field <= dnsRouteResolver; field++ {
+		if notice := validateDNSRouteForm(form, field); notice != "" {
+			return nil, notice
+		}
+	}
+	if !editing && len(routes) >= 1024 {
+		return nil, "DNS policy reached its command limit."
+	}
+	route := routeFromDNSForm(form)
+	for i, existing := range routes {
+		if dnsRouteID(existing) == dnsRouteID(route) && (!editing || dnsRouteID(existing) != modal.TargetID) {
+			return nil, "DNS route matcher already exists."
+		}
+		if editing && dnsRouteID(existing) == modal.TargetID {
+			index = i
+		}
+	}
+	if editing {
+		if index < 0 {
+			return nil, "DNS route is no longer available."
+		}
+		routes[index] = route
+	} else {
+		routes = append(routes, route)
+	}
+	return dnsRoutingCommand(m.dnsResolverSets(), routes), ""
 }
 
 func (m Model) editSelectedDNS() Model {
@@ -863,86 +995,8 @@ func (m Model) deleteSelectedDNS() Model {
 	return m
 }
 
-func (m Model) handleDNSFormKey(key string) (Model, *ipc.Command, bool) {
-	modal := *m.Modal
-	form := modal.dns
-	last := dnsSetDNSCrypt
-	if modal.Kind == ModalDNSRoute {
-		last = dnsRouteResolver
-	}
-	switch key {
-	case "backspace":
-		input := []rune(modal.Input)
-		if len(input) > 0 {
-			modal.Input = string(input[:len(input)-1])
-			m.Modal = &modal
-		}
-		return m, nil, false
-	case "shift+tab":
-		if form.step > 0 {
-			form.values[form.step] = strings.TrimSpace(modal.Input)
-			form.step--
-			modal.dns, modal.Input = form, form.values[form.step]
-			m.Modal = &modal
-		}
-		return m, nil, false
-	case "enter":
-		form.values[form.step] = strings.TrimSpace(modal.Input)
-		if notice := validateDNSFormField(modal.Kind, form, form.step); notice != "" {
-			m.Notice = notice
-			modal.dns = form
-			m.Modal = &modal
-			return m, nil, false
-		}
-		if form.step < last {
-			form.step++
-			modal.dns, modal.Input = form, form.values[form.step]
-			m.Modal = &modal
-			m.Notice = ""
-			return m, nil, false
-		}
-		return m.finishDNSForm(modal.Kind, form)
-	}
-	limit := dnsFormFieldLimit(modal.Kind, form)
-	if utf8.ValidString(key) && utf8.RuneCountInString(key) == 1 && unicode.IsPrint([]rune(key)[0]) && len(modal.Input)+len(key) <= limit {
-		modal.Input += key
-		m.Modal = &modal
-	}
-	return m, nil, false
-}
-
-func dnsFormFieldLimit(kind ModalKind, form dnsForm) int {
-	if kind == ModalDNSResolver {
-		if form.step == dnsSetEndpoints {
-			return 16*256 + 15*2
-		}
-		return 64
-	}
-	if form.step == dnsRouteValue && form.values[dnsRouteMatcher] == "suffix" {
-		return 253
-	}
-	return 64
-}
-
-func validateDNSFormField(kind ModalKind, form dnsForm, field int) string {
+func validateDNSRouteForm(form dnsForm, field int) string {
 	value := form.values[field]
-	if kind == ModalDNSResolver {
-		switch field {
-		case dnsSetID:
-			if !validSubscriptionID(value) {
-				return "Resolver ID must be a stable ID (max 64 characters)."
-			}
-		case dnsSetEndpoints:
-			if _, err := parseDNSEndpoints(value); err != nil {
-				return err.Error()
-			}
-		case dnsSetDNSCrypt:
-			if !validYesNo(value) {
-				return "DNSCrypt must be yes or no."
-			}
-		}
-		return ""
-	}
 	switch field {
 	case dnsRouteMatcher:
 		if value != "suffix" && value != "geosite" && value != "resource" {
@@ -981,69 +1035,6 @@ func parseDNSEndpoints(value string) ([]string, error) {
 		endpoints = append(endpoints, endpoint)
 	}
 	return endpoints, nil
-}
-
-func (m Model) finishDNSForm(kind ModalKind, form dnsForm) (Model, *ipc.Command, bool) {
-	sets := m.dnsResolverSets()
-	routes := m.dnsRoutes()
-	if !form.edit && ((kind == ModalDNSResolver && len(sets) >= 256) || (kind == ModalDNSRoute && len(routes) >= 1024)) {
-		m.Notice = "DNS policy reached its command limit."
-		return m, nil, false
-	}
-	if kind == ModalDNSResolver {
-		endpoints, _ := parseDNSEndpoints(form.values[dnsSetEndpoints])
-		set := ipc.DNSResolverSet{ID: form.values[dnsSetID], Endpoints: endpoints, DNSCrypt: strings.EqualFold(form.values[dnsSetDNSCrypt], "yes") || strings.EqualFold(form.values[dnsSetDNSCrypt], "y") || strings.EqualFold(form.values[dnsSetDNSCrypt], "true")}
-		index := -1
-		for i, existing := range sets {
-			if form.edit && existing.ID == form.targetID {
-				index = i
-			}
-			if existing.ID == set.ID && (!form.edit || existing.ID != form.targetID) {
-				m.Notice = "Resolver ID already exists."
-				return m, nil, false
-			}
-		}
-		if form.edit {
-			if index < 0 {
-				m.Notice = "DNS resolver set is no longer available."
-				return m, nil, false
-			}
-			sets[index] = set
-			if set.ID != form.targetID {
-				for i := range routes {
-					if routes[i].ResolverSet == form.targetID {
-						routes[i].ResolverSet = set.ID
-					}
-				}
-			}
-		} else {
-			sets = append(sets, set)
-		}
-	} else {
-		route := routeFromDNSForm(form)
-		index := -1
-		for i, existing := range routes {
-			if form.edit && dnsRouteID(existing) == form.targetID {
-				index = i
-			}
-			if dnsRouteID(existing) == dnsRouteID(route) && (!form.edit || dnsRouteID(existing) != form.targetID) {
-				m.Notice = "DNS route matcher already exists."
-				return m, nil, false
-			}
-		}
-		if form.edit {
-			if index < 0 {
-				m.Notice = "DNS route is no longer available."
-				return m, nil, false
-			}
-			routes[index] = route
-		} else {
-			routes = append(routes, route)
-		}
-	}
-	m.Modal = nil
-	m.Focus = FocusContent
-	return m, dnsRoutingCommand(sets, routes), false
 }
 
 func routeFromDNSForm(form dnsForm) ipc.DNSRoute {
@@ -1229,9 +1220,16 @@ func (m Model) handleFormKey(key string) (Model, *ipc.Command, bool) {
 	case "form_save":
 		var command *ipc.Command
 		var notice string
-		if m.Modal.Kind == ModalSubscription {
+		switch m.Modal.Kind {
+		case ModalSubscription:
 			command, notice = subscriptionFormIntent(m.Modal)
-		} else {
+		case ModalResource, ModalFilter:
+			command, notice = managedFormIntent(m.Modal)
+		case ModalMonitorSetting:
+			command, notice = monitorFormIntent(m.Modal)
+		case ModalDNSResolver, ModalDNSRoute:
+			command, notice = m.dnsFormIntent(m.Modal)
+		default:
 			notice = "This configuration form is unavailable."
 		}
 		if notice != "" {
@@ -1382,45 +1380,9 @@ func modalPrompt(kind ModalKind) string {
 		return "confirm DNS policy removal"
 	case ModalDNSListen:
 		return "DNS listener address"
-	case ModalAlertThreshold:
-		return "alert threshold in milliseconds (1-60000)"
-	case ModalMonitorSetting:
-		return "monitor setting"
 	default:
-		return "monitor interval in seconds (1-86400)"
+		return "Unsupported dialog"
 	}
-}
-
-func dnsModalPrompt(modal *Modal) string {
-	form := modal.dns
-	prefix := "New DNS resolver"
-	if modal.Kind == ModalDNSRoute {
-		prefix = "New DNS route"
-	}
-	if form.edit {
-		prefix = "Edit DNS entry"
-	}
-	field := ""
-	if modal.Kind == ModalDNSResolver {
-		switch form.step {
-		case dnsSetID:
-			field = "resolver ID"
-		case dnsSetEndpoints:
-			field = "comma-separated endpoints (no credentials)"
-		case dnsSetDNSCrypt:
-			field = "DNSCrypt yes/no"
-		}
-	} else {
-		switch form.step {
-		case dnsRouteMatcher:
-			field = "matcher type: suffix/geosite/resource"
-		case dnsRouteValue:
-			field = "matcher value"
-		case dnsRouteResolver:
-			field = "resolver set ID"
-		}
-	}
-	return fmt.Sprintf("%s %d/3 - %s", prefix, form.step+1, field)
 }
 
 func (m Model) selectTab(tab Tab) Model {
