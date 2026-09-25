@@ -28,6 +28,9 @@ type UsageSnapshot struct {
 
 type SubscriptionSnapshot struct {
 	ID, Name, SourceHost, HashPrefix, AppliedHashPrefix string
+	Route                                               string
+	RefreshIntervalSeconds, TimeoutSeconds              uint32
+	AllowHTTP, AllowInvalidTLS                          bool
 	Enabled, Active, PendingActivation                  bool
 	LastCheck, LastSuccess, NextDue                     int64
 	LastFailure                                         string

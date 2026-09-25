@@ -299,3 +299,63 @@ tab = "resources"
 key = "e"
 action = "edit_resource"
 help = "edit resource"
+
+[[binding]]
+tab = "form"
+key = "up"
+action = "form_up"
+help = "previous field"
+
+[[binding]]
+tab = "form"
+key = "down"
+action = "form_down"
+help = "next field"
+
+[[binding]]
+tab = "form"
+key = "space"
+action = "form_toggle"
+help = "toggle field"
+
+[[binding]]
+tab = "form"
+key = "enter"
+action = "form_edit"
+help = "edit field"
+
+[[binding]]
+tab = "form"
+key = "left"
+action = "form_left"
+help = "previous choice or character"
+
+[[binding]]
+tab = "form"
+key = "right"
+action = "form_right"
+help = "next choice or character"
+
+[[binding]]
+tab = "form"
+key = "backspace"
+action = "form_backspace"
+help = "delete character"
+
+[[binding]]
+tab = "form"
+key = "ctrl+s"
+action = "form_save"
+help = "save form"
+
+[[binding]]
+tab = "form"
+key = "f2"
+action = "form_save"
+help = "save form"
+
+[[binding]]
+tab = "form"
+key = "esc"
+action = "form_cancel"
+help = "cancel form"

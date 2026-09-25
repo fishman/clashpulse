@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"testing"
+
+	"github.com/fishman/clashpulse/core"
 )
 
 func TestCommandValidationBoundsIdentifiersAndSettings(t *testing.T) {
@@ -59,6 +61,22 @@ func TestSubscriptionUserAgentEditRejectsHeaderInjection(t *testing.T) {
 	}
 	if err := (Command{Kind: CommandPutSubscription, SubscriptionID: "daily", Subscription: &SubscriptionEdit{UserAgent: &bad}}).validate(); err == nil {
 		t.Fatal("header injection accepted")
+	}
+}
+
+func TestSnapshotRejectsInvalidSubscriptionPolicy(t *testing.T) {
+	valid := core.Snapshot{Subscriptions: []core.SubscriptionSnapshot{{ID: "feed", Route: "direct", RefreshIntervalSeconds: 3600, TimeoutSeconds: 30}}}
+	if err := validateSnapshot(valid); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range []core.SubscriptionSnapshot{
+		{ID: "feed", Route: "remote"},
+		{ID: "feed", Route: "direct", RefreshIntervalSeconds: 86400*30 + 1},
+		{ID: "feed", Route: "direct", TimeoutSeconds: 301},
+	} {
+		if err := validateSnapshot(core.Snapshot{Subscriptions: []core.SubscriptionSnapshot{item}}); err == nil {
+			t.Fatal("invalid subscription policy escaped local IPC boundary")
+		}
 	}
 }
 

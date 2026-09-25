@@ -350,6 +350,10 @@ func (s *runtimeService) stateSnapshot() core.Snapshot {
 			Enabled: entry.Enabled, Active: entry.Active, PendingActivation: entry.PendingActivation, LastCheck: unixSeconds(entry.CheckedAt),
 			LastSuccess: unixSeconds(entry.LastSuccess), NextDue: unixSeconds(entry.NextDue), LastFailure: publicFailureLabel("subscription", entry.LastFailure),
 		}
+		sub.Route = entry.Route
+		sub.RefreshIntervalSeconds = uint32(entry.RefreshInterval / time.Second)
+		sub.TimeoutSeconds = uint32(entry.Timeout / time.Second)
+		sub.AllowHTTP, sub.AllowInvalidTLS = entry.AllowHTTP, entry.AllowInvalidTLS
 		sub.AppliedHashPrefix = entry.AppliedHash
 		if len(entry.Hash) > 12 {
 			sub.HashPrefix = entry.Hash[:12]

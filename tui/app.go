@@ -96,10 +96,7 @@ func Run(ctx context.Context, endpoint string) error {
 				cache.width = 0
 				render(screen, model, &cache)
 			case *tcell.EventKey:
-				key := eventKeyName(event)
-				if model.Modal != nil && event.Key() == tcell.KeyRune {
-					key = event.Str()
-				}
+				key := keyForModelEvent(model, event)
 				var outgoing *ipc.Command
 				var quit bool
 				model, outgoing, quit = model.HandleKey(key)
@@ -113,6 +110,14 @@ func Run(ctx context.Context, endpoint string) error {
 			}
 		}
 	}
+}
+
+func keyForModelEvent(model Model, event *tcell.EventKey) string {
+	key := eventKeyName(event)
+	if event != nil && model.Modal != nil && event.Key() == tcell.KeyRune && (model.Modal.Form == nil || key != "space") {
+		return event.Str()
+	}
+	return key
 }
 
 func enqueueCommand(model Model, work chan commandWork, command ipc.Command) Model {

@@ -7,21 +7,16 @@ import (
 
 func TestPrivateSourceModalNeverDisplaysEnteredURL(t *testing.T) {
 	secret := "https://provider.invalid/profile?token=private"
-	for _, modal := range []*Modal{
-		{Kind: ModalSubscription, Input: secret, subscription: subscriptionForm{step: subscriptionFieldURL}},
+	for _, item := range []*Modal{
 		{Kind: ModalResource, Input: secret, managed: managedForm{step: resourceFieldURL}},
+		{Kind: ModalDNSResolver, Input: secret, dns: dnsForm{step: dnsSetEndpoints}},
 	} {
-		text := modalDisplayInput(modal)
+		text := modalDisplayInput(item)
 		if strings.Contains(text, "private") || strings.Contains(text, "provider.invalid") {
-			t.Fatalf("private URL shown in %s modal: %q", modal.Kind, text)
+			t.Fatal("private URL shown in modal")
 		}
 	}
-	agent := &Modal{Kind: ModalSubscription, Input: "clash-verge/v2.5.6", subscription: subscriptionForm{step: subscriptionFieldUserAgent}}
-	if got := modalDisplayInput(agent); got != "[hidden]" {
-		t.Fatalf("source user agent displayed: %q", got)
-	}
-	ordinary := &Modal{Kind: ModalSubscription, Input: "Daily", subscription: subscriptionForm{step: subscriptionFieldName}}
-	if got := modalDisplayInput(ordinary); got != "Daily" {
-		t.Fatalf("nonsecret field hidden: %q", got)
+	if got := modalDisplayInput(&Modal{Kind: ModalBinary, Input: "system"}); got != "system" {
+		t.Fatalf("nonsecret binary selection hidden: %q", got)
 	}
 }

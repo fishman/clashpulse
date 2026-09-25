@@ -344,8 +344,12 @@ func validateSnapshot(snapshot core.Snapshot) error {
 		}
 	}
 	for _, subscription := range snapshot.Subscriptions {
-		if !addText(subscription.ID, subscription.Name, subscription.SourceHost, subscription.HashPrefix, subscription.LastFailure) {
+		if !addText(subscription.ID, subscription.Name, subscription.SourceHost, subscription.HashPrefix, subscription.LastFailure, subscription.Route) {
 			return ErrSnapshotTooLarge
+		}
+		if subscription.Route != "" && subscription.Route != "direct" && subscription.Route != "system_proxy" && subscription.Route != "mihomo_proxy" ||
+			subscription.RefreshIntervalSeconds > 86400*30 || subscription.TimeoutSeconds > 300 {
+			return errors.New("ipc: invalid subscription policy")
 		}
 	}
 	for _, resource := range snapshot.Resources {

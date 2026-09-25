@@ -6,6 +6,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/fishman/notmutt/lib/tui/chrome"
+	"github.com/fishman/notmutt/lib/tui/modal"
 	"github.com/fishman/notmutt/lib/tui/theme"
 	"github.com/gdamore/tcell/v3"
 	"github.com/gdamore/tcell/v3/color"
@@ -166,45 +167,7 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 		setRuns(cache.current, height-2, chrome.Status(width, "status", []chrome.Segment{{Runs: []chrome.Run{{Text: strings.Join(model.Help(), "   "), Style: "muted"}}, Priority: 10}}, nil))
 	}
 	if model.Modal != nil {
-		message := modalPrompt(model.Modal.Kind)
-		if model.Modal.Kind == ModalMonitorSetting || model.Modal.Kind == ModalMonitorInterval || model.Modal.Kind == ModalAlertThreshold {
-			message = monitorPrompt(model.Modal.monitor)
-		} else if model.Modal.Kind == ModalDeleteSubscription || model.Modal.Kind == ModalDeleteDNS {
-			message = "Remove " + model.Modal.Input + "?"
-		} else if model.Modal.Kind == ModalSubscription {
-			message = subscriptionModalPrompt(model.Modal)
-		} else if model.Modal.Kind == ModalResource || model.Modal.Kind == ModalFilter {
-			message = managedModalPrompt(model.Modal)
-		} else if model.Modal.Kind == ModalDNSResolver || model.Modal.Kind == ModalDNSRoute {
-			message = dnsModalPrompt(model.Modal)
-		}
-		boxWidth := len([]rune(message)) + 6
-		if boxWidth > width {
-			boxWidth = width
-		}
-		if boxWidth > 0 {
-			x, y := (width-boxWidth)/2, height/2-1
-			if y < 0 {
-				y = 0
-			}
-			prefix := strings.Repeat(" ", x)
-			setLine(cache.current, y, prefix+message, roleModal)
-			if model.Modal.Kind == ModalDeleteSubscription || model.Modal.Kind == ModalDeleteDNS {
-				setLine(cache.current, y+1, prefix+"Enter remove | Esc cancel", roleModal)
-			} else {
-				setLine(cache.current, y+1, prefix+"Input: "+modalDisplayInput(model.Modal)+"_", roleModal)
-				action := "Enter apply"
-				wizard := model.Modal.Kind == ModalSubscription || model.Modal.Kind == ModalResource || model.Modal.Kind == ModalFilter || model.Modal.Kind == ModalDNSResolver || model.Modal.Kind == ModalDNSRoute
-				if wizard {
-					more := model.Modal.Kind == ModalSubscription && model.Modal.subscription.step+1 < subscriptionFieldCount || (model.Modal.Kind == ModalResource || model.Modal.Kind == ModalFilter) && model.Modal.managed.step+1 < managedFieldCount(model.Modal.Kind) || (model.Modal.Kind == ModalDNSResolver || model.Modal.Kind == ModalDNSRoute) && model.Modal.dns.step < 2
-					if more {
-						action = "Enter next"
-					}
-					action += " | Shift+Tab back"
-				}
-				setLine(cache.current, y+2, prefix+action+" | Esc cancel", roleModal)
-			}
-		}
+		drawModal(cache.current, width, height, model.Modal)
 	}
 	changed := invalidate
 	for y, line := range cache.current {
@@ -230,12 +193,77 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 	}
 }
 
+func drawModal(lines []renderLine, width, height int, item *Modal) {
+	if width < 3 {
+		return
+	}
+	var body []renderLine
+	if item.Form != nil {
+		body = append(body, renderLine{text: strings.ReplaceAll(string(item.Kind), "_", " ") + " settings", role: roleAccent})
+		for _, row := range item.Form.Rows(max(1, width-4), max(1, height-7)) {
+			role := roleModal
+			if row.Selected {
+				role = roleSelected
+			}
+			body = append(body, renderLine{text: row.Text, role: role})
+		}
+	} else {
+		message := modalPrompt(item.Kind)
+		if item.Kind == ModalMonitorSetting || item.Kind == ModalMonitorInterval || item.Kind == ModalAlertThreshold {
+			message = monitorPrompt(item.monitor)
+		} else if item.Kind == ModalDeleteSubscription || item.Kind == ModalDeleteDNS {
+			message = "Remove " + item.Input + "?"
+		} else if item.Kind == ModalResource || item.Kind == ModalFilter {
+			message = managedModalPrompt(item)
+		} else if item.Kind == ModalDNSResolver || item.Kind == ModalDNSRoute {
+			message = dnsModalPrompt(item)
+		}
+		body = append(body, renderLine{text: message, role: roleAccent})
+		if item.Kind == ModalDeleteSubscription || item.Kind == ModalDeleteDNS {
+			body = append(body, renderLine{text: "Enter remove  Esc cancel", role: roleModal})
+		} else {
+			input := modalDisplayInput(item)
+			wrapped, _, _ := modal.Wrap(input, len(input), max(1, width-10), max(1, height-8))
+			for i, line := range wrapped {
+				prefix := "       "
+				if i == 0 {
+					prefix = "Input: "
+				}
+				body = append(body, renderLine{text: prefix + line, role: roleModal})
+			}
+			action := "Enter apply  Esc cancel"
+			wizard := item.Kind == ModalResource || item.Kind == ModalFilter || item.Kind == ModalDNSResolver || item.Kind == ModalDNSRoute
+			if wizard {
+				more := (item.Kind == ModalResource || item.Kind == ModalFilter) && item.managed.step+1 < managedFieldCount(item.Kind) ||
+					(item.Kind == ModalDNSResolver || item.Kind == ModalDNSRoute) && item.dns.step < 2
+				if more {
+					action = "Enter next  Shift+Tab back  Esc cancel"
+				}
+			}
+			body = append(body, renderLine{text: action, role: roleMuted})
+		}
+	}
+	box, ok := modal.Bottom(width, height, len(body), 3)
+	if !ok {
+		return
+	}
+	if len(body) > box.BodyRows {
+		body = body[len(body)-box.BodyRows:]
+	}
+	setLine(lines, box.Y, "\u256d"+strings.Repeat("\u2500", width-2)+"\u256e", roleModal)
+	for i, row := range body {
+		text := runewidth.Truncate(row.text, width-2, "")
+		text += strings.Repeat(" ", width-2-runewidth.StringWidth(text))
+		setLine(lines, box.Y+i+1, "\u2502"+text+"\u2502", row.role)
+	}
+	setLine(lines, box.Y+box.Height-1, "\u2570"+strings.Repeat("\u2500", width-2)+"\u256f", roleModal)
+}
+
 func modalDisplayInput(modal *Modal) string {
 	if modal == nil {
 		return ""
 	}
-	if modal.Kind == ModalSubscription && (modal.subscription.step == subscriptionFieldURL || modal.subscription.step == subscriptionFieldUserAgent) ||
-		modal.Kind == ModalResource && modal.managed.step == resourceFieldURL ||
+	if modal.Kind == ModalResource && modal.managed.step == resourceFieldURL ||
 		modal.Kind == ModalDNSResolver && modal.dns.step == dnsSetEndpoints ||
 		modal.Kind == ModalMonitorSetting && modal.monitor == monitorTestURL {
 		if modal.Input != "" {

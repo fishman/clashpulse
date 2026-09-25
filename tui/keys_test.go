@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fishman/notmutt/lib/tui/form"
 	"github.com/gdamore/tcell/v3"
 )
 
@@ -50,10 +51,42 @@ func TestEventKeyNamesMatchDeclarativeBindings(t *testing.T) {
 		{tcell.NewEventKey(tcell.KeyCtrlC, "", tcell.ModNone), "ctrl+c"},
 		{tcell.NewEventKey(tcell.KeyBacktab, "", tcell.ModNone), "shift+tab"},
 		{tcell.NewEventKey(tcell.KeyEnter, "", tcell.ModNone), "enter"},
+		{tcell.NewEventKey(tcell.KeyRune, " ", tcell.ModNone), "space"},
+		{tcell.NewEventKey(tcell.KeyCtrlS, "", tcell.ModNone), "ctrl+s"},
+		{tcell.NewEventKey(tcell.KeyF2, "", tcell.ModNone), "f2"},
 	} {
 		if got := eventKeyName(test.event); got != test.want {
 			t.Errorf("key name = %q, want %q", got, test.want)
 		}
+	}
+}
+
+func TestFormKeymapExposesToggleAndSave(t *testing.T) {
+	keys, err := DefaultKeymap()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, binding := range []struct{ key, action string }{{"space", "form_toggle"}, {"ctrl+s", "form_save"}, {"f2", "form_save"}} {
+		if got, ok := keys.Action(Tab("form"), binding.key); !ok || got != binding.action {
+			t.Fatalf("form key %q action = %q, %t", binding.key, got, ok)
+		}
+	}
+	if !contains(keys.Help(Tab("form")), "space toggle field") {
+		t.Fatal("form help omitted toggle binding")
+	}
+}
+
+func TestFormSpaceEventTogglesInsteadOfTyping(t *testing.T) {
+	editor, err := form.New([]form.Field{{ID: "enabled", Label: "Enabled", Kind: form.Toggle, Value: "false"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	model := NewModel()
+	model.Modal = &Modal{Kind: ModalSubscription, Form: editor}
+	key := keyForModelEvent(model, tcell.NewEventKey(tcell.KeyRune, " ", tcell.ModNone))
+	model, _, _ = model.HandleKey(key)
+	if key != "space" || len(model.Modal.Form.Changes()) != 1 || model.Modal.Form.Changes()[0].Value != "true" {
+		t.Fatal("space was typed instead of toggling the selected field")
 	}
 }
 

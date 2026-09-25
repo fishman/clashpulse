@@ -7,6 +7,7 @@ import (
 
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
+	"github.com/fishman/notmutt/lib/tui/form"
 	"github.com/gdamore/tcell/v3"
 	"github.com/gdamore/tcell/v3/vt"
 )
@@ -182,5 +183,30 @@ func TestRenderNarrowTable(t *testing.T) {
 	rows := mockRender(t, model, 20, 12)
 	if !strings.Contains(rows[1], "Name") || strings.Contains(rows[1], "Source") || !strings.Contains(rows[2], "geo-active") || !strings.Contains(rows[8], "geosite.dat") {
 		t.Fatalf("narrow table lost identity or selected detail: header %q, row %q, detail %q", rows[1], rows[2], rows[8])
+	}
+}
+
+func TestSubscriptionFormMasksInputsAndKeepsFooter(t *testing.T) {
+	fields, err := form.New([]form.Field{
+		{ID: "url", Label: "Source URL", Kind: form.Text, Sensitive: true},
+		{ID: "enabled", Label: "Enabled", Kind: form.Toggle, Value: "true"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields.SetText("https://private.invalid/?token=secret")
+	model := NewModel()
+	model.Focus = FocusModal
+	model.Modal = &Modal{Kind: ModalSubscription, Form: fields}
+	wide := mockRender(t, model, 80, 16)
+	frame := strings.Join(wide, "\n")
+	if !strings.Contains(frame, "\u256d") || !strings.Contains(frame, "\u2570") ||
+		!strings.Contains(frame, "[hidden]") || strings.Contains(frame, "private.invalid") ||
+		!strings.Contains(wide[14], "space toggle field") || !strings.Contains(wide[15], "IPC connected") {
+		t.Fatal("private form, border, or footer missing")
+	}
+	small := strings.Join(mockRender(t, model, 20, 5), "\n")
+	if strings.Contains(small, "\u256d") || model.Modal == nil || model.Focus != FocusModal {
+		t.Fatal("too-small modal overwrote footer or lost focus")
 	}
 }

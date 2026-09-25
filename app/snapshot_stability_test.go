@@ -2,9 +2,12 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/core"
@@ -31,5 +34,42 @@ func TestEmptyDNSPolicyDoesNotChangeAcrossClonedSnapshots(t *testing.T) {
 	first := core.CloneSnapshot(s.stateSnapshot())
 	if next := s.stateSnapshot(); !reflect.DeepEqual(first, next) {
 		t.Fatalf("unchanged DNS policy changed snapshot after cloning: before=%+v after=%+v", first.DNS, next.DNS)
+	}
+}
+
+func TestSubscriptionSafePolicySnapshot(t *testing.T) {
+	store, err := subscriptions.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := subscriptions.NewService(store, subscriptions.Options{
+		Transport: func(download.Route, bool) (http.RoundTripper, error) { return http.DefaultTransport, nil },
+		Render:    func(context.Context, []byte) ([]byte, error) { return []byte("valid"), nil },
+		Validate:  func(context.Context, []byte) error { return nil },
+		Apply:     func(context.Context, []byte) error { return nil },
+		Restore:   func(context.Context, []byte) error { return nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = service.Add(config.Subscription{
+		ID: "feed", URL: "https://source.invalid/private?token=not-for-ipc", UserAgent: "custom-private-agent",
+		Enabled: true, Route: "direct", AllowHTTP: true, AllowInvalidTLS: true,
+		RefreshInterval: time.Hour, Timeout: 22 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &runtimeService{store: config.NewStore(config.Snapshot{}), subs: service}
+	snapshot := s.stateSnapshot()
+	if len(snapshot.Subscriptions) != 1 {
+		t.Fatal("subscription missing from snapshot")
+	}
+	feed := snapshot.Subscriptions[0]
+	if feed.Route != "direct" || !feed.AllowHTTP || !feed.AllowInvalidTLS || feed.RefreshIntervalSeconds != 3600 || feed.TimeoutSeconds != 22 {
+		t.Fatal("safe policy not available to TUI toggles")
+	}
+	if exported := fmt.Sprintf("%+v", snapshot); strings.Contains(exported, "not-for-ipc") || strings.Contains(exported, "custom-private-agent") {
+		t.Fatal("private subscription source or agent leaked through snapshot")
 	}
 }

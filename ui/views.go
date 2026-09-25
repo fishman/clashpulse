@@ -322,13 +322,32 @@ func (p *subscriptionPage) openSubscriptionEditor(existing *core.SubscriptionSna
 	} else {
 		e.name.SetText(existing.Name)
 		e.source.SetPlaceHolder("Leave blank to keep the current private URL")
-		e.refresh.SetPlaceHolder("Leave blank to keep current")
+		if existing.RefreshIntervalSeconds > 0 {
+			e.refresh.SetText(strconv.FormatUint(uint64(existing.RefreshIntervalSeconds), 10))
+		}
 		e.agent.SetPlaceHolder("Blank keeps current; '-' resets to clash-pulse")
-		e.timeout.SetPlaceHolder("Leave blank to keep current")
+		if existing.TimeoutSeconds > 0 {
+			e.timeout.SetText(strconv.FormatUint(uint64(existing.TimeoutSeconds), 10))
+		}
 		e.enabled.SetChecked(existing.Enabled)
-		e.route.SetSelected("Keep current")
-		e.http.SetSelected("Keep current")
-		e.tls.SetSelected("Keep current")
+		switch existing.Route {
+		case "mihomo_proxy":
+			e.route.SetSelected("Mihomo proxy")
+		case "system_proxy":
+			e.route.SetSelected("System proxy")
+		default:
+			e.route.SetSelected("Direct")
+		}
+		if existing.AllowHTTP {
+			e.http.SetSelected("Allow HTTP (insecure)")
+		} else {
+			e.http.SetSelected("HTTPS only")
+		}
+		if existing.AllowInvalidTLS {
+			e.tls.SetSelected("Allow invalid TLS certificates (insecure)")
+		} else {
+			e.tls.SetSelected("Verify certificates")
+		}
 		items = append(items, widget.NewFormItem("Stable ID", widget.NewLabel(existing.ID)))
 	}
 	items = append(items,
@@ -408,7 +427,8 @@ func (e *subscriptionEditor) command() (ipc.Command, bool, error) {
 		return ipc.Command{}, false, err
 	}
 	if creating || urlValue != "" {
-		if !validSubscriptionURL(urlValue, httpChanged && allowHTTP != nil && *allowHTTP) {
+		permittedHTTP := allowHTTP != nil && *allowHTTP || !httpChanged && !creating && e.existing.AllowHTTP
+		if !validSubscriptionURL(urlValue, permittedHTTP) {
 			return ipc.Command{}, false, fmt.Errorf("source URL must be HTTPS; HTTP requires explicit opt-in")
 		}
 		patch.URL = &urlValue
@@ -434,8 +454,14 @@ func (e *subscriptionEditor) command() (ipc.Command, bool, error) {
 	if patch.RefreshIntervalSeconds, err = subscriptionSeconds(e.refresh, creating, "refresh interval"); err != nil {
 		return ipc.Command{}, false, err
 	}
+	if !creating && patch.RefreshIntervalSeconds != nil && *patch.RefreshIntervalSeconds == e.existing.RefreshIntervalSeconds {
+		patch.RefreshIntervalSeconds = nil
+	}
 	if patch.TimeoutSeconds, err = subscriptionSeconds(e.timeout, creating, "timeout"); err != nil {
 		return ipc.Command{}, false, err
+	}
+	if !creating && patch.TimeoutSeconds != nil && *patch.TimeoutSeconds == e.existing.TimeoutSeconds {
+		patch.TimeoutSeconds = nil
 	}
 	if e.route.Selected != "Keep current" {
 		var route string
@@ -449,16 +475,18 @@ func (e *subscriptionEditor) command() (ipc.Command, bool, error) {
 		default:
 			return ipc.Command{}, false, fmt.Errorf("select a connection route")
 		}
-		patch.Route = &route
+		if creating || route != e.existing.Route && !(route == "direct" && e.existing.Route == "") {
+			patch.Route = &route
+		}
 	}
-	if creating || httpChanged {
+	if creating || httpChanged && *allowHTTP != e.existing.AllowHTTP {
 		patch.AllowHTTP = allowHTTP
 	}
 	allowTLS, tlsChanged, err := policyValue(e.tls.Selected, creating, "Verify certificates", "Allow invalid TLS certificates (insecure)")
 	if err != nil {
 		return ipc.Command{}, false, err
 	}
-	if creating || tlsChanged {
+	if creating || tlsChanged && *allowTLS != e.existing.AllowInvalidTLS {
 		patch.AllowInvalidTLS = allowTLS
 	}
 	changed := patch.Name != nil || patch.URL != nil || patch.UserAgent != nil || patch.Enabled != nil || patch.RefreshIntervalSeconds != nil || patch.TimeoutSeconds != nil || patch.Route != nil || patch.AllowHTTP != nil || patch.AllowInvalidTLS != nil

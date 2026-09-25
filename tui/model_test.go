@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
 )
 
@@ -112,69 +113,142 @@ func TestSubscriptionCreateEmitsTypedIntent(t *testing.T) {
 	model := NewModel().Apply(eventFromJSON(t, `{"Snapshot":{"Subscriptions":[{"ID":"existing","Name":"Existing"}]}}`))
 	model.Tab = TabSubscriptions
 	model.Selection[TabSubscriptions] = "subscription:existing"
-	model, command, _ := model.HandleKey("n")
-	if model.Modal == nil || model.Focus != FocusModal || !contains(model.Help(), "n new subscription") {
-		t.Fatalf("new subscription did not open from the binding: %#v", model)
+	model, _, _ = model.HandleKey("n")
+	if model.Modal == nil || model.Modal.Form == nil || model.Focus != FocusModal {
+		t.Fatal("new subscription did not open a form table")
 	}
-	for i, field := range []string{"new-feed", "News", "https://feeds.example/news?token=private", "", "yes", "3600", "12", "direct", "no", "yes"} {
-		model, command = fillModalField(t, model, field)
-		if i < 9 && command != nil {
-			t.Fatalf("field %d unexpectedly emitted intent: %#v", i, command)
-		}
+	model = typeFormText(t, model, "new-feed")
+	model, _, _ = model.HandleKey("down")
+	model = typeFormText(t, model, "News")
+	model, _, _ = model.HandleKey("down")
+	model = typeFormText(t, model, "https://feeds.example/news?token=private")
+	for range 2 {
+		model, _, _ = model.HandleKey("down")
 	}
-	if command == nil || command.Kind != ipc.CommandPutSubscription || command.SubscriptionID != "new-feed" || command.Subscription == nil {
-		t.Fatalf("create intent = %#v", command)
+	model, _, _ = model.HandleKey("down")
+	model, _, _ = model.HandleKey("enter")
+	model = typeFormText(t, model, "3600")
+	model, _, _ = model.HandleKey("down")
+	model, _, _ = model.HandleKey("enter")
+	model = typeFormText(t, model, "12")
+	model, _, _ = model.HandleKey("down")
+	model, _, _ = model.HandleKey("enter")
+	model, _, _ = model.HandleKey("enter")
+	for range 2 {
+		model, _, _ = model.HandleKey("down")
+	}
+	model, _, _ = model.HandleKey("space")
+	model, command, quit := model.HandleKey("ctrl+s")
+	if quit || command == nil || command.Kind != ipc.CommandPutSubscription || command.SubscriptionID != "new-feed" || command.Subscription == nil {
+		t.Fatal("form did not create a typed subscription")
 	}
 	patch := command.Subscription
-	if patch.Name == nil || *patch.Name != "News" || patch.URL == nil || *patch.URL != "https://feeds.example/news?token=private" || patch.UserAgent != nil || patch.Enabled == nil || !*patch.Enabled || patch.RefreshIntervalSeconds == nil || *patch.RefreshIntervalSeconds != 3600 || patch.TimeoutSeconds == nil || *patch.TimeoutSeconds != 12 || patch.Route == nil || *patch.Route != "direct" || patch.AllowHTTP == nil || *patch.AllowHTTP || patch.AllowInvalidTLS == nil || !*patch.AllowInvalidTLS {
-		t.Fatalf("create fields = %#v", patch)
+	if patch.Name == nil || *patch.Name != "News" || patch.URL == nil || *patch.URL != "https://feeds.example/news?token=private" ||
+		patch.UserAgent != nil || patch.Enabled == nil || !*patch.Enabled || patch.RefreshIntervalSeconds == nil || *patch.RefreshIntervalSeconds != 3600 ||
+		patch.TimeoutSeconds == nil || *patch.TimeoutSeconds != 12 || patch.Route == nil || *patch.Route != "mihomo_proxy" ||
+		patch.AllowInvalidTLS == nil || !*patch.AllowInvalidTLS {
+		t.Fatal("form did not preserve edited subscription fields")
 	}
 	if model.Modal != nil || model.Focus != FocusContent || model.Selection[TabSubscriptions] != "subscription:existing" {
-		t.Fatalf("create changed focus or selection: %#v", model)
+		t.Fatal("Save changed tab focus or stable selection")
 	}
 }
 
-func TestSubscriptionCreateIncludesUserAgent(t *testing.T) {
+func TestSubscriptionFormKeepsPrivateSourceOnToggle(t *testing.T) {
+	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Subscriptions: []core.SubscriptionSnapshot{{
+		ID: "feed", Name: "Feed", SourceHost: "provider.example", Route: "direct", Enabled: true,
+		RefreshIntervalSeconds: 3600, TimeoutSeconds: 30,
+	}}}})
+	model.Tab = TabSubscriptions
+	model.Selection[TabSubscriptions] = "subscription:feed"
+	model, _, _ = model.HandleKey("e")
+	if model.Modal == nil || model.Modal.Form == nil {
+		t.Fatal("subscription form table not opened")
+	}
+	if !contains(model.Help(), "space toggle field") || !contains(model.Help(), "ctrl+s save form") {
+		t.Fatal("form key help did not follow bindings")
+	}
+	for range 7 {
+		model, _, _ = model.HandleKey("down")
+	}
+	model, _, _ = model.HandleKey("space")
+	model, command, quit := model.HandleKey("ctrl+s")
+	if quit || model.Modal != nil || command == nil || command.Kind != ipc.CommandPutSubscription || command.Subscription == nil ||
+		command.Subscription.AllowHTTP == nil || !*command.Subscription.AllowHTTP || command.Subscription.URL != nil || command.Subscription.UserAgent != nil {
+		t.Fatal("HTTP toggle changed private source or failed to submit")
+	}
+}
+
+func TestSubscriptionFormCreatesPrivateAgentAfterUnrelatedSnapshot(t *testing.T) {
 	model := NewModel()
 	model.Tab = TabSubscriptions
 	model, _, _ = model.HandleKey("n")
-	var command *ipc.Command
-	for _, field := range []string{"agent-feed", "Provider", "https://provider.invalid/profile", "clash-verge/v2.5.6", "yes", "3600", "30", "direct", "no", "no"} {
-		model, command = fillModalField(t, model, field)
+	for _, r := range "new-feed" {
+		model, _, _ = model.HandleKey(string(r))
 	}
-	if command == nil || command.Subscription == nil || command.Subscription.UserAgent == nil || *command.Subscription.UserAgent != "clash-verge/v2.5.6" {
-		t.Fatal("subscription wizard did not send custom user agent")
+	for range 2 {
+		model, _, _ = model.HandleKey("down")
+	}
+	for _, r := range "https://provider.invalid/profile?token=private" {
+		model, _, _ = model.HandleKey(string(r))
+	}
+	model, _, _ = model.HandleKey("down")
+	for _, r := range "clash-verge/v2.5.6" {
+		model, _, _ = model.HandleKey(string(r))
+	}
+	model = model.Apply(ipc.Event{Snapshot: core.Snapshot{Revision: 2, Jobs: []core.JobSnapshot{{ID: "unrelated"}}}})
+	model, command, quit := model.HandleKey("ctrl+s")
+	if quit || model.Modal != nil || command == nil || command.SubscriptionID != "new-feed" || command.Subscription == nil ||
+		command.Subscription.URL == nil || *command.Subscription.URL != "https://provider.invalid/profile?token=private" ||
+		command.Subscription.UserAgent == nil || *command.Subscription.UserAgent != "clash-verge/v2.5.6" ||
+		command.Subscription.Enabled == nil || !*command.Subscription.Enabled {
+		t.Fatal("form lost private edits or default enabled state across unrelated snapshot")
 	}
 }
 
 func TestSubscriptionEditEmitsPatchWithoutPrivateURL(t *testing.T) {
-	model := NewModel().Apply(eventFromJSON(t, `{"Snapshot":{"Subscriptions":[{"ID":"sub-7","Name":"Before","SourceHost":"feeds.example"}]}}`))
+	model := NewModel().Apply(eventFromJSON(t, `{"Snapshot":{"Subscriptions":[{"ID":"sub-7","Name":"Before","SourceHost":"feeds.example","Enabled":true,"Route":"direct","RefreshIntervalSeconds":3600,"TimeoutSeconds":30}]}}`))
 	model.Tab = TabSubscriptions
 	model.Selection[TabSubscriptions] = "subscription:sub-7"
 	model, _, _ = model.HandleKey("e")
-	if model.Modal == nil || model.Focus != FocusModal || !contains(model.Help(), "e edit subscription") {
-		t.Fatalf("edit subscription did not open from the binding: %#v", model)
+	if model.Modal == nil || model.Modal.Form == nil || model.Focus != FocusModal {
+		t.Fatal("subscription edit form did not open")
 	}
-	var command *ipc.Command
-	for i, field := range []string{"Renamed", "", "", "no", "900", "", "mihomo_proxy", "", "no"} {
-		model, command = fillModalField(t, model, field)
-		if i < 8 && command != nil {
-			t.Fatalf("field %d unexpectedly emitted intent: %#v", i, command)
-		}
+	model, _, _ = model.HandleKey("enter")
+	model = typeFormText(t, model, "Renamed")
+	for range 3 {
+		model, _, _ = model.HandleKey("down")
 	}
+	model, _, _ = model.HandleKey("space")
+	model, _, _ = model.HandleKey("down")
+	model, _, _ = model.HandleKey("enter")
+	model = typeFormText(t, model, "900")
+	for range 2 {
+		model, _, _ = model.HandleKey("down")
+	}
+	model, _, _ = model.HandleKey("enter")
+	model, _, _ = model.HandleKey("enter")
+	for range 2 {
+		model, _, _ = model.HandleKey("down")
+	}
+	model, _, _ = model.HandleKey("space")
+	model, command, _ := model.HandleKey("ctrl+s")
 	if command == nil || command.Kind != ipc.CommandPutSubscription || command.SubscriptionID != "sub-7" || command.Subscription == nil {
-		t.Fatalf("edit intent = %#v", command)
+		t.Fatal("edit form did not dispatch a typed intent")
 	}
 	patch := command.Subscription
-	if patch.Name == nil || *patch.Name != "Renamed" || patch.URL != nil || patch.UserAgent != nil || patch.Enabled == nil || *patch.Enabled || patch.RefreshIntervalSeconds == nil || *patch.RefreshIntervalSeconds != 900 || patch.TimeoutSeconds != nil || patch.Route == nil || *patch.Route != "mihomo_proxy" || patch.AllowHTTP != nil || patch.AllowInvalidTLS == nil || *patch.AllowInvalidTLS {
-		t.Fatalf("edit fields = %#v", patch)
+	if patch.Name == nil || *patch.Name != "Renamed" || patch.URL != nil || patch.UserAgent != nil ||
+		patch.Enabled == nil || *patch.Enabled || patch.RefreshIntervalSeconds == nil || *patch.RefreshIntervalSeconds != 900 ||
+		patch.TimeoutSeconds != nil || patch.Route == nil || *patch.Route != "mihomo_proxy" || patch.AllowHTTP != nil ||
+		patch.AllowInvalidTLS == nil || !*patch.AllowInvalidTLS {
+		t.Fatal("edit lost fields or overwrote private source")
 	}
 	if model.Modal != nil || model.Focus != FocusContent || model.Selection[TabSubscriptions] != "subscription:sub-7" {
-		t.Fatalf("edit changed focus or stable selection: %#v", model)
+		t.Fatal("edit changed focus or stable selection")
 	}
 	model = model.CommandQueued().CommandResult(false, errors.New("invalid URL https://private.example/?token=secret"), true)
 	if strings.Contains(model.Notice, "private.example") || strings.Contains(model.Notice, "token=secret") {
-		t.Fatalf("subscription error disclosed URL: %q", model.Notice)
+		t.Fatal("subscription error disclosed private source")
 	}
 }
 
@@ -183,15 +257,12 @@ func TestSubscriptionEditCanReplaceSource(t *testing.T) {
 	model.Tab = TabSubscriptions
 	model.Selection[TabSubscriptions] = "subscription:sub-source"
 	model, _, _ = model.HandleKey("e")
-	var command *ipc.Command
-	for i, field := range []string{"", "https://new.example/feed?token=private", "", "", "", "", "", "", ""} {
-		model, command = fillModalField(t, model, field)
-		if i < 8 && command != nil {
-			t.Fatalf("field %d unexpectedly emitted intent: %#v", i, command)
-		}
-	}
-	if command == nil || command.Kind != ipc.CommandPutSubscription || command.SubscriptionID != "sub-source" || command.Subscription == nil || command.Subscription.URL == nil || *command.Subscription.URL != "https://new.example/feed?token=private" {
-		t.Fatalf("source replacement intent = %#v", command)
+	model, _, _ = model.HandleKey("down")
+	model = typeFormText(t, model, "https://new.example/feed?token=private")
+	model, command, _ := model.HandleKey("ctrl+s")
+	if command == nil || command.Kind != ipc.CommandPutSubscription || command.SubscriptionID != "sub-source" || command.Subscription == nil ||
+		command.Subscription.URL == nil || *command.Subscription.URL != "https://new.example/feed?token=private" || command.Subscription.UserAgent != nil {
+		t.Fatal("source replacement form did not preserve private agent")
 	}
 }
 
@@ -200,16 +271,15 @@ func TestSubscriptionModalEscapeCancelsWithoutIntent(t *testing.T) {
 	model.Tab = TabSubscriptions
 	model.Selection[TabSubscriptions] = "subscription:keep"
 	model, _, _ = model.HandleKey("n")
-	for _, key := range []string{"p", "a", "r", "t", "i", "a", "l"} {
-		model, _, _ = model.HandleKey(key)
-	}
+	model = typeFormText(t, model, "partial")
 	model = model.Apply(eventFromJSON(t, `{"Snapshot":{"Subscriptions":[{"ID":"other","Name":"Other"},{"ID":"keep","Name":"Keep"}]}}`))
-	if model.Focus != FocusModal || model.Modal == nil || model.Modal.Input != "partial" || model.Selection[TabSubscriptions] != "subscription:keep" {
-		t.Fatalf("snapshot changed modal focus, input, or stable selection: %#v", model)
+	if model.Focus != FocusModal || model.Modal == nil || model.Modal.Form == nil ||
+		len(model.Modal.Form.Changes()) != 1 || model.Modal.Form.Changes()[0].Value != "partial" || model.Selection[TabSubscriptions] != "subscription:keep" {
+		t.Fatal("unrelated snapshot changed pending form or stable selection")
 	}
 	model, command, _ := model.HandleKey("esc")
 	if command != nil || model.Modal != nil || model.Focus != FocusContent || model.Selection[TabSubscriptions] != "subscription:keep" {
-		t.Fatalf("escape did not cancel cleanly: model=%#v command=%#v", model, command)
+		t.Fatal("Escape did not cancel form without intent")
 	}
 }
 
@@ -567,6 +637,18 @@ func TestBinaryModalPreservesExecutablePathCase(t *testing.T) {
 	if command != nil || model.Modal == nil {
 		t.Fatalf("relative binary path was dispatched: %+v", command)
 	}
+}
+
+func typeFormText(t *testing.T, model Model, value string) Model {
+	t.Helper()
+	for _, r := range value {
+		var command *ipc.Command
+		model, command, _ = model.HandleKey(string(r))
+		if command != nil {
+			t.Fatal("typing a form field sent a command before Save")
+		}
+	}
+	return model
 }
 
 func fillModalField(t *testing.T, model Model, value string) (Model, *ipc.Command) {

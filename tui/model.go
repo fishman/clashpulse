@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/fishman/clashpulse/ipc"
+	"github.com/fishman/notmutt/lib/tui/form"
 )
 
 type Tab string
@@ -50,20 +51,6 @@ const (
 	ModalDeleteDNS          ModalKind = "delete_dns"
 )
 
-const (
-	subscriptionFieldID = iota
-	subscriptionFieldName
-	subscriptionFieldURL
-	subscriptionFieldUserAgent
-	subscriptionFieldEnabled
-	subscriptionFieldRefreshInterval
-	subscriptionFieldTimeout
-	subscriptionFieldRoute
-	subscriptionFieldAllowHTTP
-	subscriptionFieldAllowInvalidTLS
-	subscriptionFieldCount
-)
-
 type monitorField uint8
 
 const (
@@ -98,13 +85,6 @@ const (
 	dnsRouteResolver
 )
 
-type subscriptionForm struct {
-	edit     bool
-	targetID string
-	step     int
-	values   [subscriptionFieldCount]string
-}
-
 type managedForm struct {
 	edit     bool
 	targetID string
@@ -113,13 +93,13 @@ type managedForm struct {
 }
 
 type Modal struct {
-	Kind         ModalKind
-	Input        string
-	TargetID     string
-	monitor      monitorField
-	dns          dnsForm
-	subscription subscriptionForm
-	managed      managedForm
+	Kind     ModalKind
+	Input    string
+	TargetID string
+	Form     *form.Form
+	monitor  monitorField
+	dns      dnsForm
+	managed  managedForm
 }
 
 // Row is a stable, render-ready item. ID remains unchanged when unrelated
@@ -192,6 +172,7 @@ func (m Model) Apply(event ipc.Event) Model {
 	m.Selection = cloneSelection(m.Selection)
 	if m.Modal != nil {
 		modal := *m.Modal
+		modal.Form = modal.Form.Clone()
 		m.Modal = &modal
 	}
 	m.snapshot = event
@@ -264,12 +245,20 @@ func (m Model) Rows() []Row {
 
 func (m Model) CurrentGroupID() string { return m.groupID }
 
-func (m Model) Help() []string { return m.keymap.Help(m.Tab) }
+func (m Model) Help() []string {
+	if m.Modal != nil && m.Modal.Form != nil {
+		return m.keymap.Help(Tab("form"))
+	}
+	return m.keymap.Help(m.Tab)
+}
 
 // HandleKey applies one normalized key name and optionally returns one IPC
 // intent. It performs no I/O.
 func (m Model) HandleKey(key string) (Model, *ipc.Command, bool) {
 	if m.Modal != nil {
+		modal := *m.Modal
+		modal.Form = modal.Form.Clone()
+		m.Modal = &modal
 		return m.handleModalKey(key)
 	}
 	key = normalizeKey(key)
@@ -465,6 +454,9 @@ func (m Model) Progress() string {
 }
 
 func (m Model) handleModalKey(key string) (Model, *ipc.Command, bool) {
+	if m.Modal.Form != nil {
+		return m.handleFormKey(key)
+	}
 	if key == "esc" {
 		m.Modal = nil
 		m.Focus = FocusContent
@@ -479,9 +471,6 @@ func (m Model) handleModalKey(key string) (Model, *ipc.Command, bool) {
 	}
 	if m.Modal.Kind == ModalDNSResolver || m.Modal.Kind == ModalDNSRoute {
 		return m.handleDNSFormKey(key)
-	}
-	if m.Modal.Kind == ModalSubscription {
-		return m.handleSubscriptionKey(key)
 	}
 	if m.Modal.Kind == ModalResource || m.Modal.Kind == ModalFilter {
 		return m.handleManagedKey(key)
@@ -1087,213 +1076,201 @@ func yesNo(value bool) string {
 	return "no"
 }
 func (m Model) openSubscriptionModal(edit bool, targetID string) Model {
-	form := subscriptionForm{edit: edit, targetID: targetID}
+	name, route, enabled, refresh, timeout := "", "direct", true, uint32(43200), uint32(30)
+	var allowHTTP, allowInvalidTLS bool
 	if edit {
-		form.step = subscriptionFieldName
+		found := false
+		for _, item := range m.snapshot.Snapshot.Subscriptions {
+			if item.ID == targetID {
+				name = item.Name
+				route = fallback(item.Route, "direct")
+				enabled, allowHTTP, allowInvalidTLS = item.Enabled, item.AllowHTTP, item.AllowInvalidTLS
+				if item.RefreshIntervalSeconds > 0 {
+					refresh = item.RefreshIntervalSeconds
+				}
+				if item.TimeoutSeconds > 0 {
+					timeout = item.TimeoutSeconds
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			m.Notice = "Subscription is no longer available."
+			return m
+		}
 	}
-	m.Modal = &Modal{Kind: ModalSubscription, TargetID: targetID, subscription: form}
+	editor, err := form.New([]form.Field{
+		{ID: "id", Label: "Stable ID", Kind: form.Text, Value: targetID, ReadOnly: edit},
+		{ID: "name", Label: "Display name", Kind: form.Text, Value: name},
+		{ID: "url", Label: "Source URL", Kind: form.Text, Sensitive: true},
+		{ID: "user_agent", Label: "User-Agent", Kind: form.Text, Sensitive: true},
+		{ID: "enabled", Label: "Enabled", Kind: form.Toggle, Value: strconv.FormatBool(enabled)},
+		{ID: "refresh_interval", Label: "Refresh seconds", Kind: form.Text, Value: strconv.FormatUint(uint64(refresh), 10)},
+		{ID: "timeout", Label: "Timeout seconds", Kind: form.Text, Value: strconv.FormatUint(uint64(timeout), 10)},
+		{ID: "route", Label: "Connection route", Kind: form.Choice, Value: route, Choices: []string{"direct", "system_proxy", "mihomo_proxy"}},
+		{ID: "allow_http", Label: "Allow HTTP", Kind: form.Toggle, Value: strconv.FormatBool(allowHTTP)},
+		{ID: "allow_invalid_tls", Label: "Allow invalid TLS", Kind: form.Toggle, Value: strconv.FormatBool(allowInvalidTLS)},
+	})
+	if err != nil {
+		m.Notice = "Subscription settings unavailable."
+		return m
+	}
+	if edit {
+		editor.Move(1)
+	}
+	m.Modal = &Modal{Kind: ModalSubscription, TargetID: targetID, Form: editor}
 	m.Focus = FocusModal
-	if edit {
-		m.Notice = "Blank fields keep existing values; use - to clear the display name."
-	} else {
-		m.Notice = "Enter a stable ID and source URL; HTTP and invalid TLS are disabled by default."
-	}
+	m.Notice = "Edit fields, then Ctrl+S to save; private fields stay hidden."
 	return m
 }
 
-func (m Model) handleSubscriptionKey(key string) (Model, *ipc.Command, bool) {
-	modal := *m.Modal
-	form := modal.subscription
-	switch normalizeKey(key) {
-	case "esc":
+func (m Model) handleFormKey(key string) (Model, *ipc.Command, bool) {
+	editor := m.Modal.Form
+	action, ok := m.keymap.Action(Tab("form"), key)
+	if !ok {
+		if utf8.ValidString(key) && utf8.RuneCountInString(key) == 1 && unicode.IsPrint([]rune(key)[0]) {
+			if !editor.Insert(key) {
+				m.Notice = "Selected field does not accept this input."
+			}
+		}
+		return m, nil, false
+	}
+	switch action {
+	case "form_up":
+		editor.Move(-1)
+	case "form_down":
+		editor.Move(1)
+	case "form_toggle":
+		if !editor.Toggle() {
+			editor.Insert(" ")
+		}
+	case "form_edit":
+		if !editor.Toggle() && !editor.Cycle(1) {
+			editor.SetText("")
+		}
+	case "form_left":
+		if !editor.Cycle(-1) {
+			editor.MoveCursor(-1)
+		}
+	case "form_right":
+		if !editor.Cycle(1) {
+			editor.MoveCursor(1)
+		}
+	case "form_backspace":
+		editor.Backspace()
+	case "form_cancel":
+		editor.Cancel()
 		m.Modal = nil
 		m.Focus = FocusContent
 		m.Notice = ""
 		return m, nil, false
-	case "backspace":
-		input := []rune(modal.Input)
-		if len(input) > 0 {
-			modal.Input = string(input[:len(input)-1])
-			m.Modal = &modal
+	case "form_save":
+		var command *ipc.Command
+		var notice string
+		if m.Modal.Kind == ModalSubscription {
+			command, notice = subscriptionFormIntent(m.Modal)
+		} else {
+			notice = "This configuration form is unavailable."
 		}
-		return m, nil, false
-	case "shift+tab":
-		firstEditable := subscriptionFieldID
-		if form.edit {
-			firstEditable = subscriptionFieldName
-		}
-		if form.step > firstEditable {
-			form.values[form.step] = strings.TrimSpace(modal.Input)
-			form.step--
-			modal.Input = form.values[form.step]
-			modal.subscription = form
-			m.Modal = &modal
-			m.Notice = ""
-		}
-		return m, nil, false
-	case "enter":
-		form.values[form.step] = strings.TrimSpace(modal.Input)
-		if form.step == subscriptionFieldID && !form.edit {
-			form.targetID = form.values[subscriptionFieldID]
-		}
-		if notice := validateSubscriptionField(form, form.step); notice != "" {
-			m.Notice = notice
-			modal.subscription = form
-			m.Modal = &modal
-			return m, nil, false
-		}
-		if form.step+1 < subscriptionFieldCount {
-			form.step++
-			modal.subscription = form
-			modal.Input = form.values[form.step]
-			m.Modal = &modal
-			m.Notice = ""
-			return m, nil, false
-		}
-		intent, notice := subscriptionIntent(form)
 		if notice != "" {
 			m.Notice = notice
-			modal.subscription = form
-			m.Modal = &modal
 			return m, nil, false
 		}
 		m.Modal = nil
 		m.Focus = FocusContent
 		m.Notice = ""
-		return m, intent, false
+		return m, command, false
+	default:
+		if utf8.ValidString(key) && utf8.RuneCountInString(key) == 1 && unicode.IsPrint([]rune(key)[0]) {
+			editor.Insert(key)
+		}
 	}
-	if utf8.ValidString(key) && utf8.RuneCountInString(key) == 1 && unicode.IsPrint([]rune(key)[0]) && len(modal.Input)+len(key) <= subscriptionFieldMaxBytes(form.step) {
-		modal.Input += key
-		m.Modal = &modal
-	}
+	m.Notice = ""
 	return m, nil, false
 }
 
-func subscriptionFieldMaxBytes(field int) int {
-	switch field {
-	case subscriptionFieldID:
-		return 64
-	case subscriptionFieldName:
-		return 128
-	case subscriptionFieldURL:
-		return 4096
-	case subscriptionFieldUserAgent:
-		return 256
-	default:
-		return 64
-	}
-}
-
-func validateSubscriptionField(form subscriptionForm, field int) string {
-	value := form.values[field]
-	switch field {
-	case subscriptionFieldID:
-		if !form.edit && !validSubscriptionID(value) {
-			return "ID must start with a letter or digit and contain only letters, digits, dot, underscore, or hyphen (max 64)."
-		}
-	case subscriptionFieldName:
-		if len(value) > 128 {
-			return "Display name must be at most 128 bytes."
-		}
-	case subscriptionFieldURL:
-		if !form.edit && value == "" {
-			return "A source URL is required for a new subscription."
-		}
-		if len(value) > 4096 {
-			return "Source URL must be at most 4096 bytes."
-		}
-	case subscriptionFieldUserAgent:
-		if value == "-" && form.edit {
-			break
-		}
-		if len(value) > 256 {
-			return "User-Agent must be printable ASCII at most 256 bytes."
-		}
-		for _, r := range value {
-			if r < 0x20 || r > 0x7e {
-				return "User-Agent must be printable ASCII at most 256 bytes."
-			}
-		}
-	case subscriptionFieldEnabled, subscriptionFieldAllowHTTP, subscriptionFieldAllowInvalidTLS:
-		if value != "" && !validYesNo(value) {
-			return "Enter yes or no, or leave blank to keep the current value."
-		}
-	case subscriptionFieldRefreshInterval:
-		if value != "" && !validSubscriptionNumber(value, 60, 86400*30) {
-			return "Refresh interval must be between 60 and 2592000 seconds."
-		}
-	case subscriptionFieldTimeout:
-		if value != "" && !validSubscriptionNumber(value, 1, 300) {
-			return "Timeout must be between 1 and 300 seconds."
-		}
-	case subscriptionFieldRoute:
-		if value != "" && value != "direct" && value != "system_proxy" && value != "mihomo_proxy" {
-			return "Route must be direct, system_proxy, or mihomo_proxy."
-		}
-	}
-	return ""
-}
-
-func subscriptionIntent(form subscriptionForm) (*ipc.Command, string) {
+func subscriptionFormIntent(modal *Modal) (*ipc.Command, string) {
 	patch := &ipc.SubscriptionEdit{}
-	if name := form.values[subscriptionFieldName]; name != "" {
-		if form.edit && name == "-" {
-			name = ""
-		}
-		patch.Name = &name
-	}
-	if source := form.values[subscriptionFieldURL]; source != "" {
-		patch.URL = &source
-	} else if !form.edit {
-		return nil, "A source URL is required for a new subscription."
-	}
-	if agent := form.values[subscriptionFieldUserAgent]; agent != "" {
-		if agent == "-" && form.edit {
-			agent = ""
-		}
-		patch.UserAgent = &agent
-	}
-	setBool := func(field int, target **bool, createDefault bool) {
-		value := strings.ToLower(form.values[field])
-		if value == "" {
-			if createDefault {
-				parsed := false
-				*target = &parsed
+	id := modal.TargetID
+	creating := id == ""
+	for _, change := range modal.Form.Changes() {
+		value := strings.TrimSpace(change.Value)
+		switch change.ID {
+		case "id":
+			id = value
+		case "name":
+			if value == "-" && !creating {
+				value = ""
 			}
-			return
+			if len(value) > 128 {
+				return nil, "Display name must be at most 128 bytes."
+			}
+			patch.Name = &value
+		case "url":
+			if value == "" || value == "-" {
+				return nil, "A source URL is required."
+			}
+			patch.URL = &value
+		case "user_agent":
+			if value == "-" && !creating {
+				value = ""
+			}
+			if len(value) > 256 {
+				return nil, "User-Agent must be printable ASCII at most 256 bytes."
+			}
+			for _, r := range value {
+				if r < 0x20 || r > 0x7e {
+					return nil, "User-Agent must be printable ASCII at most 256 bytes."
+				}
+			}
+			patch.UserAgent = &value
+		case "enabled":
+			v := value == "true"
+			patch.Enabled = &v
+		case "refresh_interval":
+			v, err := strconv.ParseUint(value, 10, 32)
+			if err != nil || v < 60 || v > 86400*30 {
+				return nil, "Refresh interval must be between 60 and 2592000 seconds."
+			}
+			n := uint32(v)
+			patch.RefreshIntervalSeconds = &n
+		case "timeout":
+			v, err := strconv.ParseUint(value, 10, 32)
+			if err != nil || v < 1 || v > 300 {
+				return nil, "Timeout must be between 1 and 300 seconds."
+			}
+			n := uint32(v)
+			patch.TimeoutSeconds = &n
+		case "route":
+			if value != "direct" && value != "system_proxy" && value != "mihomo_proxy" {
+				return nil, "Choose direct, system_proxy, or mihomo_proxy."
+			}
+			patch.Route = &value
+		case "allow_http":
+			v := value == "true"
+			patch.AllowHTTP = &v
+		case "allow_invalid_tls":
+			v := value == "true"
+			patch.AllowInvalidTLS = &v
 		}
-		parsed := value == "yes" || value == "y" || value == "true"
-		*target = &parsed
 	}
-	if form.values[subscriptionFieldEnabled] == "" && !form.edit {
-		enabled := true
-		patch.Enabled = &enabled
-	} else {
-		setBool(subscriptionFieldEnabled, &patch.Enabled, false)
-	}
-	for _, field := range []struct {
-		index  int
-		target **bool
-	}{{subscriptionFieldAllowHTTP, &patch.AllowHTTP}, {subscriptionFieldAllowInvalidTLS, &patch.AllowInvalidTLS}} {
-		setBool(field.index, field.target, !form.edit)
-	}
-	for _, field := range []struct {
-		index  int
-		target **uint32
-	}{{subscriptionFieldRefreshInterval, &patch.RefreshIntervalSeconds}, {subscriptionFieldTimeout, &patch.TimeoutSeconds}} {
-		if value := form.values[field.index]; value != "" {
-			parsed, _ := strconv.ParseUint(value, 10, 32)
-			result := uint32(parsed)
-			*field.target = &result
+	if creating {
+		if !validSubscriptionID(id) {
+			return nil, "A stable subscription ID is required."
 		}
-	}
-	if route := form.values[subscriptionFieldRoute]; route != "" {
-		patch.Route = &route
+		if patch.URL == nil {
+			return nil, "A source URL is required."
+		}
+		if patch.Enabled == nil {
+			enabled := true
+			patch.Enabled = &enabled
+		}
 	}
 	if patch.Name == nil && patch.URL == nil && patch.UserAgent == nil && patch.Enabled == nil && patch.RefreshIntervalSeconds == nil && patch.TimeoutSeconds == nil && patch.Route == nil && patch.AllowHTTP == nil && patch.AllowInvalidTLS == nil {
-		return nil, "Enter at least one value to update."
+		return nil, ""
 	}
-	return &ipc.Command{Kind: ipc.CommandPutSubscription, SubscriptionID: form.targetID, Subscription: patch}, ""
+	return &ipc.Command{Kind: ipc.CommandPutSubscription, SubscriptionID: id, Subscription: patch}, ""
 }
 
 func validSubscriptionNumber(value string, min, max uint64) bool {
@@ -1325,74 +1302,6 @@ func validSubscriptionID(value string) bool {
 
 func asciiAlphaNumeric(c byte) bool {
 	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
-}
-
-func subscriptionModalPrompt(modal *Modal) string {
-	form := modal.subscription
-	prefix := fmt.Sprintf("New subscription %d/%d", form.step+1, subscriptionFieldCount)
-	if form.edit {
-		prefix = fmt.Sprintf("Edit %s %d/%d", form.targetID, form.step, subscriptionFieldCount-1)
-	}
-	field := ""
-	switch form.step {
-	case subscriptionFieldID:
-		field = "ID (required)"
-	case subscriptionFieldName:
-		if form.edit {
-			field = "Name (blank keeps; - clears)"
-		} else {
-			field = "Name (optional; blank uses ID)"
-		}
-	case subscriptionFieldURL:
-		if form.edit {
-			field = "Source URL (blank keeps private URL)"
-		} else {
-			field = "Source URL (required)"
-		}
-	case subscriptionFieldUserAgent:
-		if form.edit {
-			field = "User-Agent (blank keeps; - resets to clash-pulse)"
-		} else {
-			field = "User-Agent (blank uses clash-pulse)"
-		}
-	case subscriptionFieldEnabled:
-		if form.edit {
-			field = "Enabled yes/no (blank keeps)"
-		} else {
-			field = "Enabled yes/no (blank enables)"
-		}
-	case subscriptionFieldRefreshInterval:
-		if form.edit {
-			field = "Refresh seconds 60-2592000 (blank keeps)"
-		} else {
-			field = "Refresh seconds 60-2592000 (blank 43200)"
-		}
-	case subscriptionFieldTimeout:
-		if form.edit {
-			field = "Timeout seconds 1-300 (blank keeps)"
-		} else {
-			field = "Timeout seconds 1-300 (blank 30)"
-		}
-	case subscriptionFieldRoute:
-		if form.edit {
-			field = "Route direct/system_proxy/mihomo_proxy (blank keeps)"
-		} else {
-			field = "Route direct/system_proxy/mihomo_proxy (blank direct)"
-		}
-	case subscriptionFieldAllowHTTP:
-		if form.edit {
-			field = "Allow HTTP yes/no (blank keeps; yes opts in)"
-		} else {
-			field = "Allow HTTP yes/no (blank no; yes opts in)"
-		}
-	case subscriptionFieldAllowInvalidTLS:
-		if form.edit {
-			field = "Allow invalid TLS yes/no (blank keeps; yes opts in)"
-		} else {
-			field = "Allow invalid TLS yes/no (blank no; yes opts in)"
-		}
-	}
-	return prefix + " - " + field
 }
 
 func (m Model) openModal(kind ModalKind) Model {

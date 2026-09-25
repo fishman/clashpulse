@@ -8,7 +8,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/fishman/notmutt/lib/localipc v0.1.0
-	github.com/fishman/notmutt/lib/tui v0.1.0
+	github.com/fishman/notmutt/lib/tui v0.1.1
 	github.com/fishman/notmutt/lib/xdg v0.1.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gdamore/tcell/v3 v3.4.2

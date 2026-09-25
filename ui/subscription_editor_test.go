@@ -131,6 +131,32 @@ func TestSubscriptionEditorRejectsValuesIPCWouldReject(t *testing.T) {
 	}
 }
 
+func TestSubscriptionEditorShowsCurrentSafePolicyWithoutRewritingIt(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	w := a.NewWindow("ClashPulse")
+	page := newSubscriptionPage(func(ipc.Command) {}, w)
+	page.update([]core.SubscriptionSnapshot{{
+		ID: "feed", Name: "Feed", Route: "mihomo_proxy", Enabled: true,
+		AllowHTTP: true, AllowInvalidTLS: true, RefreshIntervalSeconds: 3600, TimeoutSeconds: 45,
+	}})
+	page.editSubscription("feed")
+	e := page.editor
+	if e.route.Selected != "Mihomo proxy" || e.http.Selected != "Allow HTTP (insecure)" ||
+		e.tls.Selected != "Allow invalid TLS certificates (insecure)" || e.refresh.Text != "3600" || e.timeout.Text != "45" ||
+		e.source.Text != "" || e.agent.Text != "" {
+		t.Fatal("editor did not show safe current policy or exposed private input")
+	}
+	e.name.SetText("Renamed")
+	command, changed, err := e.command()
+	if err != nil || !changed || command.Subscription == nil || command.Subscription.Route != nil ||
+		command.Subscription.AllowHTTP != nil || command.Subscription.AllowInvalidTLS != nil ||
+		command.Subscription.RefreshIntervalSeconds != nil || command.Subscription.TimeoutSeconds != nil ||
+		command.Subscription.URL != nil || command.Subscription.UserAgent != nil {
+		t.Fatalf("unchanged safe policy was rewritten: changed=%t err=%v", changed, err)
+	}
+}
+
 func TestSubscriptionDeleteRequiresConfirmation(t *testing.T) {
 	app := test.NewApp()
 	defer app.Quit()
