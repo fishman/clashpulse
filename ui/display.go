@@ -61,24 +61,13 @@ func filterStatus(f core.FilterSnapshot) string {
 	return "Disabled"
 }
 
-func proxyStatus(snapshot core.Snapshot, groupID, proxyID string, selected bool) string {
-	status := ""
-	if selected {
-		status = "Active"
-	}
+func proxyLatency(snapshot core.Snapshot, groupID, proxyID string) string {
 	for _, proxy := range snapshot.Proxies {
-		if proxy.GroupID != groupID || proxy.ID != proxyID {
-			continue
+		if proxy.GroupID == groupID && proxy.ID == proxyID && proxy.LatencyMillis > 0 {
+			return fmt.Sprintf("%d ms", proxy.LatencyMillis)
 		}
-		if proxy.LatencyMillis > 0 {
-			if status != "" {
-				status += " | "
-			}
-			status += fmt.Sprintf("%d ms", proxy.LatencyMillis)
-		}
-		break
 	}
-	return status
+	return ""
 }
 
 func monitorThresholdLabel(monitor core.MonitorSnapshot) string {
@@ -116,7 +105,7 @@ func groupLabel(group core.GroupSnapshot) string {
 	if group.Type == "" {
 		return label
 	}
-	return label + " | " + group.Type
+	return label + " (" + group.Type + ")"
 }
 
 func lastSwitchSummary(snapshot core.Snapshot) string {

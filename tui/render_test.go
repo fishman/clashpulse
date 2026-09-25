@@ -68,14 +68,42 @@ func TestRenderKeepsActiveTabVisible(t *testing.T) {
 	}
 }
 
-func TestRenderAlignsSettingsDetails(t *testing.T) {
+func TestSettingsTableAlignedWithoutPipes(t *testing.T) {
 	model := NewModel()
 	model.Tab = TabSettings
-	rows := mockRender(t, model, 80, 10)
-	a, b := strings.Index(rows[2], "desired"), strings.Index(rows[3], "requested")
-	if a < 0 || b < 0 || a != b || !strings.Contains(rows[1], "Value") {
-		t.Fatalf("settings detail columns drift: header=%q first=%q second=%q", rows[1], rows[2], rows[3])
+	model = model.Apply(ipc.Event{Snapshot: core.Snapshot{
+		Binary:      core.BinarySnapshot{Desired: "system", ObservedVersion: "v1"},
+		SystemProxy: core.SystemProxySnapshot{Enabled: true, Active: true},
+	}})
+	wide := mockRender(t, model, 100, 12)
+	heading := wide[1]
+	a, b, c := strings.Index(heading, "Setting"), strings.Index(heading, "Value"), strings.Index(heading, "Action")
+	if a < 0 || b <= a || c <= b || !strings.Contains(wide[2], "system") || !strings.Contains(wide[3], "requested") || !strings.Contains(wide[3], "active") || strings.Contains(strings.Join(wide[1:9], ""), " | ") {
+		t.Fatalf("unaligned Settings: %q", wide[1:9])
 	}
+	narrow := mockRender(t, model, 30, 12)
+	if !strings.Contains(narrow[1], "Setting") || !strings.Contains(narrow[1], "Value") || strings.Contains(narrow[1], "Action") {
+		t.Fatalf("narrow Settings lost its value column: %q", narrow[1])
+	}
+}
+
+func TestSettingsActionUsesKeymap(t *testing.T) {
+	keys, err := NewKeymap([]byte("[[binding]]\ntab = \"settings\"\nkey = \"v\"\naction = \"edit_binary\"\nhelp = \"choose Mihomo\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	model := NewModel(keys)
+	model.Tab = TabSettings
+	model = model.Apply(ipc.Event{Snapshot: core.Snapshot{Binary: core.BinarySnapshot{Desired: "system"}}})
+	for _, row := range model.Rows() {
+		if row.ID == "setting:binary" {
+			if len(row.Cells) < 3 || row.Cells[2] != "v" {
+				t.Fatalf("binary action did not follow keymap: %#v", row.Cells)
+			}
+			return
+		}
+	}
+	t.Fatal("binary setting missing")
 }
 
 func TestRenderAlignsPendingStatusRight(t *testing.T) {
@@ -119,6 +147,24 @@ func TestRenderStatusIdentifiesConnectionAndActiveProfile(t *testing.T) {
 	}
 	if row := mockRender(t, NewModel(), 80, 12)[11]; !strings.Contains(row, "profile not reported") {
 		t.Fatalf("unknown profile was invented: %q", row)
+	}
+}
+
+func TestRenderLogKeepsBottomStatus(t *testing.T) {
+	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Diagnostics: []core.DiagnosticSnapshot{
+		{At: 100, Severity: "error", Kind: "subscription", SourceID: "feed", Message: "HTTP 406"},
+		{At: 101, Severity: "info", Kind: "subscription", SourceID: "feed", Message: "recovered"},
+	}}})
+	model, _, _ = model.HandleKey("~")
+	for _, size := range []struct{ width, height int }{{80, 12}, {32, 9}} {
+		rows := mockRender(t, model, size.width, size.height)
+		text := strings.Join(rows[:size.height-1], "\n")
+		if !strings.Contains(text, "HTTP 406") || !strings.Contains(text, "recovered") || !strings.Contains(text, "feed") {
+			t.Fatalf("%d-column activity lost event details: %q", size.width, text)
+		}
+		if !strings.Contains(rows[size.height-1], "IPC connected") {
+			t.Fatalf("%d-column activity covered connection status: %q", size.width, rows[size.height-1])
+		}
 	}
 }
 

@@ -47,8 +47,9 @@ var proxyColumns = [...]tableColumn{
 }
 
 var settingsColumns = [...]tableColumn{
-	{"Setting", table.Col{Floor: 20, Cap: 28}, 10},
-	{"Value", table.Col{Floor: 16, Cap: 64}, 7},
+	{"Setting", table.Col{Floor: 12, Cap: 28}, 10},
+	{"Value", table.Col{Floor: 12, Cap: 64}, 7},
+	{"Action", table.Col{Floor: 8, Cap: 16}, 3},
 }
 
 var overviewColumns = [...]tableColumn{

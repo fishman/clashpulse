@@ -95,15 +95,18 @@ type desktopUI struct {
 	viewStack  *fyne.Container
 	views      map[string]fyne.CanvasObject
 
-	snapshotSummary *widget.Label
-	binarySummary   *widget.Label
-	switchSummary   *widget.Label
-	errorSummary    *widget.Label
-	proxyPage       *proxyPage
-	subPage         *subscriptionPage
-	resourcePage    *resourcePage
-	filterPage      *filterPage
-	settingsPage    *settingsPage
+	overviewCounts      *widget.Form
+	overviewCountValues []*widget.Label
+	binarySummary       *widget.Form
+	binaryValues        [4]*widget.Label
+	switchSummary       *widget.Label
+	errorSummary        *widget.Label
+	proxyPage           *proxyPage
+	subPage             *subscriptionPage
+	resourcePage        *resourcePage
+	filterPage          *filterPage
+	settingsPage        *settingsPage
+	activity            *activityView
 }
 
 func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopUI {
@@ -115,9 +118,15 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 		views:      make(map[string]fyne.CanvasObject),
 		connection: widget.NewLabel("Connecting to local service..."),
 	}
-	d.snapshotSummary = widget.NewLabel("Waiting for service snapshot")
-	d.binarySummary = widget.NewLabel("Binary status unavailable")
-	d.binarySummary.Wrapping = fyne.TextWrapWord
+	d.overviewCountValues = make([]*widget.Label, 0, 6)
+	countItems := make([]*widget.FormItem, 0, 6)
+	for _, label := range []string{"Proxy groups", "Subscriptions", "Data resources", "Filter lists", "Jobs", "Reported issues"} {
+		value := widget.NewLabel("0")
+		d.overviewCountValues = append(d.overviewCountValues, value)
+		countItems = append(countItems, widget.NewFormItem(label, value))
+	}
+	d.overviewCounts = widget.NewForm(countItems...)
+	d.binarySummary, d.binaryValues = newBinaryForm()
 	d.switchSummary = widget.NewLabel("No automatic switches recorded")
 	d.switchSummary.Wrapping = fyne.TextWrapWord
 	d.errorSummary = widget.NewLabel("No service errors")
@@ -127,6 +136,7 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 	d.resourcePage = newResourcePage(d.enqueue, w)
 	d.filterPage = newFilterPage(d.enqueue, w)
 	d.settingsPage = newSettingsPage(d.enqueue, w)
+	d.activity = newActivityView()
 
 	d.views["Overview"] = d.overviewView()
 	d.views["Proxies"] = d.proxyPage.view
@@ -152,8 +162,9 @@ func (d *desktopUI) overviewView() fyne.CanvasObject {
 		widget.NewButton("Stop service", func() { d.enqueue(ipc.Command{Kind: ipc.CommandStop}) }),
 		widget.NewButton("Restart service", func() { d.enqueue(ipc.Command{Kind: ipc.CommandRestart}) }),
 		widget.NewButton("Reload configuration", func() { d.enqueue(ipc.Command{Kind: ipc.CommandReloadConfiguration}) }),
+		widget.NewButton("View activity", d.openActivity),
 	)
-	return container.NewVBox(title, d.snapshotSummary, d.binarySummary, d.switchSummary, d.errorSummary, controls)
+	return container.NewVBox(title, d.overviewCounts, widget.NewLabelWithStyle("Mihomo binary", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), d.binarySummary, d.switchSummary, d.errorSummary, controls)
 }
 
 func (d *desktopUI) showView(name string) {
@@ -250,7 +261,7 @@ func (d *desktopUI) runIPCSession() {
 				d.postStatus("Action could not be queued")
 				continue
 			}
-			d.postStatus("Connected | action queued")
+			d.postStatus("Action queued")
 		}
 	}
 }
@@ -269,13 +280,19 @@ func (d *desktopUI) postSnapshot(snapshot core.Snapshot) {
 		if d.connection.Text != "Connected" {
 			d.connection.SetText("Connected")
 		}
-		summary := snapshotSummary(immutable)
-		if first || summary != d.snapshotSummary.Text {
-			d.snapshotSummary.SetText(summary)
+		counts := []string{count(immutable.Groups), count(immutable.Subscriptions), count(immutable.Resources), count(immutable.Filters), count(immutable.Jobs), count(immutable.Errors)}
+		for i, value := range counts {
+			if d.overviewCountValues[i].Text != value {
+				d.overviewCountValues[i].SetText(value)
+			}
 		}
 		binaryChanged := first || !reflect.DeepEqual(previous.Binary, immutable.Binary)
 		if binaryChanged {
-			d.binarySummary.SetText(binarySummary(immutable.Binary))
+			for i, value := range binaryFieldValues(immutable.Binary) {
+				if d.binaryValues[i].Text != value {
+					d.binaryValues[i].SetText(value)
+				}
+			}
 		}
 		if first || !reflect.DeepEqual(previous.Switches, immutable.Switches) {
 			d.switchSummary.SetText(lastSwitchSummary(immutable))
@@ -297,6 +314,9 @@ func (d *desktopUI) postSnapshot(snapshot core.Snapshot) {
 		}
 		if binaryChanged || previous.Monitor != immutable.Monitor || previous.SystemProxy != immutable.SystemProxy || !reflect.DeepEqual(previous.DNS, immutable.DNS) {
 			d.settingsPage.update(immutable.Binary, immutable.Monitor, immutable.SystemProxy, immutable.DNS)
+		}
+		if !reflect.DeepEqual(previous.Diagnostics, immutable.Diagnostics) {
+			d.activity.update(immutable.Diagnostics)
 		}
 		d.current, d.hasSnapshot = immutable, true
 		d.updateTray(immutable)
@@ -323,12 +343,6 @@ func (d *desktopUI) postStatus(status string) {
 	})
 }
 
-func snapshotSummary(snapshot core.Snapshot) string {
-	return "Proxy groups: " + count(snapshot.Groups) + " | Subscriptions: " + count(snapshot.Subscriptions) +
-		" | Data resources: " + count(snapshot.Resources) + " | Filter lists: " + count(snapshot.Filters) +
-		" | Jobs: " + count(snapshot.Jobs) + " | Reported issues: " + count(snapshot.Errors)
-}
-
 func serviceErrors(issues []core.ErrorSnapshot) string {
 	if len(issues) == 0 {
 		return "No service errors"
@@ -344,7 +358,7 @@ func serviceErrors(issues []core.ErrorSnapshot) string {
 	return strings.Join(lines, "\n")
 }
 
-func binarySummary(binary core.BinarySnapshot) string {
+func binaryFieldValues(binary core.BinarySnapshot) [4]string {
 	desired := binary.Desired
 	if desired == "" {
 		desired = "unspecified"
@@ -357,7 +371,20 @@ func binarySummary(binary core.BinarySnapshot) string {
 	if len(binary.Capabilities) > 0 {
 		capabilities = strings.Join(binary.Capabilities, ", ")
 	}
-	return "Mihomo binary | desired " + desired + " | observed " + observed + " | capabilities " + capabilities + " | " + compatibilityLabel(binary.LastCompatibilityFailure)
+	return [4]string{desired, observed, capabilities, compatibilityLabel(binary.LastCompatibilityFailure)}
+}
+
+func newBinaryForm() (*widget.Form, [4]*widget.Label) {
+	var values [4]*widget.Label
+	initial := binaryFieldValues(core.BinarySnapshot{})
+	items := make([]*widget.FormItem, 0, len(values))
+	for i, label := range []string{"Desired", "Observed", "Capabilities", "Compatibility"} {
+		value := widget.NewLabel(initial[i])
+		value.Wrapping = fyne.TextWrapWord
+		values[i] = value
+		items = append(items, widget.NewFormItem(label, value))
+	}
+	return widget.NewForm(items...), values
 }
 
 func count[T any](items []T) string {

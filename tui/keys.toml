@@ -359,3 +359,62 @@ tab = "form"
 key = "esc"
 action = "form_cancel"
 help = "cancel form"
+
+[[binding]]
+key = "~"
+action = "toggle_log"
+help = "toggle session log"
+
+[[binding]]
+tab = "log"
+key = "up"
+action = "log_older"
+help = "older diagnostic"
+
+[[binding]]
+tab = "log"
+key = "k"
+action = "log_older"
+help = "older diagnostic"
+
+[[binding]]
+tab = "log"
+key = "down"
+action = "log_newer"
+help = "newer diagnostic"
+
+[[binding]]
+tab = "log"
+key = "j"
+action = "log_newer"
+help = "newer diagnostic"
+
+[[binding]]
+tab = "log"
+key = "pageup"
+action = "log_page_older"
+help = "older page"
+
+[[binding]]
+tab = "log"
+key = "pagedown"
+action = "log_page_newer"
+help = "newer page"
+
+[[binding]]
+tab = "log"
+key = "home"
+action = "log_oldest"
+help = "oldest diagnostic"
+
+[[binding]]
+tab = "log"
+key = "end"
+action = "log_newest"
+help = "newest diagnostic"
+
+[[binding]]
+tab = "log"
+key = "q"
+action = "log_close"
+help = "close log"

@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"fyne.io/fyne/v2/test"
+
 	"github.com/fishman/clashpulse/core"
 )
 
@@ -47,17 +49,19 @@ func TestStatusLabelsDoNotExposeFailureDetails(t *testing.T) {
 	}
 }
 
-func TestProxyStatusShowsOnlySelectionAndLatency(t *testing.T) {
-	snapshot := core.Snapshot{Proxies: []core.ProxySnapshot{{GroupID: "g1", ID: "p1", LatencyMillis: 42, Outcome: "private detail"}}}
-	got := proxyStatus(snapshot, "g1", "p1", true)
-	if got != "Active | 42 ms" {
-		t.Fatalf("proxy status = %q", got)
-	}
-	if strings.Contains(got, "private detail") {
-		t.Fatalf("proxy status leaked outcome: %q", got)
-	}
-	if got := proxyStatus(snapshot, "g2", "p1", false); got != "" {
-		t.Errorf("unmatched proxy status = %q", got)
+func TestProxyRowShowsOnlySelectionAndLatency(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	page := newProxyPage(nil)
+	page.update(core.Snapshot{
+		Groups:  []core.GroupSnapshot{{ID: "g1", Type: "Selector", Selected: "p1", Proxies: []string{"p1"}}},
+		Proxies: []core.ProxySnapshot{{GroupID: "g1", ID: "p1", Label: "node-a", LatencyMillis: 42, Outcome: "private detail"}},
+	})
+	row := page.list.CreateItem()
+	page.list.UpdateItem(0, row)
+	labels := rowLabels(row)
+	if strings.Join(labels, ",") != "node-a,Active,42 ms" || strings.Contains(strings.Join(labels, " "), "private detail") {
+		t.Fatalf("proxy row exposed outcome or lost separate cells: %v", labels)
 	}
 }
 

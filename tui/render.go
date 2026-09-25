@@ -3,6 +3,7 @@ package tui
 import (
 	"slices"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/fishman/notmutt/lib/tui/chrome"
@@ -136,6 +137,9 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 			}
 		}
 	}
+	if model.LogOpen {
+		drawLog(cache.current, width, height, model)
+	}
 	if height >= 6 {
 		profile := "profile not reported"
 		for _, subscription := range model.snapshot.Snapshot.Subscriptions {
@@ -151,6 +155,15 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 			{Runs: []chrome.Run{{Text: "IPC connected", Style: "connection"}}, Priority: 10},
 			{Runs: []chrome.Run{{Text: profile, Style: "profile"}}, Priority: 9},
 			{Runs: []chrome.Run{{Text: model.Progress(), Style: "progress"}}, Priority: 2},
+		}
+		if width >= 64 {
+			for i := len(model.snapshot.Snapshot.Diagnostics) - 1; i >= 0; i-- {
+				diagnostic := model.snapshot.Snapshot.Diagnostics[i]
+				if diagnostic.Severity == "error" && diagnostic.Message != "" {
+					left = append(left, chrome.Segment{Runs: []chrome.Run{{Text: "latest error: " + diagnostic.Message, Style: "error"}}, Priority: 1})
+					break
+				}
+			}
 		}
 		var pending []chrome.Segment
 		if model.Pending > 0 {
@@ -190,6 +203,44 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 	cache.previous, cache.current = cache.current, cache.previous
 	if changed {
 		screen.Show()
+	}
+}
+
+func drawLog(lines []renderLine, width, height int, model Model) {
+	diagnostics := model.snapshot.Snapshot.Diagnostics
+	setLine(lines, 1, "Session log ("+itoa(len(diagnostics))+")", roleAccent)
+	rows := height - 5
+	if rows <= 0 {
+		return
+	}
+	perEntry := 1
+	if width < 64 {
+		perEntry = 2
+	}
+	visible := rows / perEntry
+	start := len(diagnostics) - visible - model.LogOffset
+	if start < 0 {
+		start = 0
+	}
+	end := min(start+visible, len(diagnostics))
+	if start == end {
+		setLine(lines, 2, "No session diagnostics.", roleMuted)
+		return
+	}
+	y := 2
+	for _, diagnostic := range diagnostics[start:end] {
+		role := roleBase
+		if diagnostic.Severity == "error" {
+			role = roleError
+		}
+		if perEntry == 1 {
+			setLine(lines, y, timeLabel(diagnostic.At)+" "+diagnostic.Severity+" "+diagnostic.Kind+" "+diagnostic.SourceID+" "+diagnostic.Message, role)
+			y++
+			continue
+		}
+		setLine(lines, y, time.Unix(diagnostic.At, 0).UTC().Format("15:04:05Z")+" "+diagnostic.Severity, role)
+		setLine(lines, y+1, diagnostic.Kind+" "+diagnostic.SourceID+" "+diagnostic.Message, role)
+		y += 2
 	}
 }
 

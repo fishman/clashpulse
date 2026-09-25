@@ -27,11 +27,11 @@ func TestSettingsCanSelectBundledBinaryAndShowCompatibilityIssue(t *testing.T) {
 	}
 
 	page.update(core.BinarySnapshot{Desired: "bundled", LastCompatibilityFailure: "bundled Mihomo is not installed"}, core.MonitorSnapshot{}, core.SystemProxySnapshot{}, core.DNSSnapshot{})
-	if !strings.Contains(page.binary.Text, "bundled Mihomo is not installed") {
-		t.Fatalf("bundled compatibility issue not surfaced: %q", page.binary.Text)
+	if !strings.Contains(page.binaryValues[3].Text, "bundled Mihomo is not installed") {
+		t.Fatalf("bundled compatibility issue not surfaced: %q", page.binaryValues[3].Text)
 	}
-	if page.binary.Wrapping != fyne.TextWrapWord {
-		t.Fatal("binary capability and compatibility summary clips instead of wrapping")
+	if page.binaryValues[3].Wrapping != fyne.TextWrapWord {
+		t.Fatal("binary capability and compatibility fields clip instead of wrapping")
 	}
 }
 

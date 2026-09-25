@@ -37,10 +37,17 @@ type proxyPage struct {
 	list        *widget.List
 	empty       *widget.Label
 	send        sendIntent
+	items       map[*fyne.Container]*proxyItem
+}
+
+type proxyItem struct {
+	name    *widget.Label
+	state   *widget.Label
+	latency *widget.Label
 }
 
 func newProxyPage(send sendIntent) *proxyPage {
-	p := &proxyPage{send: send, groupOptions: make(map[string]string)}
+	p := &proxyPage{send: send, groupOptions: make(map[string]string), items: make(map[*fyne.Container]*proxyItem)}
 	p.groupSelect = widget.NewSelect(nil, func(label string) {
 		if p.refreshing {
 			return
@@ -64,11 +71,18 @@ func newProxyPage(send sendIntent) *proxyPage {
 	p.groupMode = widget.NewLabel("")
 	p.list = widget.NewList(
 		func() int { return len(p.choices) },
-		func() fyne.CanvasObject { return widget.NewLabel("") },
+		func() fyne.CanvasObject {
+			item := &proxyItem{name: widget.NewLabel(""), state: widget.NewLabel(""), latency: widget.NewLabel("")}
+			row := container.NewGridWithColumns(3, item.name, item.state, item.latency)
+			p.items[row] = item
+			return row
+		},
 		func(id widget.ListItemID, object fyne.CanvasObject) {
-			label := object.(*widget.Label)
+			item := p.items[object.(*fyne.Container)]
 			if id < 0 || id >= len(p.choices) {
-				label.SetText("")
+				item.name.SetText("")
+				item.state.SetText("")
+				item.latency.SetText("")
 				return
 			}
 			choice := p.choices[id]
@@ -79,7 +93,6 @@ func newProxyPage(send sendIntent) *proxyPage {
 					break
 				}
 			}
-			status := proxyStatus(p.snapshot, p.selectedGroupID, choice, selected)
 			name := choice
 			for _, proxy := range p.snapshot.Proxies {
 				if proxy.GroupID == p.selectedGroupID && proxy.ID == choice && proxy.Label != "" {
@@ -87,7 +100,13 @@ func newProxyPage(send sendIntent) *proxyPage {
 					break
 				}
 			}
-			label.SetText(name + "  " + status)
+			item.name.SetText(name)
+			if selected {
+				item.state.SetText("Active")
+			} else {
+				item.state.SetText("")
+			}
+			item.latency.SetText(proxyLatency(p.snapshot, p.selectedGroupID, choice))
 		},
 	)
 	p.list.OnSelected = func(id widget.ListItemID) {
@@ -200,7 +219,7 @@ func newSubscriptionPage(send sendIntent, window fyne.Window) *subscriptionPage 
 	p.list = widget.NewList(
 		func() int { return len(p.rows) },
 		func() fyne.CanvasObject {
-			item := &subscriptionItem{name: widget.NewLabel(""), detail: widget.NewLabel("")}
+			item := &subscriptionItem{name: widget.NewLabel(""), source: widget.NewLabel(""), status: widget.NewLabel("")}
 			item.refresh = widget.NewButton("Refresh", func() {
 				if item.id != "" {
 					p.send(ipc.Command{Kind: ipc.CommandRefreshSubscription, SubscriptionID: item.id})
@@ -231,7 +250,7 @@ func newSubscriptionPage(send sendIntent, window fyne.Window) *subscriptionPage 
 					}
 				}
 			})
-			row := container.NewVBox(item.name, item.detail, container.NewHBox(item.refresh, item.activate, item.edit, item.delete, item.details), widget.NewSeparator())
+			row := container.NewVBox(container.NewGridWithColumns(3, item.name, item.source, item.status), container.NewHBox(item.refresh, item.activate, item.edit, item.delete, item.details), widget.NewSeparator())
 			p.items[row] = item
 			return row
 		},
@@ -240,13 +259,15 @@ func newSubscriptionPage(send sendIntent, window fyne.Window) *subscriptionPage 
 			if id < 0 || id >= len(p.rows) {
 				item.id = ""
 				item.name.SetText("")
-				item.detail.SetText("")
+				item.source.SetText("")
+				item.status.SetText("")
 				return
 			}
 			subscription := p.rows[id]
 			item.id = subscription.ID
 			item.name.SetText(subscription.Name)
-			item.detail.SetText(sourceHostLabel(subscription.SourceHost) + " | " + subscriptionStatus(subscription))
+			item.source.SetText(sourceHostLabel(subscription.SourceHost))
+			item.status.SetText(subscriptionStatus(subscription))
 			if subscription.Active {
 				item.delete.Disable()
 			} else {
@@ -564,7 +585,8 @@ func subscriptionIDChar(char byte, first bool) bool {
 type subscriptionItem struct {
 	id       string
 	name     *widget.Label
-	detail   *widget.Label
+	source   *widget.Label
+	status   *widget.Label
 	refresh  *widget.Button
 	activate *widget.Button
 	edit     *widget.Button
@@ -590,7 +612,7 @@ func newResourcePage(send sendIntent, window fyne.Window) *resourcePage {
 	p.list = widget.NewList(
 		func() int { return len(p.rows) },
 		func() fyne.CanvasObject {
-			item := &resourceItem{name: widget.NewLabel(""), detail: widget.NewLabel("")}
+			item := &resourceItem{name: widget.NewLabel(""), source: widget.NewLabel(""), status: widget.NewLabel("")}
 			item.refresh = widget.NewButton("Refresh", func() {
 				if item.id != "" {
 					p.send(ipc.Command{Kind: ipc.CommandRefreshResource, ResourceID: item.id})
@@ -605,7 +627,7 @@ func newResourcePage(send sendIntent, window fyne.Window) *resourcePage {
 				}
 			})
 			item.edit = widget.NewButton("Edit", func() { p.editResource(item.id) })
-			row := container.NewVBox(container.NewBorder(nil, nil, nil, container.NewHBox(item.refresh, item.edit, item.details), item.name), item.detail, widget.NewSeparator())
+			row := container.NewVBox(container.NewGridWithColumns(3, item.name, item.source, item.status), container.NewHBox(item.refresh, item.edit, item.details), widget.NewSeparator())
 			p.items[row] = item
 			return row
 		},
@@ -614,7 +636,8 @@ func newResourcePage(send sendIntent, window fyne.Window) *resourcePage {
 			if id < 0 || id >= len(p.rows) {
 				item.id = ""
 				item.name.SetText("")
-				item.detail.SetText("")
+				item.source.SetText("")
+				item.status.SetText("")
 				item.refresh.Disable()
 				item.edit.Disable()
 				return
@@ -622,7 +645,8 @@ func newResourcePage(send sendIntent, window fyne.Window) *resourcePage {
 			resource := p.rows[id]
 			item.id = resource.ID
 			item.name.SetText(resource.ID)
-			item.detail.SetText(sourceHostLabel(resource.SourceHost) + " | " + resourceStatus(resource))
+			item.source.SetText(sourceHostLabel(resource.SourceHost))
+			item.status.SetText(resourceStatus(resource))
 			if resource.Enabled {
 				item.refresh.Enable()
 			} else {
@@ -663,7 +687,8 @@ func (p *resourcePage) editResource(id string) {
 type resourceItem struct {
 	id      string
 	name    *widget.Label
-	detail  *widget.Label
+	source  *widget.Label
+	status  *widget.Label
 	refresh *widget.Button
 	edit    *widget.Button
 	details *widget.Button
@@ -687,7 +712,7 @@ func newFilterPage(send sendIntent, window fyne.Window) *filterPage {
 	p.list = widget.NewList(
 		func() int { return len(p.rows) },
 		func() fyne.CanvasObject {
-			item := &filterItem{name: widget.NewLabel(""), detail: widget.NewLabel("")}
+			item := &filterItem{name: widget.NewLabel(""), format: widget.NewLabel(""), status: widget.NewLabel("")}
 			item.refresh = widget.NewButton("Refresh", func() {
 				if item.id != "" {
 					p.send(ipc.Command{Kind: ipc.CommandRefreshFilter, FilterID: item.id})
@@ -702,7 +727,7 @@ func newFilterPage(send sendIntent, window fyne.Window) *filterPage {
 				}
 			})
 			item.edit = widget.NewButton("Edit", func() { p.editFilter(item.id) })
-			row := container.NewVBox(container.NewBorder(nil, nil, nil, container.NewHBox(item.refresh, item.edit, item.details), item.name), item.detail, widget.NewSeparator())
+			row := container.NewVBox(container.NewGridWithColumns(3, item.name, item.format, item.status), container.NewHBox(item.refresh, item.edit, item.details), widget.NewSeparator())
 			p.items[row] = item
 			return row
 		},
@@ -711,7 +736,8 @@ func newFilterPage(send sendIntent, window fyne.Window) *filterPage {
 			if id < 0 || id >= len(p.rows) {
 				item.id = ""
 				item.name.SetText("")
-				item.detail.SetText("")
+				item.format.SetText("")
+				item.status.SetText("")
 				item.refresh.Disable()
 				item.edit.Disable()
 				return
@@ -719,7 +745,8 @@ func newFilterPage(send sendIntent, window fyne.Window) *filterPage {
 			filter := p.rows[id]
 			item.id = filter.ID
 			item.name.SetText(filter.ID)
-			item.detail.SetText("Format " + filter.Format + " | " + filterStatus(filter))
+			item.format.SetText(filter.Format)
+			item.status.SetText(filterStatus(filter))
 			if filter.Enabled {
 				item.refresh.Enable()
 			} else {
@@ -759,7 +786,8 @@ func (p *filterPage) editFilter(id string) {
 type filterItem struct {
 	id      string
 	name    *widget.Label
-	detail  *widget.Label
+	format  *widget.Label
+	status  *widget.Label
 	refresh *widget.Button
 	edit    *widget.Button
 	details *widget.Button
@@ -1082,7 +1110,8 @@ type settingsPage struct {
 	sectionSelect       *widget.Select
 	sectionContent      *fyne.Container
 	sectionViews        map[string]fyne.CanvasObject
-	binary              *widget.Label
+	binary              *widget.Form
+	binaryValues        [4]*widget.Label
 	binaryPath          string
 	threshold           *widget.Label
 	monitor             *widget.Check
@@ -1102,8 +1131,7 @@ type settingsPage struct {
 func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 	p := &settingsPage{send: send, window: window, intervals: make(map[string]uint32)}
 	p.dns = newDNSSettings(send, window)
-	p.binary = widget.NewLabel("Binary status unavailable")
-	p.binary.Wrapping = fyne.TextWrapWord
+	p.binary, p.binaryValues = newBinaryForm()
 	p.threshold = widget.NewLabel("Not configured")
 	p.systemProxy = widget.NewCheck("Enable system proxy", func(enabled bool) {
 		if p.refreshing {
@@ -1230,9 +1258,10 @@ func (p *settingsPage) update(binary core.BinarySnapshot, monitor core.MonitorSn
 	p.settingsInitialized = true
 	p.monitorState, p.systemProxyState = monitor, systemProxy
 	p.binaryPath = binary.Desired
-	binaryText := binarySummary(binary)
-	if p.binary.Text != binaryText {
-		p.binary.SetText(binaryText)
+	for i, value := range binaryFieldValues(binary) {
+		if p.binaryValues[i].Text != value {
+			p.binaryValues[i].SetText(value)
+		}
 	}
 	if monitorChanged {
 		p.threshold.SetText(monitorThresholdLabel(monitor))

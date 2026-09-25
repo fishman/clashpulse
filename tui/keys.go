@@ -52,7 +52,7 @@ func NewKeymap(data []byte) (Keymap, error) {
 		if binding.Key == "" || binding.Action == "" || binding.Help == "" {
 			return Keymap{}, fmt.Errorf("TUI keybinding %d requires key, action, and help", i+1)
 		}
-		if binding.Tab != "" && binding.Tab != "form" && !knownTab(Tab(binding.Tab)) {
+		if binding.Tab != "" && binding.Tab != "form" && binding.Tab != "log" && !knownTab(Tab(binding.Tab)) {
 			return Keymap{}, fmt.Errorf("TUI keybinding %d has unknown tab %q", i+1, binding.Tab)
 		}
 		if !knownAction(binding.Action) {
@@ -83,7 +83,7 @@ func (k Keymap) Action(tab Tab, key string) (string, bool) {
 func (k Keymap) Help(tab Tab) []string {
 	entries := make([]string, 0, len(k.bindings))
 	for _, binding := range k.bindings {
-		if tab == "form" && binding.Tab != "form" {
+		if (tab == "form" || tab == "log") && binding.Tab != string(tab) {
 			continue
 		}
 		if binding.Tab != "" && binding.Tab != string(tab) {
@@ -100,7 +100,7 @@ func normalizeKey(key string) string {
 
 func knownAction(action string) bool {
 	switch action {
-	case "quit", "next_tab", "prev_tab", "move_up", "move_down", "activate", "cancel_modal",
+	case "quit", "next_tab", "prev_tab", "move_up", "move_down", "activate", "cancel_modal", "toggle_log", "log_older", "log_newer", "log_page_older", "log_page_newer", "log_oldest", "log_newest", "log_close",
 		"tab_overview", "tab_proxies", "tab_subscriptions", "tab_filters", "tab_resources", "tab_settings",
 		"start", "stop", "reload_configuration", "manual_probe", "toggle_automation",
 		"refresh_subscription", "activate_subscription", "new_subscription", "edit_subscription", "delete_subscription", "refresh_filter", "refresh_resource", "new_filter", "edit_filter", "new_resource", "edit_resource",

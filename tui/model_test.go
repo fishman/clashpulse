@@ -10,6 +10,33 @@ import (
 	"github.com/fishman/clashpulse/ipc"
 )
 
+func TestLogOverlayScrollsWithoutDispatch(t *testing.T) {
+	model := NewModel()
+	model.Tab = TabProxies
+	entries := make([]core.DiagnosticSnapshot, 50)
+	for i := range entries {
+		entries[i] = core.DiagnosticSnapshot{At: int64(i + 100), Severity: "error", Kind: "subscription", SourceID: "feed", Message: "HTTP 406"}
+	}
+	model = model.Apply(ipc.Event{Snapshot: core.Snapshot{
+		Groups:      []core.GroupSnapshot{{ID: "main", Proxies: []string{"alpha"}}},
+		Proxies:     []core.ProxySnapshot{{ID: "alpha", GroupID: "main"}},
+		Diagnostics: entries,
+	}})
+	selected := model.Selection[TabProxies]
+	model, intent, quit := model.HandleKey("~")
+	if !model.LogOpen || intent != nil || quit || model.Selection[TabProxies] != selected {
+		t.Fatal("opening activity changed control state")
+	}
+	model, intent, quit = model.HandleKey("pageup")
+	if model.LogOffset <= 0 || intent != nil || quit || model.Selection[TabProxies] != selected {
+		t.Fatal("scrolling activity moved the proxy cursor or dispatched intent")
+	}
+	model, intent, quit = model.HandleKey("q")
+	if model.LogOpen || intent != nil || quit || model.Selection[TabProxies] != selected || model.Tab != TabProxies {
+		t.Fatal("closing activity dispatched quit or changed focus")
+	}
+}
+
 func TestApplyKeepsStableProxyCursorAndModalFocus(t *testing.T) {
 	model := NewModel()
 	model.Tab = TabProxies
@@ -500,7 +527,7 @@ func TestSettingsShowSanitizedMonitorConfiguration(t *testing.T) {
 	for _, row := range model.Rows() {
 		details[row.ID] = row.Detail
 	}
-	if details["setting:monitor"] != "enabled" || !strings.Contains(details["setting:interval"], "30 seconds") || !strings.Contains(details["setting:alert-threshold"], "250 ms") || !strings.Contains(details["setting:alert-threshold"], "above threshold") || !strings.Contains(details["setting:binary"], "desired") {
+	if details["setting:monitor"] != "enabled" || !strings.Contains(details["setting:interval"], "30 seconds") || !strings.Contains(details["setting:alert-threshold"], "250 ms") || !strings.Contains(details["setting:alert-threshold"], "above threshold") {
 		t.Fatalf("settings details = %#v", details)
 	}
 }
@@ -702,6 +729,15 @@ func TestMonitorPolicyEditsKeepSubsecondUnitsAndAllowZero(t *testing.T) {
 func TestDNSSetAndRouteEditsPreserveFullPolicyUntilSnapshot(t *testing.T) {
 	model := dnsPolicyModel(t)
 	model.Selection[TabSettings] = "dns:set:one"
+	var oldDetail string
+	for _, row := range model.Rows() {
+		if row.ID == "dns:set:one" {
+			oldDetail = row.Detail
+		}
+	}
+	if oldDetail == "" {
+		t.Fatal("selected DNS row missing")
+	}
 	model, _, _ = model.HandleKey("g")
 	model, command, _ := model.HandleKey("enter")
 	if command != nil || model.Modal.dns.step != dnsSetEndpoints {
@@ -716,7 +752,7 @@ func TestDNSSetAndRouteEditsPreserveFullPolicyUntilSnapshot(t *testing.T) {
 		t.Fatalf("resolver replacement lost policy entries: %#v", command.DNSRouting)
 	}
 	for _, row := range model.Rows() {
-		if row.ID == "dns:set:one" && !strings.Contains(row.Detail, "1.1.1.1") {
+		if row.ID == "dns:set:one" && (row.Detail != oldDetail || strings.Contains(row.Detail, "8.8.8.8")) {
 			t.Fatalf("model changed before snapshot: %#v", row)
 		}
 	}
@@ -840,7 +876,6 @@ func TestSettingsRenderCurrentMonitorAndDNSPolicy(t *testing.T) {
 		details[row.ID] = row.Title + " " + row.Detail
 	}
 	for id, value := range map[string]string{
-		"setting:monitor:test-url":     "https://monitor.example/204",
 		"setting:interval":             "60 seconds",
 		"setting:monitor:timeout":      "750 ms",
 		"setting:monitor:concurrency":  "3",
@@ -851,11 +886,15 @@ func TestSettingsRenderCurrentMonitorAndDNSPolicy(t *testing.T) {
 		"setting:monitor:cooldown":     "0 seconds",
 		"setting:monitor:jitter":       "200 ms",
 		"setting:dns-listen":           "127.0.0.1:1053",
-		"dns:set:one":                  "udp://1.1.1.1:53",
 		"dns:route:suffix:example.com": "resolver one",
 	} {
 		if !strings.Contains(details[id], value) {
 			t.Errorf("row %s = %q, want %q", id, details[id], value)
+		}
+	}
+	for _, detail := range details {
+		if strings.Contains(detail, "https://monitor.example/204") || strings.Contains(detail, "udp://1.1.1.1:53") {
+			t.Fatal("Settings detail exposed monitored URL or resolver endpoint")
 		}
 	}
 	help := strings.Join(model.Help(), ";")

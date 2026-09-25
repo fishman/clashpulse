@@ -119,6 +119,7 @@ type Row struct {
 	resourceID     string
 	dnsID          string
 	monitor        monitorField
+	action         string
 }
 
 type rowKind uint8
@@ -146,6 +147,8 @@ type Model struct {
 	Modal     *Modal
 	Pending   int
 	Notice    string
+	LogOpen   bool
+	LogOffset int
 
 	keymap   Keymap
 	snapshot ipc.Event
@@ -239,13 +242,35 @@ func (m Model) Rows() []Row {
 	selected := m.Selection[m.Tab]
 	for i := range rows {
 		rows[i].Selected = rows[i].ID == selected
+		if rows[i].action != "" {
+			rows[i].Cells[2] = settingActionKey(m.keymap, rows[i].action)
+		}
 	}
 	return rows
+}
+
+func settingActionKey(keymap Keymap, action string) string {
+	var global string
+	for _, binding := range keymap.bindings {
+		if binding.Action != action {
+			continue
+		}
+		if binding.Tab == string(TabSettings) {
+			return binding.Key
+		}
+		if binding.Tab == "" && global == "" {
+			global = binding.Key
+		}
+	}
+	return global
 }
 
 func (m Model) CurrentGroupID() string { return m.groupID }
 
 func (m Model) Help() []string {
+	if m.LogOpen {
+		return m.keymap.Help(Tab("log"))
+	}
 	if m.Modal != nil && m.Modal.Form != nil {
 		return m.keymap.Help(Tab("form"))
 	}
@@ -255,6 +280,37 @@ func (m Model) Help() []string {
 // HandleKey applies one normalized key name and optionally returns one IPC
 // intent. It performs no I/O.
 func (m Model) HandleKey(key string) (Model, *ipc.Command, bool) {
+	if m.LogOpen {
+		action, _ := m.keymap.Action(Tab("log"), key)
+		maxOffset := len(m.snapshot.Snapshot.Diagnostics)
+		switch action {
+		case "log_older":
+			if m.LogOffset < maxOffset {
+				m.LogOffset++
+			}
+		case "log_newer":
+			if m.LogOffset > 0 {
+				m.LogOffset--
+			}
+		case "log_page_older":
+			m.LogOffset += 50
+			if m.LogOffset > maxOffset {
+				m.LogOffset = maxOffset
+			}
+		case "log_page_newer":
+			m.LogOffset -= 50
+			if m.LogOffset < 0 {
+				m.LogOffset = 0
+			}
+		case "log_oldest":
+			m.LogOffset = maxOffset
+		case "log_newest":
+			m.LogOffset = 0
+		default:
+			m.LogOpen = false
+		}
+		return m, nil, false
+	}
 	if m.Modal != nil {
 		modal := *m.Modal
 		modal.Form = modal.Form.Clone()
@@ -264,6 +320,11 @@ func (m Model) HandleKey(key string) (Model, *ipc.Command, bool) {
 	key = normalizeKey(key)
 	action, ok := m.keymap.Action(m.Tab, key)
 	if !ok {
+		return m, nil, false
+	}
+	if action == "toggle_log" {
+		m.LogOpen = true
+		m.LogOffset = 0
 		return m, nil, false
 	}
 	m.Focus = FocusContent
@@ -1655,44 +1716,70 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 		return rows
 	case TabSettings:
 		monitor := snapshot.Monitor
-		testURL := monitor.TestURL
-		if len(testURL) >= 7 && strings.EqualFold(testURL[:7], "http://") {
-			testURL += " | plain HTTP can be intercepted"
+		binaryDetail := fmt.Sprintf("Desired %s; observed %s; capabilities %s",
+			fallback(snapshot.Binary.Desired, "unspecified"), fallback(snapshot.Binary.ObservedVersion, "unknown"),
+			fallback(strings.Join(snapshot.Binary.Capabilities, ", "), "none verified"))
+		if snapshot.Binary.LastCompatibilityFailure != "" {
+			binaryDetail += "; compatibility issue reported"
+		}
+		testURLValue, testURLDetail := "not configured", "No test URL is configured."
+		if monitor.TestURL != "" {
+			testURLValue, testURLDetail = "configured", "Test URL configured."
+		}
+		if strings.HasPrefix(strings.ToLower(monitor.TestURL), "http://") {
+			testURLDetail += " Plain HTTP can be intercepted."
+		}
+		proxyAction := "system_proxy_enable"
+		if snapshot.SystemProxy.Enabled {
+			proxyAction = "system_proxy_disable"
+		}
+		monitorAction := "monitor_enable"
+		if monitor.Enabled {
+			monitorAction = "monitor_disable"
 		}
 		rows := []Row{
-			{ID: "setting:binary", Title: "Mihomo binary", Detail: binaryDetail(snapshot.Binary.Desired, snapshot.Binary.ObservedVersion, snapshot.Binary.LastCompatibilityFailure, snapshot.Binary.Capabilities) + " | press Enter or b to change", kind: rowSettingBinary},
-			{ID: "setting:system-proxy", Title: "System proxy", Detail: fmt.Sprintf("requested %t | active %t | e enable, d disable", snapshot.SystemProxy.Enabled, snapshot.SystemProxy.Active)},
-			{ID: "setting:monitor", Title: "Monitor", Detail: enabledLabel(monitor.Enabled)},
+			{ID: "setting:binary", Title: "Mihomo binary", Detail: binaryDetail, Cells: []string{"Mihomo binary", fallback(snapshot.Binary.Desired, "unspecified"), ""}, kind: rowSettingBinary, action: "edit_binary"},
+			{ID: "setting:system-proxy", Title: "System proxy", Detail: fmt.Sprintf("System proxy requested %t; currently active %t.", snapshot.SystemProxy.Enabled, snapshot.SystemProxy.Active), Cells: []string{"System proxy", fmt.Sprintf("requested %t; active %t", snapshot.SystemProxy.Enabled, snapshot.SystemProxy.Active), ""}, action: proxyAction},
+			{ID: "setting:monitor", Title: "Monitor", Detail: enabledLabel(monitor.Enabled), Cells: []string{"Monitor", enabledLabel(monitor.Enabled), ""}, action: monitorAction},
 		}
 		for _, setting := range []struct {
-			id, title, value, key string
-			field                 monitorField
+			id, title, value, action string
+			field                    monitorField
 		}{
-			{"setting:monitor:test-url", "Monitor test URL", testURL, "u", monitorTestURL},
-			{"setting:interval", "Monitor interval", strconv.FormatInt(monitor.IntervalSeconds, 10) + " seconds", "i", monitorInterval},
-			{"setting:monitor:timeout", "Monitor timeout", strconv.FormatInt(monitor.TimeoutMillis, 10) + " ms", "o", monitorTimeout},
-			{"setting:monitor:concurrency", "Monitor concurrency", strconv.Itoa(monitor.Concurrency), "c", monitorConcurrency},
-			{"setting:monitor:threshold", "Monitor threshold", strconv.FormatInt(monitor.ThresholdMillis, 10) + " ms", "h", monitorThreshold},
-			{"setting:alert-threshold", "Alert threshold", strconv.FormatInt(monitor.AlertThresholdMillis, 10) + " ms | high alert above threshold", "t", monitorAlertThreshold},
-			{"setting:monitor:bad-samples", "Consecutive bad samples", strconv.Itoa(monitor.ConsecutiveBadSamples), "s", monitorBadSamples},
-			{"setting:monitor:improvement", "Minimum improvement", strconv.FormatInt(monitor.MinImprovementMillis, 10) + " ms", "p", monitorImprovement},
-			{"setting:monitor:cooldown", "Monitor cooldown", strconv.FormatInt(monitor.CooldownSeconds, 10) + " seconds", "z", monitorCooldown},
-			{"setting:monitor:jitter", "Monitor jitter", strconv.FormatInt(monitor.JitterMillis, 10) + " ms", "w", monitorJitter},
+			{"setting:monitor:test-url", "Monitor test URL", testURLValue, "edit_monitor_url", monitorTestURL},
+			{"setting:interval", "Monitor interval", strconv.FormatInt(monitor.IntervalSeconds, 10) + " seconds", "edit_monitor_interval", monitorInterval},
+			{"setting:monitor:timeout", "Monitor timeout", strconv.FormatInt(monitor.TimeoutMillis, 10) + " ms", "edit_monitor_timeout", monitorTimeout},
+			{"setting:monitor:concurrency", "Monitor concurrency", strconv.Itoa(monitor.Concurrency), "edit_monitor_concurrency", monitorConcurrency},
+			{"setting:monitor:threshold", "Monitor threshold", strconv.FormatInt(monitor.ThresholdMillis, 10) + " ms", "edit_monitor_threshold", monitorThreshold},
+			{"setting:alert-threshold", "Alert threshold", strconv.FormatInt(monitor.AlertThresholdMillis, 10) + " ms", "edit_alert_threshold", monitorAlertThreshold},
+			{"setting:monitor:bad-samples", "Consecutive bad samples", strconv.Itoa(monitor.ConsecutiveBadSamples), "edit_monitor_bad_samples", monitorBadSamples},
+			{"setting:monitor:improvement", "Minimum improvement", strconv.FormatInt(monitor.MinImprovementMillis, 10) + " ms", "edit_monitor_improvement", monitorImprovement},
+			{"setting:monitor:cooldown", "Monitor cooldown", strconv.FormatInt(monitor.CooldownSeconds, 10) + " seconds", "edit_monitor_cooldown", monitorCooldown},
+			{"setting:monitor:jitter", "Monitor jitter", strconv.FormatInt(monitor.JitterMillis, 10) + " ms", "edit_monitor_jitter", monitorJitter},
 		} {
-			rows = append(rows, Row{ID: setting.id, Title: setting.title, Detail: setting.value + " | press Enter or " + setting.key + " to change", kind: rowSettingMonitor, monitor: setting.field})
+			detail := setting.value
+			if setting.field == monitorTestURL {
+				detail = testURLDetail
+			} else if setting.field == monitorAlertThreshold {
+				detail += "; high alert above threshold"
+			}
+			rows = append(rows, Row{ID: setting.id, Title: setting.title, Detail: detail,
+				Cells: []string{setting.title, setting.value, ""}, kind: rowSettingMonitor, monitor: setting.field, action: setting.action})
 		}
-		rows = append(rows, Row{ID: "setting:dns-listen", Title: "DNS listener", Detail: snapshot.DNS.Listen + " | press Enter or l to change", kind: rowSettingDNSListen})
+		rows = append(rows, Row{ID: "setting:dns-listen", Title: "DNS listener", Detail: snapshot.DNS.Listen,
+			Cells: []string{"DNS listener", snapshot.DNS.Listen, ""}, kind: rowSettingDNSListen, action: "edit_dns_listen"})
 		for _, set := range snapshot.DNS.ResolverSets {
-			rows = append(rows, Row{ID: "dns:set:" + set.ID, Title: "DNS resolver set " + set.ID, Detail: "DNSCrypt " + yesNo(set.DNSCrypt) + " | " + strings.Join(set.Endpoints, ", ") + " | press Enter or g to edit, x to remove", kind: rowDNSResolver, dnsID: set.ID})
+			value := fmt.Sprintf("DNSCrypt %s; %d endpoint(s)", yesNo(set.DNSCrypt), len(set.Endpoints))
+			rows = append(rows, Row{ID: "dns:set:" + set.ID, Title: "DNS resolver set " + set.ID,
+				Detail: value, Cells: []string{"DNS resolver set " + set.ID, value, ""}, kind: rowDNSResolver, dnsID: set.ID, action: "edit_dns_entry"})
 		}
 		for _, route := range snapshot.DNS.Routes {
 			matcher, value := dnsRouteMatcherFields(route.Suffix, route.GeoSite, route.Resource)
 			id := dnsRouteIdentity(route.Suffix, route.GeoSite, route.Resource)
-			rows = append(rows, Row{ID: id, Title: "DNS route " + matcher + " " + value, Detail: "resolver " + route.ResolverSet + " | press Enter or g to edit, x to remove", kind: rowDNSRoute, dnsID: id})
-		}
-		for i := range rows {
-			value, _, _ := strings.Cut(rows[i].Detail, " | ")
-			rows[i].Cells = []string{rows[i].Title, value}
+			name := "DNS route " + matcher + " " + value
+			resolver := "resolver " + route.ResolverSet
+			rows = append(rows, Row{ID: id, Title: name, Detail: resolver,
+				Cells: []string{name, resolver, ""}, kind: rowDNSRoute, dnsID: id, action: "edit_dns_entry"})
 		}
 		return rows
 	default:

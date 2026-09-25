@@ -49,7 +49,7 @@ func TestResourceAddSendsTypedIntentAndClearsPrivateSource(t *testing.T) {
 	row := page.list.CreateItem().(*fyne.Container)
 	page.list.UpdateItem(0, row)
 	item := page.items[row]
-	if strings.Contains(item.name.Text+item.detail.Text, sourceURL) {
+	if strings.Contains(item.name.Text+item.source.Text+item.status.Text, sourceURL) {
 		t.Fatal("resource row exposed the private source URL")
 	}
 }
@@ -65,7 +65,7 @@ func TestResourceEditOmitsPrivateSourceAndWaitsForSnapshot(t *testing.T) {
 	row := page.list.CreateItem().(*fyne.Container)
 	page.list.UpdateItem(0, row)
 	item := page.items[row]
-	before := item.detail.Text
+	before := item.source.Text + item.status.Text
 
 	item.edit.OnTapped()
 	editor := page.editor
@@ -83,7 +83,7 @@ func TestResourceEditOmitsPrivateSourceAndWaitsForSnapshot(t *testing.T) {
 	if edit.URL != nil || edit.Kind != nil || edit.Format != nil || edit.RuleType != nil || edit.IntervalSeconds != nil || edit.SHA256 != nil || editor.source.Text != "" {
 		t.Fatal("edit resent omitted private source or unchanged fields")
 	}
-	if !page.rows[0].Enabled || item.detail.Text != before || item.refresh.Disabled() {
+	if !page.rows[0].Enabled || item.source.Text+item.status.Text != before || item.refresh.Disabled() {
 		t.Fatal("resource row changed before a new snapshot arrived")
 	}
 

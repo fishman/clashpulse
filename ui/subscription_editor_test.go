@@ -47,7 +47,7 @@ func TestSubscriptionAddSendsTypedIntentAndClearsSourceAfterSubmit(t *testing.T)
 	row := page.list.CreateItem().(*fyne.Container)
 	page.list.UpdateItem(0, row)
 	item := page.items[row]
-	if item.name.Text != "Nightly" || item.detail.Text == "" || strings.Contains(item.name.Text+item.detail.Text, sourceURL) {
+	if item.name.Text != "Nightly" || item.source.Text == "" || item.status.Text == "" || strings.Contains(item.name.Text+item.source.Text+item.status.Text, sourceURL) {
 		t.Fatal("snapshot-rendered subscription controls are unsafe")
 	}
 }
@@ -106,7 +106,7 @@ func TestSubscriptionRenameRetainsPrivateSourceAndWaitsForSnapshot(t *testing.T)
 	}
 	page.update([]core.SubscriptionSnapshot{{ID: "managed-feed", Name: "After", SourceHost: "feed.example", Enabled: true}})
 	page.list.UpdateItem(0, row)
-	if item.name.Text != "After" || item.detail.Text == "" {
+	if item.name.Text != "After" || item.source.Text == "" || item.status.Text == "" {
 		t.Fatal("subscription row did not update from the next snapshot")
 	}
 }
