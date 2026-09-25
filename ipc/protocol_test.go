@@ -3,6 +3,7 @@ package ipc
 import (
 	"bytes"
 	"encoding/binary"
+	"strings"
 	"testing"
 
 	"github.com/fishman/clashpulse/core"
@@ -77,6 +78,22 @@ func TestSnapshotRejectsInvalidSubscriptionPolicy(t *testing.T) {
 		if err := validateSnapshot(core.Snapshot{Subscriptions: []core.SubscriptionSnapshot{item}}); err == nil {
 			t.Fatal("invalid subscription policy escaped local IPC boundary")
 		}
+	}
+}
+
+func TestDiagnosticSnapshotBoundsAndSafety(t *testing.T) {
+	valid := core.Snapshot{Diagnostics: []core.DiagnosticSnapshot{{At: 1, Severity: "error", Kind: "subscription", SourceID: "feed", Message: "HTTP 406"}}}
+	if err := validateSnapshot(valid); err != nil {
+		t.Fatal(err)
+	}
+	valid.Diagnostics[0].Message = strings.Repeat("x", 161)
+	if validateSnapshot(valid) == nil {
+		t.Fatal("oversized diagnostic message accepted")
+	}
+	valid.Diagnostics[0].Message = "HTTP 406"
+	valid.Diagnostics = make([]core.DiagnosticSnapshot, 201)
+	if validateSnapshot(valid) == nil {
+		t.Fatal("unbounded session log escaped IPC")
 	}
 }
 

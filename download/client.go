@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -37,6 +38,24 @@ type Response struct {
 	ETag                 string
 	LastModified         string
 	SubscriptionUserInfo string
+}
+
+// StatusError contains only a numeric response status, never the request URL or body.
+type StatusError struct{ Code int }
+
+func (e StatusError) Error() string { return fmt.Sprintf("HTTP %d", e.Code) }
+func (e StatusError) Valid() bool   { return e.Code >= 400 && e.Code <= 599 }
+
+// ParseStatus accepts only bounded numeric error statuses, not arbitrary server text.
+func ParseStatus(message string) (StatusError, bool) {
+	if len(message) != len("HTTP 406") || !strings.HasPrefix(message, "HTTP ") {
+		return StatusError{}, false
+	}
+	code, err := strconv.Atoi(message[len("HTTP "):])
+	if err != nil || !(StatusError{Code: code}).Valid() {
+		return StatusError{}, false
+	}
+	return StatusError{Code: code}, true
 }
 
 type Factory func(Route) (http.RoundTripper, error)
@@ -110,7 +129,7 @@ func (c *Client) Fetch(ctx context.Context, req Request) (Response, error) {
 		}
 		if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 			response.Body.Close()
-			return Response{}, fmt.Errorf("download: unexpected status %d", response.StatusCode)
+			return Response{}, StatusError{Code: response.StatusCode}
 		}
 
 		body, err := readBody(ctx, response.Body, req.MaxBytes)

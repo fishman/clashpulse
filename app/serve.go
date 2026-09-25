@@ -73,11 +73,22 @@ func (s *runtimeService) removeServiceIntent(jobID string) {
 func (s *runtimeService) finishServiceIntent(jobID string, cmd ipc.Command, err error) {
 	s.removeServiceIntent(jobID)
 	if err != nil {
-		s.reportError(string(cmd.Kind), err)
+		s.reportErrorScoped(string(cmd.Kind), serviceCommandSource(cmd), err)
 	} else {
-		s.snapshot.Errors = nil
+		s.resolveIssue(string(cmd.Kind), serviceCommandSource(cmd))
 	}
 	s.publish()
+}
+
+func serviceCommandSource(cmd ipc.Command) string {
+	switch {
+	case cmd.SubscriptionID != "":
+		return cmd.SubscriptionID
+	case cmd.ResourceID != "":
+		return cmd.ResourceID
+	default:
+		return cmd.FilterID
+	}
 }
 
 func (s *runtimeService) discardServiceIntent(jobID string) {
@@ -356,6 +367,7 @@ func (s *runtimeService) run(ctx context.Context) error {
 				s.reportError("config", err)
 			}
 		case <-s.stateChanged:
+			s.reconcileSubscriptionFailures(s.subs.List())
 			s.publish()
 		case cmd := <-s.intents:
 			startIntent(cmd)

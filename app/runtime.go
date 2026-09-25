@@ -418,6 +418,9 @@ func publicFailureLabel(kind, failure string) string {
 	if failure == "" {
 		return ""
 	}
+	if status, ok := download.ParseStatus(failure); ok {
+		return kind + " " + status.Error()
+	}
 	return kind + " update failed"
 }
 
@@ -451,6 +454,10 @@ func (s *runtimeService) publish() {
 }
 
 func (s *runtimeService) reportError(kind string, err error) {
+	s.reportErrorScoped(kind, "", err)
+}
+
+func (s *runtimeService) reportErrorScoped(kind, sourceID string, err error) {
 	if err == nil {
 		return
 	}
@@ -474,7 +481,7 @@ func (s *runtimeService) reportError(kind string, err error) {
 	if kind == "notification" {
 		message = "desktop notification unavailable"
 	}
-	failure := core.ErrorSnapshot{Key: kind, Message: message}
+	failure := core.ErrorSnapshot{Kind: kind, SourceID: sourceID, Key: kind, Message: message}
 	if message == "operation failed" && (kind == "config" || kind == "reload_configuration" || kind == "update_configuration" || kind == "set_dns_routing" || kind == "delete_subscription" || strings.HasPrefix(kind, "put_")) {
 		failure.Message = "configuration change failed; previous settings remain active"
 	}
@@ -501,7 +508,17 @@ func (s *runtimeService) reportError(kind string, err error) {
 		failure.Key = "subscription.delete"
 		failure.Message = "subscription cleanup incomplete; new settings remain active"
 	}
-	s.snapshot.Errors = []core.ErrorSnapshot{failure}
+	if kind == "refresh_subscription" && sourceID != "" {
+		failure.Key = "subscription"
+		failure.Message = "subscription update failed"
+		var status download.StatusError
+		if errors.As(err, &status) && status.Valid() {
+			failure.Message = "subscription " + status.Error()
+		}
+	}
+	if s.upsertIssue(failure) {
+		s.appendDiagnostic(safeDiagnostic(kind, sourceID, err))
+	}
 	s.publish()
 }
 

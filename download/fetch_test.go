@@ -84,6 +84,34 @@ func TestFetchUsesClashPulseUserAgentByDefault(t *testing.T) {
 	}
 }
 
+func TestHTTPStatusErrorIsSafe(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotAcceptable)
+		_, _ = w.Write([]byte("<html>private-token</html>"))
+	}))
+	defer server.Close()
+	client := NewClient(func(Route) (http.RoundTripper, error) { return http.DefaultTransport, nil })
+	_, err := client.Fetch(context.Background(), Request{
+		URL: server.URL + "/profile?token=private-token", Route: Direct, MaxBytes: 64, AllowHTTP: true,
+	})
+	var status StatusError
+	if !errors.As(err, &status) || status.Code != 406 || strings.Contains(err.Error(), "private-token") || strings.Contains(err.Error(), "<html>") {
+		t.Fatalf("unsafe status classification: %T", err)
+	}
+}
+
+func TestParseStatusRejectsInjectedMessage(t *testing.T) {
+	status, ok := ParseStatus("HTTP 406")
+	if !ok || status.Code != 406 || status.Error() != "HTTP 406" {
+		t.Fatal("safe status was not parsed consistently")
+	}
+	for _, raw := range []string{"HTTP 406 token=private", "HTTP 200", "HTTP 999", "HTTP abc", "HTTP 406\r\nAuthorization: private"} {
+		if _, ok := ParseStatus(raw); ok {
+			t.Fatal("unsafe or nonerror status was accepted")
+		}
+	}
+}
+
 func TestFetchRejectsHTTPAndUserinfo(t *testing.T) {
 	client := NewClient(func(Route) (http.RoundTripper, error) { return http.DefaultTransport, nil })
 	for _, req := range []Request{

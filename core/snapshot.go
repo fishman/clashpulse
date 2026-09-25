@@ -1,5 +1,7 @@
 package core
 
+const MaxDiagnostics = 200
+
 type GroupSnapshot struct {
 	ID                string
 	Label             string
@@ -106,9 +108,13 @@ type SwitchSnapshot struct {
 type JobSnapshot struct {
 	ID, Kind, State string
 }
-
 type ErrorSnapshot struct {
-	File, Key, Message string
+	File, Key, Kind, SourceID, Message string
+}
+
+type DiagnosticSnapshot struct {
+	At                                int64
+	Severity, Kind, SourceID, Message string
 }
 
 type Snapshot struct {
@@ -125,6 +131,7 @@ type Snapshot struct {
 	Jobs          []JobSnapshot
 	Switches      []SwitchSnapshot
 	Errors        []ErrorSnapshot
+	Diagnostics   []DiagnosticSnapshot
 }
 
 func NewSnapshot(groups []GroupSnapshot) Snapshot {
@@ -155,6 +162,7 @@ func CloneSnapshot(snapshot Snapshot) Snapshot {
 	out.Binary.Capabilities = append([]string(nil), snapshot.Binary.Capabilities...)
 	out.Jobs = append([]JobSnapshot(nil), snapshot.Jobs...)
 	out.Errors = append([]ErrorSnapshot(nil), snapshot.Errors...)
+	out.Diagnostics = append([]DiagnosticSnapshot(nil), snapshot.Diagnostics...)
 	out.Switches = append([]SwitchSnapshot(nil), snapshot.Switches...)
 	for i := range out.Switches {
 		out.Switches[i].Evidence = append([]ProbeSnapshot(nil), snapshot.Switches[i].Evidence...)

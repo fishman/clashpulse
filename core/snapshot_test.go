@@ -37,3 +37,12 @@ func TestSnapshotCopiesDNSResolverEndpoints(t *testing.T) {
 		t.Fatal("IPC snapshot retained mutable resolver endpoint")
 	}
 }
+
+func TestSnapshotClonesDiagnostics(t *testing.T) {
+	source := Snapshot{Diagnostics: []DiagnosticSnapshot{{At: 1, Severity: "error", Kind: "subscription", SourceID: "feed", Message: "HTTP 406"}}}
+	copy := CloneSnapshot(source)
+	source.Diagnostics[0].Message = "changed"
+	if copy.Diagnostics[0].Message != "HTTP 406" {
+		t.Fatal("IPC snapshot retained mutable diagnostic entry")
+	}
+}

@@ -36,9 +36,9 @@ func (s *runtimeService) runIntent(ctx context.Context, cmd ipc.Command) {
 		}
 	}
 	if err != nil {
-		s.reportError(string(cmd.Kind), err)
+		s.reportErrorScoped(string(cmd.Kind), serviceCommandSource(cmd), err)
 	} else {
-		s.snapshot.Errors = nil
+		s.resolveIssue(string(cmd.Kind), serviceCommandSource(cmd))
 	}
 	s.publish()
 }

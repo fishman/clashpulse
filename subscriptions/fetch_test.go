@@ -37,6 +37,39 @@ func TestRefreshUsesConfiguredUserAgent(t *testing.T) {
 	}
 }
 
+func TestRefreshReportsSafeHTTPStatus(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		if requests == 1 {
+			w.WriteHeader(http.StatusNotAcceptable)
+			_, _ = w.Write([]byte("<html>private-token</html>"))
+			return
+		}
+		_, _ = w.Write([]byte("proxies:\n  - name: recovered\n    type: direct\n"))
+	}))
+	defer server.Close()
+	_, service := makeService(t, server, nil, nil)
+	_, err := service.Add(config.Subscription{ID: "status", URL: server.URL + "/profile?token=private-token", AllowHTTP: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = service.Refresh(context.Background(), "status")
+	var status download.StatusError
+	if !errors.Is(err, ErrFetch) || !errors.As(err, &status) || status.Code != 406 || strings.Contains(err.Error(), "private-token") {
+		t.Fatalf("status was not safely classified: %T", err)
+	}
+	if entries := service.List(); len(entries) != 1 || entries[0].LastFailure != "HTTP 406" {
+		t.Fatal("safe HTTP status absent from subscription state")
+	}
+	if _, err := service.Refresh(context.Background(), "status"); err != nil {
+		t.Fatal(err)
+	}
+	if entries := service.List(); entries[0].LastFailure != "" {
+		t.Fatal("recovery kept active status failure")
+	}
+}
+
 func TestRefresh304ClearsPriorFailureAndPublishesRecovery(t *testing.T) {
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -64,8 +97,13 @@ func TestRefresh304ClearsPriorFailureAndPublishesRecovery(t *testing.T) {
 	if _, err := service.Refresh(context.Background(), "recovery"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Refresh(context.Background(), "recovery"); err != ErrFetch {
+	if _, err := service.Refresh(context.Background(), "recovery"); !errors.Is(err, ErrFetch) {
 		t.Fatalf("failed refresh = %v", err)
+	} else {
+		var status download.StatusError
+		if !errors.As(err, &status) || status.Code != 406 {
+			t.Fatal("rejected refresh lost its safe status")
+		}
 	}
 	if _, err := service.Refresh(context.Background(), "recovery"); err != nil {
 		t.Fatalf("304 recovery = %v", err)
@@ -267,8 +305,13 @@ func TestLatestURLPromotesValidatedSnapshotAndRetainsItOnInvalidUpdate(t *testin
 		t.Fatalf("last-known-good snapshot was not retained: %+v", entries)
 	}
 	latest.URL = server.URL + "/missing?sig=fetch-secret"
-	if _, err := service.Refresh(context.Background(), entry.ID); err != ErrFetch || strings.Contains(err.Error(), "fetch-secret") {
-		t.Fatalf("failed new-link fetch = %v, want sanitized ErrFetch", err)
+	if _, err := service.Refresh(context.Background(), entry.ID); !errors.Is(err, ErrFetch) || strings.Contains(err.Error(), "fetch-secret") {
+		t.Fatal("failed new-link fetch lost safe error classification")
+	} else {
+		var status download.StatusError
+		if !errors.As(err, &status) || status.Code != 404 {
+			t.Fatal("missing profile response lost its HTTP status")
+		}
 	}
 	entries = service.List()
 	if len(entries) != 1 || !entries[0].HasSnapshot || entries[0].Hash != updated.Hash {

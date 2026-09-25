@@ -105,6 +105,25 @@ func TestServerRejectsIncompatibleVersion(t *testing.T) {
 	}
 }
 
+func TestRejectsOlderDiagnosticProtocol(t *testing.T) {
+	server, _, _ := startTestServer(t, func(context.Context, Command) error { return nil }, core.Snapshot{})
+	conn, err := dialLocal(context.Background(), server.Endpoint())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if err := writeFrame(conn, clientFrame{Type: "hello", Version: 2}); err != nil {
+		t.Fatal(err)
+	}
+	var response serverFrame
+	if err := readFrame(conn, &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Type != "error" || response.Error == nil || response.Error.Code != "incompatible_version" {
+		t.Fatal("version-2 client was allowed to ignore diagnostic snapshots")
+	}
+}
+
 func TestClientRejectsUnsupportedProtocol(t *testing.T) {
 	endpoint := filepath.Join(t.TempDir(), "ipc.sock")
 	listener, err := net.Listen("unix", endpoint)

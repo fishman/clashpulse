@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -102,6 +103,11 @@ func (s *Service) refresh(ctx context.Context, id string, supplied *config.Subsc
 		checkedAt := time.Now()
 		if contextErr := s.recordContextFailure(operationCtx, id, checkedAt); contextErr != nil {
 			return Result{}, contextErr
+		}
+		var status download.StatusError
+		if errors.As(err, &status) && status.Valid() {
+			s.recordFailure(id, checkedAt, status)
+			return Result{}, fmt.Errorf("%w: %w", ErrFetch, status)
 		}
 		s.recordFailure(id, checkedAt, ErrFetch)
 		return Result{}, ErrFetch

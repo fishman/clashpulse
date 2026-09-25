@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -183,7 +184,9 @@ func TestRunAtRefreshActivateSelectAndStop(t *testing.T) {
 		t.Fatal(err)
 	}
 	state = waitAppSnapshot(t, ctx, client, func(state core.Snapshot) bool {
-		return len(state.Errors) != 0 && state.Errors[0].File == "config.toml" && state.Errors[0].Key == "monitor.automated_groups"
+		return slices.ContainsFunc(state.Errors, func(issue core.ErrorSnapshot) bool {
+			return issue.File == "config.toml" && issue.Key == "monitor.automated_groups"
+		})
 	})
 	if len(state.Groups) != 1 || state.Groups[0].Selected != opaqueID("node-b") {
 		t.Fatalf("invalid automation destroyed prior runtime: %+v", state.Groups)
@@ -202,7 +205,9 @@ func TestRunAtRefreshActivateSelectAndStop(t *testing.T) {
 		t.Fatal(err)
 	}
 	state = waitAppSnapshot(t, ctx, client, func(state core.Snapshot) bool {
-		return len(state.Errors) != 0 && state.Errors[0].Key == string(ipc.CommandUpdateConfiguration) && len(state.Jobs) == 0
+		return len(state.Jobs) == 0 && slices.ContainsFunc(state.Errors, func(issue core.ErrorSnapshot) bool {
+			return issue.Kind == string(ipc.CommandUpdateConfiguration)
+		})
 	})
 	if state.Binary.Desired != binary || len(state.Groups) != 1 || state.Groups[0].Selected != opaqueID("node-b") {
 		t.Fatalf("failed binary switch changed known-good runtime: %+v", state)

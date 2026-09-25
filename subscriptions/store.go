@@ -793,7 +793,8 @@ func validFailure(failure string) bool {
 	case "", ErrFetch.Error(), ErrNoSnapshot.Error(), ErrInvalidProfile.Error(), ErrRender.Error(), ErrValidation.Error(), context.DeadlineExceeded.Error():
 		return true
 	default:
-		return false
+		_, ok := download.ParseStatus(failure)
+		return ok
 	}
 }
 

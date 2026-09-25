@@ -12,7 +12,7 @@ import (
 
 const (
 	// ProtocolVersion is negotiated in the first frame on every connection.
-	ProtocolVersion uint16 = 2
+	ProtocolVersion uint16 = 3
 	// MaxFrameSize bounds both incoming and outgoing JSON frames.
 	MaxFrameSize = 1 << 20
 )
@@ -315,7 +315,8 @@ func validateSnapshot(snapshot core.Snapshot) error {
 	if !addItems(len(snapshot.Groups)) || !addItems(len(snapshot.Proxies)) ||
 		!addItems(len(snapshot.Subscriptions)) || !addItems(len(snapshot.Resources)) ||
 		!addItems(len(snapshot.Filters)) || !addItems(len(snapshot.DNS.ResolverSets)) || !addItems(len(snapshot.DNS.Routes)) ||
-		!addItems(len(snapshot.Binary.Capabilities)) || !addItems(len(snapshot.Jobs)) || !addItems(len(snapshot.Errors)) {
+		!addItems(len(snapshot.Binary.Capabilities)) || !addItems(len(snapshot.Jobs)) || !addItems(len(snapshot.Errors)) ||
+		len(snapshot.Diagnostics) > core.MaxDiagnostics || !addItems(len(snapshot.Diagnostics)) {
 		return ErrSnapshotTooLarge
 	}
 	textBytes := 0
@@ -391,7 +392,17 @@ func validateSnapshot(snapshot core.Snapshot) error {
 		}
 	}
 	for _, item := range snapshot.Errors {
-		if !addText(item.File, item.Key, item.Message) {
+		if !addText(item.File, item.Key, item.Kind, item.SourceID, item.Message) {
+			return ErrSnapshotTooLarge
+		}
+	}
+	for _, item := range snapshot.Diagnostics {
+		if item.At < 0 || (item.Severity != "error" && item.Severity != "info") || !stableIDPattern.MatchString(item.Kind) ||
+			(item.SourceID != "" && !stableIDPattern.MatchString(item.SourceID)) || len(item.Message) == 0 || len(item.Message) > 160 ||
+			strings.ContainsAny(item.Message, "\x00\r\n") || strings.Contains(item.Message, "://") {
+			return errors.New("ipc: invalid diagnostic snapshot")
+		}
+		if !addText(item.Severity, item.Kind, item.SourceID, item.Message) {
 			return ErrSnapshotTooLarge
 		}
 	}
