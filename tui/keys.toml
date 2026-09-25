@@ -93,8 +93,8 @@
 "k" = { fun = "log_older", desc = "older diagnostic" }
 "down" = { fun = "log_newer", desc = "newer diagnostic" }
 "j" = { fun = "log_newer", desc = "newer diagnostic" }
-"pageup" = { fun = "log_page_older", desc = "older page" }
-"pagedown" = { fun = "log_page_newer", desc = "newer page" }
+"pgup" = { fun = "log_page_older", desc = "older page" }
+"pgdown" = { fun = "log_page_newer", desc = "newer page" }
 "home" = { fun = "log_oldest", desc = "oldest diagnostic" }
 "end" = { fun = "log_newest", desc = "newest diagnostic" }
 "q" = { fun = "log_close", desc = "close log", show = true }
@@ -103,8 +103,8 @@
 [schemes.default.help]
 "up" = { fun = "help_up", desc = "previous binding" }
 "down" = { fun = "help_down", desc = "next binding" }
-"pageup" = { fun = "help_page_up", desc = "previous page" }
-"pagedown" = { fun = "help_page_down", desc = "next page" }
+"pgup" = { fun = "help_page_up", desc = "previous page" }
+"pgdown" = { fun = "help_page_down", desc = "next page" }
 "home" = { fun = "help_home", desc = "first binding" }
 "end" = { fun = "help_end", desc = "last binding" }
 "q" = { fun = "help_close", desc = "close help", show = true }

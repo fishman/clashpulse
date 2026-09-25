@@ -83,6 +83,26 @@ func TestEventKeyNamesMatchDeclarativeBindings(t *testing.T) {
 	}
 }
 
+func TestPageKeysDispatchInLogAndHelpContexts(t *testing.T) {
+	keys, err := DefaultKeymap()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		key    tcell.Key
+		tab    Tab
+		action string
+	}{
+		{tcell.KeyPgUp, Tab("log"), "log_page_older"},
+		{tcell.KeyPgDn, Tab("help"), "help_page_down"},
+	} {
+		name := eventKeyName(tcell.NewEventKey(tc.key, "", tcell.ModNone))
+		if got, ok := keys.Action(tc.tab, name); !ok || got != tc.action {
+			t.Fatalf("%s key %q dispatched %q, want %q", tc.tab, name, got, tc.action)
+		}
+	}
+}
+
 func TestFormKeymapExposesToggleAndSave(t *testing.T) {
 	keys, err := DefaultKeymap()
 	if err != nil {

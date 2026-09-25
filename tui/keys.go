@@ -135,6 +135,8 @@ func eventKeyName(event *tcell.EventKey) string {
 		return "left"
 	case tcell.KeyRight:
 		return "right"
+	case tcell.KeyPgDn:
+		return "pgdown"
 	case tcell.KeyBackspace, tcell.KeyBackspace2:
 		return "backspace"
 	case tcell.KeyCtrlC:

@@ -28,7 +28,7 @@ func TestLogOverlayScrollsWithoutDispatch(t *testing.T) {
 	if !model.LogOpen || intent != nil || quit || model.Selection[TabProxies] != selected {
 		t.Fatal("opening activity changed control state")
 	}
-	model, intent, quit = model.HandleKey("pageup")
+	model, intent, quit = model.HandleKey("pgup")
 	if model.LogOffset <= 0 || intent != nil || quit || model.Selection[TabProxies] != selected {
 		t.Fatal("scrolling activity moved the proxy cursor or dispatched intent")
 	}
