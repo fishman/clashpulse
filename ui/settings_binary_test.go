@@ -35,6 +35,45 @@ func TestSettingsCanSelectBundledBinaryAndShowCompatibilityIssue(t *testing.T) {
 	}
 }
 
+func TestSettingsNavigationCollapsesOnlyWhenSectionsCannotFit(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	w := a.NewWindow("ClashPulse")
+	page := newSettingsPage(func(ipc.Command) {}, w)
+	w.SetContent(page.view)
+	w.Resize(fyne.NewSize(1200, 640))
+	if !page.sidebar.Visible() || page.sectionSelect.Visible() {
+		t.Fatal("wide settings page did not show its sidebar")
+	}
+	page.sidebar.SetSelected("DNS")
+	if page.sectionSelect.Selected != "DNS" || page.sectionContent.Objects[0] != page.dns.view {
+		t.Fatal("sidebar did not select the DNS section")
+	}
+	w.Resize(fyne.NewSize(480, 640))
+	if page.sidebar.Visible() || !page.sectionSelect.Visible() || page.sectionSelect.Selected != "DNS" || page.sectionContent.Objects[0] != page.dns.view {
+		t.Fatal("collapsed navigation lost the DNS section")
+	}
+	if page.sectionViews["Mihomo binary"].MinSize().Width > page.sectionContent.Size().Width {
+		t.Fatal("binary actions overflow the compact settings viewport")
+	}
+	page.sectionSelect.SetSelected("Mihomo binary")
+	if !page.sidebar.Visible() || page.sectionSelect.Visible() {
+		t.Fatal("settings switched to dropdown despite enough room for the sidebar")
+	}
+	page.sectionSelect.SetSelected("DNS")
+	if page.sidebar.Visible() || page.sectionContent.Size().Width < page.dns.view.MinSize().Width {
+		t.Fatal("DNS controls are clipped instead of collapsing the sidebar")
+	}
+	page.sectionSelect.SetSelected("Monitor")
+	if page.sidebar.Selected != "Monitor" || page.sectionContent.Objects[0] == page.dns.view {
+		t.Fatal("dropdown did not change sections")
+	}
+	w.Resize(fyne.NewSize(1200, 640))
+	if !page.sidebar.Visible() || page.sectionSelect.Visible() || page.sidebar.Selected != "Monitor" {
+		t.Fatal("expanding settings did not restore the selected sidebar section")
+	}
+}
+
 func findSettingsButton(object fyne.CanvasObject, text string) *widget.Button {
 	if button, ok := object.(*widget.Button); ok && button.Text == text {
 		return button

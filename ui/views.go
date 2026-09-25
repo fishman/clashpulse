@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/fishman/clashpulse/core"
@@ -999,8 +1000,39 @@ func (e *filterEditor) command() (ipc.Command, bool, error) {
 	return ipc.Command{Kind: ipc.CommandPutFilter, FilterID: id, Filter: patch}, true, nil
 }
 
+type settingsLayout struct{}
+
+func (settingsLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	return fyne.NewSize(fyne.Max(280, objects[1].MinSize().Width), 240)
+}
+
+func (settingsLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	sidebar, dropdown, content := objects[0], objects[1], objects[2]
+	gap := theme.Padding()
+	sideWidth := sidebar.MinSize().Width
+	if size.Width >= sideWidth+gap+content.MinSize().Width {
+		dropdown.Hide()
+		sidebar.Show()
+		sidebar.Move(fyne.NewPos(0, 0))
+		sidebar.Resize(fyne.NewSize(sideWidth, size.Height))
+		content.Move(fyne.NewPos(sideWidth+gap, 0))
+		content.Resize(fyne.NewSize(size.Width-sideWidth-gap, size.Height))
+		return
+	}
+	sidebar.Hide()
+	dropdown.Show()
+	dropdown.Move(fyne.NewPos(0, 0))
+	dropdown.Resize(fyne.NewSize(size.Width, dropdown.MinSize().Height))
+	content.Move(fyne.NewPos(0, dropdown.Size().Height+gap))
+	content.Resize(fyne.NewSize(size.Width, size.Height-dropdown.Size().Height-gap))
+}
+
 type settingsPage struct {
 	view                fyne.CanvasObject
+	sidebar             *widget.RadioGroup
+	sectionSelect       *widget.Select
+	sectionContent      *fyne.Container
+	sectionViews        map[string]fyne.CanvasObject
 	binary              *widget.Label
 	binaryPath          string
 	threshold           *widget.Label
@@ -1048,32 +1080,58 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 			p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{MonitorIntervalSeconds: &value}})
 		}
 	})
-	p.view = container.NewVScroll(container.NewVBox(
-		widget.NewLabelWithStyle("Settings", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		widget.NewLabelWithStyle("Mihomo binary", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		p.binary,
-		container.NewHBox(
-			widget.NewButton("Use system Mihomo", func() {
-				value := "system"
-				p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{Binary: &value}})
-			}),
-			widget.NewButton("Use bundled Mihomo", func() {
-				value := "bundled"
-				p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{Binary: &value}})
-			}),
-			widget.NewButton("Choose executable path", p.editBinaryPath),
+	sections := []string{"Mihomo binary", "System Proxy", "Monitor", "DNS"}
+	p.sectionViews = map[string]fyne.CanvasObject{
+		"Mihomo binary": container.NewVBox(
+			widget.NewLabelWithStyle("Mihomo binary", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+			p.binary,
+			container.NewVBox(
+				widget.NewButton("Use system Mihomo", func() {
+					value := "system"
+					p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{Binary: &value}})
+				}),
+				widget.NewButton("Use bundled Mihomo", func() {
+					value := "bundled"
+					p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{Binary: &value}})
+				}),
+				widget.NewButton("Choose executable path", p.editBinaryPath),
+			),
 		),
-		widget.NewLabelWithStyle("System proxy", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		p.systemProxy,
-		p.proxyStatus,
-		widget.NewLabelWithStyle("Monitor", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		p.monitor,
-		container.NewHBox(widget.NewLabel("Monitor interval"), p.interval),
-		container.NewHBox(widget.NewLabel("Alert threshold"), p.threshold, widget.NewButton("Change", p.editThreshold)),
-		widget.NewButton("Edit probe policy", p.editMonitorPolicy),
-		p.dns.view,
-	))
+		"System Proxy": container.NewVBox(
+			widget.NewLabelWithStyle("System proxy", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+			p.systemProxy, p.proxyStatus,
+		),
+		"Monitor": container.NewVBox(
+			widget.NewLabelWithStyle("Monitor", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+			p.monitor,
+			container.NewHBox(widget.NewLabel("Monitor interval"), p.interval),
+			container.NewHBox(widget.NewLabel("Alert threshold"), p.threshold, widget.NewButton("Change", p.editThreshold)),
+			widget.NewButton("Edit probe policy", p.editMonitorPolicy),
+		),
+		"DNS": p.dns.view,
+	}
+	p.sectionContent = container.NewStack(p.sectionViews[sections[0]])
+	p.sidebar = widget.NewRadioGroup(sections, p.selectSection)
+	p.sectionSelect = widget.NewSelect(sections, p.selectSection)
+	p.sidebar.SetSelected(sections[0])
+	p.sectionSelect.SetSelected(sections[0])
+	p.view = container.New(settingsLayout{}, p.sidebar, p.sectionSelect, container.NewVScroll(p.sectionContent))
 	return p
+}
+
+func (p *settingsPage) selectSection(name string) {
+	view, ok := p.sectionViews[name]
+	if !ok || p.sectionContent.Objects[0] == view {
+		return
+	}
+	p.sectionContent.Objects = []fyne.CanvasObject{view}
+	p.view.Refresh()
+	if p.sidebar.Selected != name {
+		p.sidebar.SetSelected(name)
+	}
+	if p.sectionSelect.Selected != name {
+		p.sectionSelect.SetSelected(name)
+	}
 }
 
 func (p *settingsPage) editBinaryPath() {
