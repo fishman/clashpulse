@@ -318,6 +318,63 @@ key dispatch, incremental stable-ID list diffs, and rendering are separate from
 control logic. It redraws from IPC events only; progress is a non-focus-stealing
 row driven by job events.
 
+### TUI chrome and tables
+
+ClashPulse uses the released `github.com/fishman/notmutt/lib/tui` theme,
+chrome, and table modules already pinned in `go.mod`. Notmutt's checked-in
+default is One Dark, not Catppuccin: use Catppuccin Mocha colors explicitly
+while retaining Notmutt's tab-strip and padded status-segment geometry. The
+palette uses base `#1e1e2e`, text `#cdd6f4`, surface `#313244`, muted
+`#7f849c`, blue `#89b4fa`, green `#a6e3a1`, yellow `#f9e2af`, and red
+`#f38ba8`; selection and active tabs have a filled blue accent. Resolve
+semantic styles once and render only changed rows.
+
+The first terminal row is the full-width `chrome.Tabs` strip for the existing
+fixed views and key bindings. Remove the extra `ClashPulse - <view>` title
+row; on narrow terminals `chrome.Tabs` retains the active tab. Below it,
+render a per-view column header and a stable-ID, windowed table using one
+`table.Layout` for headers and rows. Do not rebuild row selection or modal
+state on unrelated snapshot changes. Hide low-priority columns when they
+cannot fit; preserve name/identity and the most relevant state, and show
+secondary details for the selected row without leaking private input.
+
+Columns at full width:
+
+- Proxies: group, proxy, selected, latency, outcome, automation. Group rows
+  remain recognizable and only eligible managed selectors accept manual
+  selection.
+- Subscriptions: name, source host, active/enabled state, last check, next
+  refresh, usage. Pending activation and failures remain visible in the
+  selected-row details.
+- Filter lists: name, format, target, source host, enabled, validated, next
+  update. Keep hash, destination, and failure information in row details.
+- Data resources: name (stable ID), type, format, source host, enabled,
+  validated, next update. Show rule type, hash, destination, timestamps, and
+  last result in row details.
+- Settings: setting and current value; Overview remains a status summary
+  rather than forcing unrelated events into a data table.
+
+The source column is explicitly the sanitized `SourceHost` already present in
+IPC snapshots, never a full URL or private local path. Subscription/resource
+URLs and proxy credentials remain restricted to authenticated edit requests;
+do not expand the snapshot protocol to populate a visual column. Modal input
+continues to mask private values.
+
+Use one `chrome.Status` row with distinct segments: IPC connected, active
+subscription display name, job progress, and pending commands. The active
+profile name comes from the authenticated snapshot; absent an active
+subscription, display `profile not reported` rather than inventing one.
+ClashPulse currently exits with a clear error when IPC closes; this visual
+change does not add reconnect behavior or claim a disconnected live state.
+Existing notice/error and key-help rows remain below the status row. The
+status layout drops lower-priority segments as width shrinks, keeping IPC
+connection and profile identity when they fit.
+
+Verify wide and narrow tcell renders for tab position, exact table alignment,
+column priority, status segments, stable cursor/modal state, and redaction.
+Smoke-run the real TUI against a disposable local IPC service; no direct
+Mihomo, network, or config I/O belongs in the renderer.
+
 ## Staged delivery
 
 ### Stage 1: foundations and configuration
