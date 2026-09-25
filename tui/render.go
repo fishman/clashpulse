@@ -1,19 +1,48 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/fishman/notmutt/lib/tui/chrome"
+	"github.com/fishman/notmutt/lib/tui/table"
+	"github.com/fishman/notmutt/lib/tui/theme"
 	"github.com/gdamore/tcell/v3"
+	"github.com/gdamore/tcell/v3/color"
+	"github.com/mattn/go-runewidth"
 )
 
+var styles = theme.Resolve(theme.Palette{Base: map[string]string{
+	"fg": "#ffffff", "bg": "#000000", "muted": "#c0c0c0", "accent": "#00ffff", "error": "#ff0000", "modal": "#00008b",
+}}, "dark", map[string]theme.Style{
+	"normal":        {Fg: "fg", Bg: "bg"},
+	"muted":         {Fg: "muted"},
+	"accent":        {Fg: "accent", Attrs: []string{"bold"}},
+	"selected":      {Fg: "bg", Bg: "accent", Attrs: []string{"bold"}},
+	"error":         {Fg: "error"},
+	"modal":         {Bg: "modal"},
+	"tabbar":        {Fg: "muted"},
+	"tabbar.active": {Fg: "accent", Attrs: []string{"bold"}},
+	"status":        {Fg: "muted"},
+	"progress":      {Fg: "accent", Attrs: []string{"bold"}},
+})
+
+var compiledStyles = func() map[string]tcell.Style {
+	resolved := make(map[string]tcell.Style, len(styles))
+	for name, definition := range styles {
+		resolved[name] = compileStyle(definition)
+	}
+	return resolved
+}()
+
 var (
-	baseStyle     = tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorBlack)
-	mutedStyle    = tcell.StyleDefault.Foreground(tcell.ColorSilver).Background(tcell.ColorBlack)
-	accentStyle   = tcell.StyleDefault.Foreground(tcell.ColorAqua).Background(tcell.ColorBlack).Bold(true)
-	selectedStyle = tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.ColorAqua).Bold(true)
-	errorStyle    = tcell.StyleDefault.Foreground(tcell.ColorRed).Background(tcell.ColorBlack)
-	modalStyle    = tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorDarkBlue)
+	baseStyle     = styleForName("normal")
+	mutedStyle    = styleForName("muted")
+	accentStyle   = styleForName("accent")
+	selectedStyle = styleForName("selected")
+	errorStyle    = styleForName("error")
+	modalStyle    = styleForName("modal")
 	headerLayout  = lipgloss.NewStyle().Align(lipgloss.Center)
 	statusLayout  = lipgloss.NewStyle().Align(lipgloss.Left)
 )
@@ -21,6 +50,7 @@ var (
 type renderLine struct {
 	text string
 	role uint8
+	runs []chrome.Run
 }
 
 const (
@@ -36,7 +66,7 @@ type renderCache struct {
 	width, height     int
 	tab               Tab
 	previous, current []renderLine
-	blank, separator  string
+	blank             string
 }
 
 func render(screen tcell.Screen, model Model, cache *renderCache) {
@@ -48,7 +78,7 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 	if invalidate {
 		cache.width, cache.height, cache.tab = width, height, model.Tab
 		cache.previous, cache.current = make([]renderLine, height), make([]renderLine, height)
-		cache.blank, cache.separator = strings.Repeat(" ", width), strings.Repeat("-", width)
+		cache.blank = strings.Repeat(" ", width)
 		screen.SetStyle(baseStyle)
 		screen.Clear()
 	}
@@ -56,8 +86,18 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 		cache.current[i] = renderLine{}
 	}
 	setLine(cache.current, 0, headerLayout.Width(width).Render("ClashPulse - "+viewTitle(model.Tab)), roleAccent)
-	setLine(cache.current, 1, tabLine(model.Tab), roleMuted)
-	setLine(cache.current, 2, cache.separator, roleMuted)
+	labels := make([]string, len(tabs))
+	active := 0
+	for i, tab := range tabs {
+		labels[i] = itoa(i+1) + " " + viewTitle(tab)
+		if tab == model.Tab {
+			active = i
+		}
+	}
+	setRuns(cache.current, 1, chrome.Tabs(labels, active, width, "tabbar", "tabbar.active"))
+	layout := table.Layout{Cols: []table.Col{{Floor: 12, Cap: 24}}, Sep: "  "}
+	sizes := layout.Sizes(width, true)
+	setLine(cache.current, 2, layout.Line([]string{"Name", "Details"}, sizes), roleMuted)
 	rows := model.Rows()
 	contentHeight := height - 6
 	if contentHeight < 0 {
@@ -68,29 +108,26 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 		if row.Selected {
 			role = roleSelected
 		}
-		text := row.Title
-		if row.Detail != "" {
-			text += "  " + row.Detail
-		}
-		setLine(cache.current, 3+i, text, role)
+		setLine(cache.current, 3+i, layout.Line([]string{row.Title, row.Detail}, sizes), role)
 	}
 	if len(rows) == 0 && contentHeight > 0 {
 		setLine(cache.current, 3, " No items are currently reported by the service.", roleMuted)
 	}
 	if height >= 4 {
-		progress := model.Progress()
+		progress := []chrome.Segment{{Runs: []chrome.Run{{Text: model.Progress(), Style: "progress"}}, Priority: 10}}
+		var pending []chrome.Segment
 		if model.Pending > 0 {
-			progress += " | sending " + itoa(model.Pending)
+			pending = append(pending, chrome.Segment{Runs: []chrome.Run{{Text: "sending " + itoa(model.Pending), Style: "status"}}, Priority: 5})
 		}
-		setLine(cache.current, height-3, progress, roleAccent)
+		setRuns(cache.current, height-3, chrome.Status(width, "status", progress, pending))
 		if model.Notice != "" {
-			role := roleMuted
+			style := "status"
 			if strings.HasPrefix(model.Notice, "Command failed:") || strings.HasPrefix(model.Notice, "Managed source command failed") {
-				role = roleError
+				style = "error"
 			}
-			setLine(cache.current, height-2, model.Notice, role)
+			setRuns(cache.current, height-2, chrome.Status(width, "status", []chrome.Segment{{Runs: []chrome.Run{{Text: model.Notice, Style: style}}, Priority: 10}}, nil))
 		}
-		setLine(cache.current, height-1, strings.Join(model.Help(), "   "), roleMuted)
+		setRuns(cache.current, height-1, chrome.Status(width, "status", []chrome.Segment{{Runs: []chrome.Run{{Text: strings.Join(model.Help(), "   "), Style: "muted"}}, Priority: 10}}, nil))
 	}
 	if model.Modal != nil {
 		message := modalPrompt(model.Modal.Kind)
@@ -135,11 +172,18 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 	}
 	changed := invalidate
 	for y, line := range cache.current {
-		if !invalidate && line == cache.previous[y] {
+		previous := cache.previous[y]
+		if !invalidate && line.text == previous.text && line.role == previous.role && slices.Equal(line.runs, previous.runs) {
 			continue
 		}
 		screen.PutStrStyled(0, y, cache.blank, baseStyle)
-		if line.text != "" {
+		if len(line.runs) > 0 {
+			x := 0
+			for _, run := range line.runs {
+				putText(screen, x, y, width-x, run.Text, styleForName(run.Style))
+				x += runewidth.StringWidth(run.Text)
+			}
+		} else if line.text != "" {
 			putText(screen, 0, y, width, line.text, styleForRole(line.role))
 		}
 		changed = true
@@ -168,6 +212,12 @@ func modalDisplayInput(modal *Modal) string {
 func setLine(lines []renderLine, y int, text string, role uint8) {
 	if y >= 0 && y < len(lines) {
 		lines[y] = renderLine{text: text, role: role}
+	}
+}
+
+func setRuns(lines []renderLine, y int, runs []chrome.Run) {
+	if y >= 0 && y < len(lines) {
+		lines[y] = renderLine{runs: runs}
 	}
 }
 
@@ -212,16 +262,34 @@ func visibleRows(rows []Row, height int) []Row {
 	return rows[start : start+height]
 }
 
-func tabLine(active Tab) string {
-	labels := make([]string, 0, len(tabs))
-	for index, tab := range tabs {
-		label := viewTitle(tab)
-		if tab == active {
-			label = "[" + label + "]"
-		}
-		labels = append(labels, itoa(index+1)+" "+label)
+func styleForName(name string) tcell.Style {
+	if style, ok := compiledStyles[name]; ok {
+		return style
 	}
-	return strings.Join(labels, "   ")
+	return compiledStyles["normal"]
+}
+
+func compileStyle(definition theme.Style) tcell.Style {
+	style := tcell.StyleDefault
+	if definition.Fg != "" {
+		style = style.Foreground(color.GetColor(definition.Fg))
+	}
+	if definition.Bg != "" {
+		style = style.Background(color.GetColor(definition.Bg))
+	}
+	for _, attribute := range definition.Attrs {
+		switch attribute {
+		case "bold":
+			style = style.Bold(true)
+		case "italic":
+			style = style.Italic(true)
+		case "underline":
+			style = style.Underline(true)
+		case "reverse":
+			style = style.Reverse(true)
+		}
+	}
+	return style
 }
 
 func putText(screen tcell.Screen, x, y, width int, text string, style tcell.Style) {
