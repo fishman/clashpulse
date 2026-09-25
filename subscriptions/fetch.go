@@ -116,7 +116,9 @@ func (s *Service) refresh(ctx context.Context, id string, supplied *config.Subsc
 			s.recordFailure(id, checkedAt, ErrNoSnapshot)
 			return Result{}, ErrNoSnapshot
 		}
-		s.touch(id, checkedAt, response.ETag, response.LastModified, usage)
+		if err := s.touch(id, checkedAt, response.ETag, response.LastModified, usage); err != nil {
+			return Result{}, err
+		}
 		if usage == nil {
 			usage = record.Usage
 		}
@@ -125,9 +127,11 @@ func (s *Service) refresh(ctx context.Context, id string, supplied *config.Subsc
 	profile := response.Body
 	profileHash := hashBytes(profile)
 	if record.Hash != "" && profileHash == record.Hash {
-		// Conditional success and hash equality update memory only. No files,
-		// generated config, or active Mihomo process is touched.
-		s.touch(id, checkedAt, response.ETag, response.LastModified, usage)
+		// Equal bytes do not regenerate config or restart Mihomo. Recovery
+		// persists the cleared failure; healthy checks remain write-free.
+		if err := s.touch(id, checkedAt, response.ETag, response.LastModified, usage); err != nil {
+			return Result{}, err
+		}
 		if usage == nil {
 			usage = record.Usage
 		}

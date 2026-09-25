@@ -37,6 +37,52 @@ func TestRefreshUsesConfiguredUserAgent(t *testing.T) {
 	}
 }
 
+func TestRefresh304ClearsPriorFailureAndPublishesRecovery(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		switch requests {
+		case 1:
+			w.Header().Set("ETag", `"good"`)
+			_, _ = w.Write([]byte("proxies:\n  - name: stable\n    type: direct\n"))
+		case 2:
+			w.WriteHeader(http.StatusNotAcceptable)
+		default:
+			if r.Header.Get("If-None-Match") != `"good"` {
+				t.Fatal("conditional validator lost after failed refresh")
+			}
+			w.WriteHeader(http.StatusNotModified)
+		}
+	}))
+	defer server.Close()
+	store, service := makeService(t, server, nil, nil)
+	changes := 0
+	service.options.OnChange = func() { changes++ }
+	if _, err := service.Add(config.Subscription{ID: "recovery", URL: server.URL, AllowHTTP: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Refresh(context.Background(), "recovery"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Refresh(context.Background(), "recovery"); err != ErrFetch {
+		t.Fatalf("failed refresh = %v", err)
+	}
+	if _, err := service.Refresh(context.Background(), "recovery"); err != nil {
+		t.Fatalf("304 recovery = %v", err)
+	}
+	if changes != 3 {
+		t.Fatalf("recovered issue was not published: changes=%d", changes)
+	}
+	reopened, err := NewStore(store.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, ok := reopened.get("recovery")
+	if !ok || record.LastFailure != "" {
+		t.Fatal("successful 304 left a stale persisted failure")
+	}
+}
+
 func TestRefresh304AndIdenticalHashDoNotWriteState(t *testing.T) {
 	profile := []byte("proxies:\n  - name: stable\n    type: direct\n")
 	requests := 0

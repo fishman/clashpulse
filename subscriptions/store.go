@@ -397,26 +397,32 @@ func (s *Store) delete(id string) error {
 	return nil
 }
 
-func (s *Store) touchSuccess(id string, checkedAt time.Time, etag, lastModified string, usage *Usage) {
+func (s *Store) touchSuccess(id string, checkedAt time.Time, etag, lastModified string, usage *Usage) (bool, error) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	record, ok := s.records[id]
-	if ok {
-		record.CheckedAt = checkedAt
-		record.LastSuccess = checkedAt
-		if etag != "" {
-			record.ETag = etag
-		}
-		if lastModified != "" {
-			record.LastModified = lastModified
-		}
-		if usage != nil {
-			record.Usage = cloneUsage(usage)
-		}
-		record.LastFailureAt = time.Time{}
-		record.LastFailure = ""
-		s.records[id] = record
+	if !ok {
+		return false, ErrNotFound
 	}
-	s.mu.Unlock()
+	recovered := record.LastFailure != ""
+	record.CheckedAt = checkedAt
+	record.LastSuccess = checkedAt
+	if etag != "" {
+		record.ETag = etag
+	}
+	if lastModified != "" {
+		record.LastModified = lastModified
+	}
+	if usage != nil {
+		record.Usage = cloneUsage(usage)
+	}
+	record.LastFailureAt = time.Time{}
+	record.LastFailure = ""
+	if recovered && s.writeRecord(filepath.Join(s.dir, id), record) != nil {
+		return false, ErrStore
+	}
+	s.records[id] = record
+	return recovered, nil
 }
 
 func (s *Store) touchFailure(id string, checkedAt time.Time, failure string) bool {

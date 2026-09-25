@@ -371,7 +371,14 @@ func (s *Service) dueIDs(now time.Time, excluded map[string]bool) ([]string, tim
 
 func (s *Service) wakeups() <-chan struct{} { return s.wake }
 
-func (s *Service) touch(id string, checkedAt time.Time, etag, lastModified string, usage *Usage) {
-	s.store.touchSuccess(id, checkedAt, etag, lastModified, usage)
+func (s *Service) touch(id string, checkedAt time.Time, etag, lastModified string, usage *Usage) error {
+	recovered, err := s.store.touchSuccess(id, checkedAt, etag, lastModified, usage)
+	if err != nil {
+		return err
+	}
+	if recovered && s.options.OnChange != nil {
+		s.options.OnChange()
+	}
 	s.signalWake()
+	return nil
 }
