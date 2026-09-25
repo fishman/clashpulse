@@ -375,6 +375,36 @@ column priority, status segments, stable cursor/modal state, and redaction.
 Smoke-run the real TUI against a disposable local IPC service; no direct
 Mihomo, network, or config I/O belongs in the renderer.
 
+### Shared terminal modal primitives
+
+Extract the reusable, mail-independent parts of notmutt's dialogue overlay
+into its existing `github.com/fishman/notmutt/lib/tui` module as a small
+`modal` package: bottom-anchored bordered-box geometry that reserves footer
+rows, and display-cell-aware text-entry wrapping with a visible cursor. The
+functions own neither model state, key dispatch, commands, styling, nor
+secrets. Notmutt keeps its mail-specific `dialogue` actions and lipgloss
+border styling; its existing dialogue/compose overlays and text prompts call
+the shared geometry/wrapping functions without changing frame height or
+dropping the bottom keyhint/status rows.
+
+ClashPulse uses the same bottom-anchored geometry for its text, confirmation,
+and wizard modals. The tcell renderer draws its Catppuccin border and rows
+above the notice, key-help, and bottommost status rows, even on a full list.
+On a terminal too short or narrow for the border plus one content row, keep
+the existing modal input state but do not draw outside the screen. A long
+Unicode input wraps on display cells and windows to keep its cursor visible.
+ClashPulse must mask source URLs and resolver credentials before handing
+display text to the shared modal renderer; the shared package never receives
+controller credentials or IPC objects. Modal focus, field validation, wizard
+transitions, and intent dispatch remain client-owned.
+
+The user authorized publishing the new shared module version. After
+Notmutt's library and TUI tests pass, tag and push `lib/tui/v0.1.1` in the
+Notmutt repository, then pin `github.com/fishman/notmutt/lib/tui v0.1.1`
+exactly in ClashPulse. Never commit a local `replace`, `go.work`, or an
+unreleased module dependency. Verify both module consumers and the real
+ClashPulse TUI against a disposable IPC service before delivery.
+
 ## Staged delivery
 
 ### Stage 1: foundations and configuration
