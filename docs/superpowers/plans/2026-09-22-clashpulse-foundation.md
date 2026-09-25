@@ -21,6 +21,9 @@
 - IPC is Unix socket in a 0700 directory or Windows named pipe; never TCP.
 - Subscription URLs, credentials, controller secret, proxy credentials, and profile body never enter logs, IPC snapshots, or user-visible errors.
 - First release controls HTTP/HTTPS System Proxy only. TUN, DNS redirection, service managers, core auto-download, profile editors, and subscription pools are out of scope.
+- The user authorized `references/notmutt` tag `lib/tui/v0.1.1`; publish it only after Notmutt tests, then pin module `github.com/fishman/notmutt/lib/tui v0.1.1` exactly in ClashPulse. No local `replace` or copied shared code.
+- IPC protocol 3 carries only safe subscription policy fields and a bounded 200-entry sanitized diagnostic ring; full URLs, custom User-Agent, credentials, raw HTTP bodies, and raw Mihomo logs stay private.
+- The bottommost TUI row remains the status bar; configuration form tables use declarative keys and do no I/O. The GUI keeps `widget.List` virtualization and has no visible pipe-delimited summaries or data rows.
 
 ---
 
@@ -974,6 +977,655 @@ the project DRY pass, rerun formatter and focused test, then commit only the
 TUI files with `feat(tui): add catppuccin chrome and tables` if the user
 authorizes a commit.
 
+## Task 13: Release shared modal geometry and configuration form table
+
+**Scope:** `references/notmutt/` is a separate Git repository. The user
+authorized the nested module release `lib/tui/v0.1.1`. Notmutt consumes
+geometry/wrapping; its mail actions stay local. ClashPulse consumes the new
+form table. No new dependency or raw secret logging.
+
+**Files:** Create `references/notmutt/lib/tui/modal/modal.go`,
+`modal/modal_test.go`, `references/notmutt/lib/tui/form/form.go`, and
+`form/form_test.go`; modify `references/notmutt/src/tui/model.go` at
+`spliceBox` and `textDialogue.wrap`. Its `compose.go` caller stays unchanged.
+
+**Produces in package `modal`:**
+
+```go
+type Box struct { X, Y, Width, Height, BodyRows int }
+func Bottom(width, height, bodyRows, footerRows int) (Box, bool)
+func Wrap(text string, cursorByte, cellWidth, maxRows int) (rows []string, cursorRow, cursorCol int)
+```
+
+**Produces in sibling package `form`:**
+
+```go
+type Kind uint8
+const (Text Kind = iota; Toggle; Choice)
+type Field struct { ID, Label, Value string; Kind Kind; Choices []string; Sensitive, ReadOnly bool }
+type Change struct { ID, Value string }
+type Row struct { ID, Text string; Selected bool }
+type Form struct { fields []Field; selected, offset, cursor int; editing bool; edited map[string]string }
+func New(fields []Field) (*Form, error)
+func (f *Form) Clone() *Form
+func (f *Form) Move(delta int)
+func (f *Form) Toggle() bool
+func (f *Form) Cycle(delta int) bool
+func (f *Form) SetText(value string) bool
+func (f *Form) Insert(text string) bool
+func (f *Form) Backspace() bool
+func (f *Form) MoveCursor(delta int)
+func (f *Form) Changes() []Change
+func (f *Form) Cancel()
+func (f *Form) Rows(width, height int) []Row
+```
+
+`Form` receives action intentions after the client resolves its TOML
+keymap; it owns no key strings or IPC commands. `Rows` aligns Field/Value
+with the existing shared `table.Layout`, masks every sensitive input,
+and windows to the selected stable field ID. Changes contain only edited
+fields; Toggle flips `true`/`false` and Choice cycles declared values.
+`form.New` rejects duplicate IDs, unknown kinds, and invalid choices,
+and copies its input fields/options so a snapshot update cannot mutate an
+in-progress form. Text is bounded to 4096 bytes; domain validation and
+conversion to typed intent remain with ClashPulse. A blank sensitive
+field means unchanged; an explicit `-` clear is interpreted by the client.
+
+- [ ] **Step 1: Write failing shared-library tests**
+
+In `modal/modal_test.go` and `form/form_test.go`:
+
+```go
+func TestBottomReservesFooterAndCapsBody(t *testing.T) {
+    box, ok := Bottom(40, 10, 10, 2)
+    if !ok || box.Y != 1 || box.Height != 7 || box.BodyRows != 5 { t.Fatalf("box = %+v %t", box, ok) }
+    if _, ok := Bottom(2, 10, 1, 2); ok { t.Fatal("border did not fit") }
+}
+func TestWrapKeepsWideRuneAndCursorVisible(t *testing.T) {
+    text := "\u4e2d\u56fdabc"
+    rows, row, col := Wrap(text, len(text), 4, 2)
+    if len(rows) != 2 || rows[0] != "\u4e2d\u56fd" || rows[1] != "abc" || row != 1 || col != 3 {
+        t.Fatalf("wrap = %q cursor %d,%d", rows, row, col)
+    }
+}
+```
+
+In `form/form_test.go` (package `form`):
+
+```go
+func TestFormTogglesAndMasksSensitiveValues(t *testing.T) {
+    form, err := New([]Field{{ID: "url", Label: "Source", Kind: Text, Sensitive: true},
+        {ID: "enabled", Label: "Enabled", Kind: Toggle, Value: "false"}})
+    if err != nil { t.Fatal(err) }
+    form.SetText("https://private.invalid/?token=secret")
+    form.Move(1)
+    if !form.Toggle() || len(form.Changes()) != 2 { t.Fatal("toggle or edit was lost") }
+    for _, row := range form.Rows(40, 2) {
+        if strings.Contains(row.Text, "secret") { t.Fatal("sensitive value rendered") }
+    }
+    form.Cancel()
+    if len(form.Changes()) != 0 { t.Fatal("cancel retained pending edits") }
+}
+```
+
+Add a choice-cycle and long-field-list viewport test that asserts the
+selected field remains visible after scrolling. Run from `lib/tui`:
+`go test ./modal ./form -run '^Test(BottomReservesFooterAndCapsBody|WrapKeepsWideRuneAndCursorVisible|FormTogglesAndMasksSensitiveValues)$' -count=1`;
+expected RED because the package does not exist.
+
+- [ ] **Step 2: Implement separate modal geometry and form-table state**
+
+`Bottom` reserves one top tab row, two border rows, and `footerRows`;
+it caps body rows and returns false when no body row fits. `Wrap` counts
+`runewidth` cells, clamps a byte cursor to a rune boundary, and windows
+its rows. `Form` stores only its copied field descriptions and pending
+values; `Rows` returns display text (masked for Sensitive) and selection,
+never a raw URL. `Changes` returns edited IDs/values only; `Cancel`
+discards pending edits. No raw key events, filesystem, or network.
+Run `go test ./modal ./form -count=1` GREEN.
+
+- [ ] **Step 3: Migrate Notmutt's existing overlay primitives**
+
+In `spliceBox`, call `modal.Bottom(width,len(lines),len(content),2)`,
+window body rows to `box.BodyRows` before lipgloss adds the existing
+configurable border, and splice complete rows at `box.Y`. In
+`textDialogue.wrap`, keep the current sanitization and label width,
+then delegate entry wrapping/cursor to
+`modal.Wrap(entry,d.cur,w,max(1,m.height-5))`. Do not move the mail
+`dialogue.handle` interface, Lua hooks, or Notmutt styling. Notmutt need
+not instantiate `form.Form` in this release.
+
+- [ ] **Step 4: Verify and publish the authorized module tag**
+
+Run `gofmt -w lib/tui/modal/modal.go lib/tui/modal/modal_test.go lib/tui/form/form.go lib/tui/form/form_test.go src/tui/model.go`,
+`go test ./...` from `lib/tui`, and
+`go test ./tui -run '^Test(DialogueBox|DialogueCursorEditing|DialogueEditorKeys)' -count=1`
+from `src`. Recheck Notmutt status for user edits; stage only the files
+above and commit `feat(tui): share modal layout and form tables`.
+Confirm `git tag -l lib/tui/v0.1.1` is empty, tag that tested commit,
+then `git push origin lib/tui/v0.1.1` (authorized). Do not push a branch
+or force-push without separate authorization. Verify nested module tag
+fetchability; on failure preserve local commits and report the blocker.
+
+## Task 14: Pin shared modal and migrate subscription editing
+
+**Files:** Modify `go.mod`, `go.sum`, `core/snapshot.go`, `app/runtime.go`,
+`app/snapshot_stability_test.go`, `ipc/protocol.go`, `ui/views.go`,
+`ui/subscription_editor_test.go`, `tui/model.go`, `tui/render.go`,
+`tui/keys.go`, `tui/keys.toml`, `tui/model_test.go`,
+`tui/render_test.go`, `tui/secret_modal_test.go`. Do not add a URL or
+custom User-Agent to snapshots. Task 15 bumps IPC once for the combined
+schema before either task is shipped.
+
+**Consumes:** Tagged module `github.com/fishman/notmutt/lib/tui v0.1.1`:
+`modal.Bottom`, `modal.Wrap`, and `form.Form`, `form.Field`, `form.Row`,
+`form.Change` from Task 13.
+**Produces:** `core.SubscriptionSnapshot` additionally carries safe current
+`Route string`, `AllowHTTP`, `AllowInvalidTLS` booleans,
+`RefreshIntervalSeconds`, and `TimeoutSeconds` (bounded integers).
+`Model.Modal` retains a cloned `*form.Form` for an open configuration form;
+commands remain typed `ipc.SubscriptionEdit`.
+
+- [ ] **Step 1: Write subscription form and footer tests RED**
+
+In `tui/model_test.go`, open a new subscription with `n`, enter stable ID,
+name, private source URL and optional custom agent in their Field/Value
+rows, toggle Enabled with Space, and Save with Ctrl+S. Assert exactly one
+`CommandPutSubscription` carries the changed typed fields; Cancel carries
+none. For editing, use a snapshot with Route `direct`, HTTP/TLS false,
+refresh and timeout values. Toggle AllowHTTP and select `mihomo_proxy`;
+Save must retain the absent URL and User-Agent, preserve the selected
+subscription ID, and send the current toggles. `Model.Apply` of an
+unrelated job event must preserve pending form edits. Replace the old
+step-by-step wizard tests with these observable command/transition tests,
+not a parallel deprecated editor.
+
+```go
+func TestSubscriptionFormKeepsPrivateSourceOnToggle(t *testing.T) {
+    model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Subscriptions:
+        []core.SubscriptionSnapshot{{ID: "feed", Name: "Feed", SourceHost: "provider.example", Route: "direct"}}}})
+    model.Tab = TabSubscriptions
+    model.Selection[TabSubscriptions] = "subscription:feed"
+    model, _, _ = model.HandleKey("e")
+    if model.Modal == nil || model.Modal.Form == nil { t.Fatal("form table not opened") }
+    for i := 0; i < 7; i++ { model, _, _ = model.HandleKey("down") }
+    model, _, _ = model.HandleKey("space")
+    model, command, quit := model.HandleKey("ctrl+s")
+    if quit || model.Modal != nil || command == nil || command.Subscription == nil ||
+        command.Subscription.AllowHTTP == nil || !*command.Subscription.AllowHTTP ||
+        command.Subscription.URL != nil || command.Subscription.UserAgent != nil {
+        t.Fatal("HTTP toggle changed private source or failed to submit")
+    }
+}
+```
+
+The final test must assert the `ipc.Command` payload and no source URL/agent
+field, not merely the modal closing. In `tui/render_test.go`, assert a
+bordered form at `80x16`, status at bottom, hotkeys above it, masked URL
+and agent, and scroll-preserved selection at `30x9`. At `20x5` no box may
+draw outside the viewport. Name tests
+`TestSubscriptionFormKeepsPrivateSourceOnToggle`,
+`TestSubscriptionFormMasksInputsAndKeepsFooter`, and
+`TestSubscriptionSafePolicySnapshot`. Run
+`go test -tags ci ./tui ./app -run '^TestSubscription(FormKeepsPrivateSourceOnToggle|FormMasksInputsAndKeepsFooter|SafePolicySnapshot)$' -count=1`;
+expected RED against the wizard and missing snapshot policy fields.
+
+- [ ] **Step 2: Pin and render the released modal package**
+
+Run `go get github.com/fishman/notmutt/lib/tui@v0.1.1`; verify exact pin,
+sum, and no committed `replace` or `go.work`. Use `modal.Bottom` with
+three reserved footer rows and `modal.Wrap` on masked display text.
+Draw the border and aligned shared form rows with Catppuccin tcell styles;
+keep focus and pending input if width/height cannot fit. Binary and
+confirmation modals use the same geometry, not a duplicate box builder.
+
+- [ ] **Step 3: Cut over the subscription editor completely**
+
+Construct fields ID, Name, URL, User-Agent, Enabled, Refresh seconds,
+Timeout seconds, Route choice, Allow HTTP, and Allow invalid TLS in
+`tui/model.go`. Add declarative `form` context bindings to keys.toml:
+up/down select, Space toggle, Enter edit/cycle, Left/Right choice, Ctrl+S
+save, Esc cancel. Extend `NewKeymap` to recognize the form context;
+`Model.HandleKey` resolves its actions before app-specific validation.
+On edit, start on Name (ID is read-only) and preserve selection by stable
+field ID across unrelated snapshots.
+Clone the shared `Form` when copying `Model.Modal`, so unrelated IPC
+snapshots do not mutate it. Map `Form.Changes()` to a single validated
+`ipc.SubscriptionEdit` on Save; URL/User-Agent unchanged unless explicitly
+edited, and `-` clears the override. Remove old field-step state and
+prompt/wizard code for subscriptions. In `app.stateSnapshot`, expose only
+the safe current policy fields above; `ipc.validateSnapshot` bounds them.
+Preselect GUI route, refresh, timeout, and HTTP/TLS opt-ins from those safe
+snapshot fields; keep URL and custom User-Agent as blank private edit
+inputs. Changing one field never overwrites another or triggers refresh
+before the normal app command path.
+Do not advance IPC version independently here; Task 15 completes the
+version-3 schema before release.
+
+- [ ] **Step 4: Verify package and subscriptions editor**
+
+Run `gofmt -w` on modified Go files,
+`go test -tags ci ./tui ./app ./ipc -count=1`, and
+`GOOS=windows CGO_ENABLED=0 go build -tags ci ./...`. Smoke-run
+subscription edit against a disposable IPC service on a PTY. Never use
+the real subscription token or raw proxy profile as a fixture.
+
+## Task 15: Typed HTTP status and app-owned diagnostic snapshots
+
+**Files:** Modify `download/client.go`, `download/fetch_test.go`,
+`subscriptions/fetch.go`, `subscriptions/model.go`, `subscriptions/store.go`,
+`subscriptions/fetch_test.go`, `app/runtime.go`, `app/serve.go`,
+`core/snapshot.go`, `core/snapshot_test.go`, `ipc/protocol.go`,
+`ipc/protocol_test.go`; create `app/diagnostics_test.go`. Keep raw HTTP
+bodies and raw transport error strings out of the protocol.
+
+**Interfaces:**
+
+```go
+// download
+type StatusError struct{ Code int }
+func (e StatusError) Error() string
+// subscriptions
+type FetchStatusError struct{ Code int }
+func (e FetchStatusError) Error() string
+func (e FetchStatusError) Unwrap() error // returns ErrFetch
+// core
+type DiagnosticSnapshot struct { At int64; Severity, Kind, SourceID, Message string }
+// Snapshot gains Diagnostics []DiagnosticSnapshot; ErrorSnapshot gains SourceID.
+```
+
+```go
+// app only: raw errors enter safeDiagnostic, not the ring writer.
+type diagnosticEvent struct { Severity, Kind, SourceID, Message string; At time.Time }
+func safeDiagnostic(kind, sourceID string, err error) diagnosticEvent
+func (s *runtimeService) appendDiagnostic(event diagnosticEvent)
+func (s *runtimeService) resolveIssue(kind, sourceID string)
+```
+
+`runtimeService` is the sole writer of a maximum 200-entry in-memory ring;
+`core.CloneSnapshot` copies it. `ipc.ProtocolVersion` becomes 3 and
+`validateSnapshot` bounds count and message bytes. Active issues are keyed
+by `(kind, sourceID)`; a successful operation clears its own issue only.
+Client views consume this typed snapshot in Task 16.
+
+- [ ] **Step 1: Prove HTTP 406 classification without exposing a body**
+
+Use `httptest.NewServer` returning `406` with an HTML body containing a
+synthetic token; `download.Client.Fetch` must return `StatusError{Code:406}`
+and no token/body in `Error()`. In subscriptions, call `Service.Refresh`
+through a real service fixture and assert `errors.Is(err, ErrFetch)` plus
+`errors.As(err, &status)` where `status.Code == 406`; last failure is a
+bounded safe `HTTP 406` label, not the URL. Add a second `200` response and
+assert the existing recovery behavior clears that failure. Write the failing test:
+
+```go
+func TestHTTPStatusErrorIsSafe(t *testing.T) {
+    server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+        w.WriteHeader(http.StatusNotAcceptable)
+        _, _ = w.Write([]byte("<html>private-token</html>"))
+    }))
+    defer server.Close()
+    client := NewClient(func(Route) (http.RoundTripper, error) { return http.DefaultTransport, nil })
+    _, err := client.Fetch(context.Background(), Request{
+        URL: server.URL + "/profile?token=private-token", Route: Direct, MaxBytes: 64, AllowHTTP: true,
+    })
+    var status StatusError
+    if !errors.As(err, &status) || status.Code != 406 || strings.Contains(err.Error(), "private-token") || strings.Contains(err.Error(), "<html>") {
+        t.Fatalf("unsafe status classification: %T", err)
+    }
+}
+```
+
+Run: `go test ./download ./subscriptions -run '^Test(HTTPStatusErrorIsSafe|RefreshReportsSafeHTTPStatus)$' -count=1`;
+expected RED before typed errors exist.
+
+- [ ] **Step 2: Implement safe status propagation**
+
+In `download.Client.Fetch`, replace the 2xx-range error at the status branch
+with `StatusError{Code:response.StatusCode}` after closing the body. In
+`subscriptions.refresh`, recognize only that typed error with `errors.As`,
+store a failure string constructed from its numeric code, and return
+`FetchStatusError` wrapping `ErrFetch`; retain existing behavior for network,
+parse, validation, and cancellation failures. In `Store.validFailure`, accept
+only `HTTP 400` through `HTTP 599` in addition to existing fixed sentinel
+strings. `publicFailureLabel` displays the safe code but never a URL.
+Preserve old known-good bytes on every failed request.
+
+- [ ] **Step 3: Prove bounded redacted history and independent issue clearing**
+
+Add app/core/ipc regressions with synthetic safe IDs and a private URL in
+an underlying `errors.New` value: an app error entry must exclude the URL,
+the 201st entry drops the oldest and keeps the latest 200, and recovery of
+subscription `alpha` removes only `(refresh_subscription, alpha)` while
+`(resource, beta)` remains. Snapshot cloning must not share the diagnostic
+slice; a protocol-2 client must be rejected by a protocol-3 service.
+Write this failing ring test and the named issue/clone/version tests:
+
+```go
+func TestDiagnosticsBoundedAndRedacted(t *testing.T) {
+    service := &runtimeService{}
+    secret := "https://private.invalid/profile?token=secret"
+    event := safeDiagnostic("refresh_subscription", "alpha", errors.New(secret))
+    if strings.Contains(event.Message, "secret") || strings.Contains(event.Message, "private.invalid") {
+        t.Fatal("raw error escaped the diagnostic boundary")
+    }
+    for i := 0; i < 201; i++ {
+        event.At = time.Unix(int64(i+1), 0)
+        service.appendDiagnostic(event)
+    }
+    if got := service.snapshot.Diagnostics; len(got) != 200 || got[0].At != 2 || got[199].At != 201 {
+        t.Fatal("session log did not evict its oldest entry")
+    }
+}
+```
+
+Run:
+`go test -tags ci ./app ./core ./ipc -run '^Test(DiagnosticsBoundedAndRedacted|IssueResolutionPreservesOtherSource|SnapshotClonesDiagnostics|RejectsOlderDiagnosticProtocol)$' -count=1`;
+expected RED before the new snapshot field and issue owner exist.
+
+- [ ] **Step 4: Implement one sanitized event path in app**
+
+Add `DiagnosticSnapshot` and `ErrorSnapshot.SourceID` in core and update
+clone/validation. `runtimeService` appends only fixed known messages and
+numeric HTTP status to its bounded ring; never forward `err.Error()` or a
+downloaded body. Replace the current wholesale `snapshot.Errors = ...`
+and unconditional `= nil` with upsert/remove by operation and stable source
+ID. Thread `cmd.SubscriptionID`, `ResourceID`, or `FilterID` through
+`finishServiceIntent`; migrate other `reportError` callers to empty source
+ID. On `stateChanged`, reconcile the sanitized subscription failure
+transitions, so scheduled recovery clears the matching issue and appends
+one recovery entry. Leave unrelated failures active. `publish` still
+coalesces identical snapshots and never polls.
+
+- [ ] **Step 5: Verify backend contract**
+
+Run `gofmt -w` on modified Go files, `go test -tags ci ./download ./subscriptions ./app ./core ./ipc -count=1`,
+and `go vet -tags ci ./...`. Run the existing
+`TestRefresh304ClearsPriorFailureAndPublishesRecovery` regression and ensure
+a healthy 304 emits no duplicate.
+
+## Task 16: Notmutt-style log viewers over one IPC snapshot
+
+**Files:** Modify `tui/model.go`, `tui/render.go`, `tui/keys.go`,
+`tui/keys.toml`, `tui/model_test.go`, `tui/render_test.go`, `ui/ui.go`,
+`ui/errors_test.go`, `README.md`; create `ui/activity.go` for the
+virtualized Overview activity dialog. No new top-level GUI view or
+client-owned log ring.
+
+**Consumes:** `core.Snapshot.Diagnostics []core.DiagnosticSnapshot` from
+Task 15, immutable through IPC. Neither client rereads files or subscribes
+to a second logging service.
+
+- [ ] **Step 1: Write view-state and secrecy tests RED**
+
+Use a real snapshot fixture with one proxy and two safe diagnostics:
+
+```go
+func TestLogOverlayScrollsWithoutDispatch(t *testing.T) {
+    model := NewModel()
+    model.Tab = TabProxies
+    model = model.Apply(ipc.Event{Snapshot: core.Snapshot{
+        Groups: []core.GroupSnapshot{{ID: "main", Proxies: []string{"alpha"}}},
+        Proxies: []core.ProxySnapshot{{ID: "alpha", GroupID: "main"}},
+        Diagnostics: []core.DiagnosticSnapshot{
+            {At: 100, Severity: "error", Kind: "subscription", SourceID: "feed", Message: "HTTP 406"},
+            {At: 101, Severity: "info", Kind: "subscription", SourceID: "feed", Message: "recovered"},
+        },
+    }})
+    selected := model.Selection[TabProxies]
+    model, intent, quit := model.HandleKey("~")
+    if !model.LogOpen || intent != nil || quit || model.Selection[TabProxies] != selected {
+        t.Fatal("log overlay changed control state")
+    }
+    model, intent, quit = model.HandleKey("q")
+    if model.LogOpen || intent != nil || quit || model.Selection[TabProxies] != selected {
+        t.Fatal("closing log dispatched quit or moved cursor")
+    }
+}
+```
+
+Also scroll two or more pages with `up` and assert the offset changes;
+render safe entries with timestamp/severity/source ID and bottom status
+at wide and narrow widths. Test URL redaction at Task 15's app boundary,
+not with an impossible secret-bearing sanitized snapshot. In
+`ui/errors_test.go`, open `View activity` in Fyne's virtual app and assert
+the `widget.List` follows a later immutable snapshot without rebuilding
+the window. Name the render and GUI tests
+`TestRenderLogKeepsBottomStatus` and
+`TestActivityDialogShowsSanitizedSnapshot`. Run
+`go test -tags ci ./tui ./ui -run '^Test(LogOverlayScrollsWithoutDispatch|RenderLogKeepsBottomStatus|ActivityDialogShowsSanitizedSnapshot)$' -count=1`;
+expected RED before the log viewers exist.
+
+- [ ] **Step 2: Add declarative log navigation**
+
+Add a global `~` -> `toggle_log` binding to `tui/keys.toml` and
+`knownAction`. When the overlay is open, handle up/down/page/home/end as
+view-only scroll and consume any other key to close without executing its
+underlying action (including `q`). The overlay is a view state over the
+snapshot, not a second mutable log. Its help derives from the keymap;
+preserve `Model.Tab`, cursor, and modal focus across snapshot updates.
+Use `tcell` and the existing width-safe renderer; append the latest error
+as a low-priority `chrome.Status` segment after IPC/profile on wide screens.
+
+- [ ] **Step 3: Show the same ring in GUI Overview**
+
+Add one `View activity` button without introducing a seventh top-level
+view. Open a scrollable `widget.List` dialog and update its immutable
+entries only through the current `fyne.Do` snapshot path; no direct file,
+controller, or process calls. Render severity and time, stable source ID,
+and safe message. Keep secrets absent by construction: do not display
+URLs from edit forms or raw Mihomo logs.
+Update the existing README run section with `~` for the TUI session log
+and Overview > View activity for GUI diagnostics; both show only
+sanitized current-session events.
+
+- [ ] **Step 4: Verify live client behavior**
+
+Run `gofmt -w` on modified Go files, `go test -tags ci ./tui ./ui -count=1`,
+and a PTY smoke run against a disposable IPC service emitting an error
+then a recovery. Open `~`, scroll, close, switch tabs; confirm GUI activity
+dialog contents with Fyne's virtual test app. No timer-driven redraw.
+
+## Task 17: Align TUI Settings and every visible GUI data row
+
+**Files:** Modify `tui/model.go`, `tui/table.go`, `tui/render.go`,
+`tui/render_test.go`, `ui/views.go`, `ui/display.go`, `ui/ui.go`,
+`ui/settings_binary_test.go`, `ui/display_test.go`, `ui/errors_test.go`,
+`ui/proxy_action_test.go`. Keep the responsive Settings sidebar and
+`widget.List` virtualization; no new GUI widget framework.
+
+**Consumes:** Immutable `core.BinarySnapshot`, monitor, DNS, and system
+proxy snapshots; `Keymap` remains the sole TUI shortcut source. Produces
+three Settings columns, `Setting | Value | Action`, in the existing
+`table.Layout` geometry. `Row.Detail` remains a plain selected-row
+description, not the source of table cells.
+
+- [ ] **Step 1: Prove aligned columns and original controls RED**
+
+In `tui/render_test.go`, apply a snapshot with desired system Mihomo,
+observed version, enabled monitor, and active system proxy; render at
+100 columns. Assert row 1 contains `Setting`, `Value`, and `Action` at
+distinct aligned columns; a binary row shows its actual desired value,
+the system proxy row shows requested and active state, and no Settings
+header/data/selected-detail line contains ` | `. Repeat at 30 columns:
+retain Setting and Value, drop Action. Bind the binary edit action to a
+different key in `NewKeymap` and verify the Action cell follows the
+keymap. In headless Fyne tests, assert Overview counts, binary identity,
+proxy rows, subscription rows, resource rows, filter rows, and Settings
+binary fields render in separate aligned labels without visible ` | `.
+All existing selection and action buttons remain operable.
+
+```go
+func TestSettingsTableAlignedWithoutPipes(t *testing.T) {
+    model := NewModel()
+    model.Tab = TabSettings
+    model = model.Apply(ipc.Event{Snapshot: core.Snapshot{
+        Binary: core.BinarySnapshot{Desired: "system", ObservedVersion: "v1"},
+        SystemProxy: core.SystemProxySnapshot{Enabled: true, Active: true},
+    }})
+    lines := mockRender(t, model, 100, 12)
+    if !strings.Contains(lines[1], "Setting") || !strings.Contains(lines[1], "Value") || !strings.Contains(lines[1], "Action") ||
+        !strings.Contains(lines[2], "system") || strings.Contains(strings.Join(lines[1:9], ""), " | ") {
+        t.Fatalf("unaligned Settings: %q", lines[1:9])
+    }
+}
+```
+
+In the GUI test, update a virtual window with one group/proxy,
+subscription, resource, and filter. Assert independent status/source/
+format labels in the `widget.List` row objects, no pipe delimiter in
+visible text, and no accidental URL or credential display. Rebind a
+Settings TUI action with `NewKeymap` and assert its Action cell changes.
+Run `go test -tags ci ./tui ./ui -run '^Test(SettingsTableAlignedWithoutPipes|SettingsActionUsesKeymap|GUIRowsAreAlignedWithoutPipes|SettingsBinaryFieldsAreAligned)$' -count=1`;
+expected RED against current `strings.Cut` and Fyne pipe labels.
+
+- [ ] **Step 2: Build typed Settings cells once per row**
+
+In `rowsForSnapshot`, construct Settings `Row.Cells` directly as
+`[]string{title, value, ""}` from typed fields; remove the trailing loop
+that calls `strings.Cut(rows[i].Detail, " | ")`. Give each editable row
+its existing action ID (`edit_binary`, `edit_monitor_interval`, etc.) so
+`Model.Rows` derives the Action cell using `Keymap`'s declarative bindings.
+Convert `Row.Detail` to a plain sentence or show nothing when the table
+already carries the value/action; remove pipe-delimited Settings detail
+assembly. Keep monitor test URL and DNS resolver credentials out of
+incidental detail rows; edit modals retain their private input policy.
+In `tui/table.go`, add Action with a lower drop priority than Value,
+and let Setting/Value floors shrink at 30 columns.
+
+- [ ] **Step 3: Align GUI summaries and virtualized rows**
+
+In `ui/ui.go`, replace the Overview's six pipe-separated counters and
+binary identity chain with a labelled grid/form; update only changed
+labels on a new snapshot. In `ui/views.go`, keep `widget.List` rows but
+lay out name, source/format, and status as separate reusable grid cells
+for Subscriptions, Data Resources, and Filter Lists. Proxies gets
+separate name/state/latency cells while preserving its selection
+callback and group automation controls. In `ui/display.go`, remove
+concatenated `" | "` status/group labels and any helper that only exists
+to produce them. Settings Mihomo binary becomes a `widget.Form` with
+Desired, Observed, Capabilities, and Compatibility values. Replace the
+single-line `Connected | action queued` status text with plain text.
+At narrow widths wrap/truncate labels rather than overlap; preserve
+theme and button focus. Never render source URLs or resolver credentials.
+
+- [ ] **Step 4: Verify layout and behavior**
+
+Run `gofmt -w` on modified Go files,
+`go test -tags ci ./tui ./ui -count=1`, and the full
+`go test -tags ci -count=1 ./...` plus `go vet -tags ci ./...`.
+Use `mockRender` at 30 and 100 columns, Fyne's headless canvas at 480
+and 1200 widths, and a disposable IPC PTY smoke run to confirm logs and
+Settings actions remain usable. Perform the project DRY pass, rerun
+formatter and focused checks. Commit only this change's tracked files;
+never stage `references/`, `test.yaml`, or `list.yaml` through the
+ClashPulse repository.
+
+## Task 18: Migrate remaining TUI configuration editors to shared form tables
+
+**Files:** Modify `tui/model.go`, `tui/managed_editor.go`, `tui/render.go`,
+`tui/model_test.go`, `tui/resource_format_test.go`,
+`tui/dns_rename_test.go`, `tui/secret_modal_test.go`. Reuse Task 14's
+tagged `form.Form`, form-context keymap, bottom-anchored `modal` renderer,
+typed command surface. Do not add another generic editor or import app
+services into the TUI.
+
+**Consumes:** `form.New`, `Form.Clone`, `Form.Changes`, and the
+declarative form bindings from Tasks 13-14. Produces no new IPC schema:
+resource/filter/DNS/monitor commands already exist.
+
+- [ ] **Step 1: Write per-editor behavioral tests RED**
+
+In `tui/model_test.go` open edit modals for an enabled resource, filter,
+DNS resolver with DNSCrypt, and monitor policy. Each must show all its
+fields as aligned rows, retain selected field and pending edits across
+unrelated snapshot events, toggle a boolean via Space, and send exactly
+one validated IPC command on Ctrl+S. For resource/filter edits, leave
+Source URL blank and assert the command omits it; Cancel sends nothing.
+For DNS resolver/route forms preserve all other resolver sets/routes in
+the resulting typed policy intent. For monitor form verify interval,
+timeout, threshold, and Enabled changes are one `ConfigPatch` rather
+than a sequence of single-field wizard submissions.
+
+```go
+func TestResourceFormToggleRetainsPrivateSource(t *testing.T) {
+    model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Resources:
+        []core.ResourceSnapshot{{ID: "geo", Kind: "geosite.dat", Format: "dat", Enabled: true}}}})
+    model.Tab = TabResources
+    model.Selection[TabResources] = "resource:geo"
+    model, _, _ = model.HandleKey("e")
+    if model.Modal == nil || model.Modal.Form == nil { t.Fatal("resource form absent") }
+    for i := 0; i < 4; i++ { model, _, _ = model.HandleKey("down") }
+    model, _, _ = model.HandleKey("space")
+    model, command, _ := model.HandleKey("ctrl+s")
+    if command == nil || command.Resource == nil || command.Resource.URL != nil ||
+        command.Resource.Enabled == nil || *command.Resource.Enabled {
+        t.Fatal("resource edit changed private source or ignored toggle")
+    }
+}
+```
+
+Name focused tests
+`TestResourceFormToggleRetainsPrivateSource`,
+`TestFilterFormToggleRetainsSource`, `TestDNSFormPreservesOtherRoutes`,
+and `TestMonitorFormSubmitsPolicy`. Run
+`go test -tags ci ./tui -run '^Test(ResourceFormToggleRetainsPrivateSource|FilterFormToggleRetainsSource|DNSFormPreservesOtherRoutes|MonitorFormSubmitsPolicy)$' -count=1`;
+expected RED against the current one-field-at-a-time wizards.
+
+- [ ] **Step 2: Replace managed resource and filter wizard paths**
+
+Build form fields with existing resource ID, kind, format, rule type,
+private source, enabled toggle, interval, and optional pin; filters
+use ID, resource ID, format, target, and enabled toggle. Start edits
+on the first mutable field and leave private Source URL empty with a
+masked `unchanged` display. Map `Form.Changes()` into existing
+`ipc.ResourceEdit` and `ipc.FilterEdit` after existing domain checks.
+Remove `managedForm.step`, `managedModalPrompt`, and obsolete wizard
+dispatch. No credentials in displayed rows or notices.
+
+- [ ] **Step 3: Replace DNS and monitor wizard paths**
+
+Build DNS resolver/set and route forms over the typed policy snapshot;
+mask sensitive resolver endpoints. The Save action validates the whole
+candidate policy and sends one `CommandSetDNSRouting`; do not drop
+unrelated sets/routes. Monitor form edits Enabled, URL, interval,
+timeout, concurrency, thresholds, bad samples, improvement, cooldown,
+and jitter before one `CommandUpdateConfiguration`. Keep simple
+delete-confirmation and binary-selection modals on shared box geometry.
+Remove old field-step state and unreachable prompt branches; key help
+derives from one declarative form map.
+
+- [ ] **Step 4: Verify complete form behavior and code cutover**
+
+Run `gofmt -w tui/model.go tui/managed_editor.go tui/render.go tui/model_test.go tui/resource_format_test.go tui/dns_rename_test.go tui/secret_modal_test.go`,
+`go test -tags ci ./tui -count=1`, `go test -tags ci -count=1 ./...`,
+`go vet -tags ci ./...`,
+`GOOS=windows CGO_ENABLED=0 go build -tags ci ./...`, and
+`GOOS=darwin CGO_ENABLED=0 go build -tags ci ./...`. Smoke-run each
+config form on a PTY against an authenticated disposable IPC server;
+no real source URL or
+credentials. Perform the DRY pass, remove unused wizard helpers/tests,
+then rerun formatter and focused checks. Release readiness requires
+Tasks 13-18 together; the subscription snapshot and diagnostics both
+negotiate protocol 3 only after this complete cutover.
+
+## Modal and diagnostics review focus
+
+- A 406 HTML challenge with a token in its body must become a numeric,
+  URL-free diagnostic; Task 15's HTTP classification test owns it.
+- A successful 304 after failure clears only its source issue and emits one
+  recovery without writing healthy no-op checks; Task 15 app tests plus
+  `TestRefresh304ClearsPriorFailureAndPublishesRecovery` own it.
+- An already-running desktop service must deliver earlier log entries to
+  a newly connected TUI while its selected proxy stays put; Task 16's
+  overlay test owns it.
+- A tiny or Unicode-width terminal must retain modal footer rows, the
+  selected form field, and masked private input; shared `modal`/`form`
+  tests in Task 13 and consumer tests in Tasks 14 and 18 own it.
+- Customized Settings shortcuts and GUI-wide status/source columns must
+  stay aligned without visible pipe separators or stale actions; Task 17
+  tests own both.
+
 ## TUI redesign review focus
 
 - Narrow terminal with a selected resource: preserve its identity and enabled
@@ -990,22 +1642,28 @@ authorizes a commit.
 
 ## Plan self-review
 
-- Spec coverage: original Tasks 1-10 are shipped; Tasks 11-12 implement the
-  approved TUI chrome and tables section without changing transport or
-  lifecycle. The Mocha palette, top tabs, safe status, each tab's columns,
-  narrow layout, stable cursor, selected details, and PTY smoke each have an
-  owner above.
-- Placeholder scan: both new tasks name real files, existing interfaces,
-  failing renderer checks, focused green commands, and whole-project checks.
-- Type consistency: `Row.Cells` adds rendering data but retains `Row.ID`,
-  `Detail`, and action fields. `core.Snapshot` remains an authenticated IPC
-  event payload; source URLs are still absent. `chrome` and `table` remain
-  shared primitives, not model owners.
+- Spec coverage: Tasks 1-12 are already shipped. Task 13 extracts and
+  releases independent Notmutt `modal` and `form` packages. Task 14 pins
+  them and cuts over subscription editing with safe policy metadata;
+  Task 15 owns typed HTTP errors, active issues, diagnostics, and the
+  final IPC version 3. Task 16 presents the ring in both clients, Task
+  17 removes all visible GUI pipes and aligns TUI Settings, and Task 18
+  completes resource/filter/DNS/monitor form cutover. Chinese translation
+  is separately requested for the end and not implied by these tasks.
+- Placeholder scan: each new task names files, consumes/produces contracts,
+  concrete red behavior checks, focused verification, and privacy limits.
+- Type consistency: `modal.Bottom`/`modal.Wrap` and `form.New` are sibling
+  packages under the same tagged module. `core.SubscriptionSnapshot` adds
+  only safe policy intent; `core.DiagnosticSnapshot` adds bounded sanitized
+  history. `ipc.ProtocolVersion` advances once from 2 to 3 before release.
 
 ## Execution Handoff
 
-Review Tasks 11-12 in this updated existing plan before implementation. Both
-tasks depend on the same `tui/render.go` geometry and should execute in order;
-no parallel same-file edits. Choose native in-session execution (recommended)
-or subagent-driven implementation and review. Do not execute the original
-completed foundation tasks again.
+Review Tasks 13-18 in this updated existing plan. The previously chosen
+Native execution method is preserved. After review, execute sequentially:
+Notmutt `lib/tui/v0.1.1` release before the ClashPulse import; complete
+the shared subscription/diagnostic IPC version-3 schema before shipping;
+then logs, GUI alignment, and remaining form editors. Do not execute
+the already-shipped foundation and chrome tasks again. Run one
+fresh-context review over the complete diff after green checks;
+resolve Important/Critical findings before branch integration.
