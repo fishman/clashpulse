@@ -6,6 +6,7 @@
 # id = "primary"                   # Stable ASCII ID; do not reuse it.
 # name = "Primary"                  # Safe display name.
 # url = "https://provider.example/profile?token=replace-me"
+# user_agent = "clash-verge/v2.5.6" # Optional provider override; default clash-pulse.
 # enabled = true
 # refresh_interval = "12h"         # Single shared timer schedules refreshes.
 # timeout = "30s"                  # Context bound includes download and validation.

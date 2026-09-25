@@ -162,6 +162,9 @@ func validateSnapshot(s Snapshot) error {
 		if err := validateSubscriptionURL(item.URL, item.AllowHTTP); err != nil {
 			return fmt.Errorf("subscriptions.toml: subscription.url: %w", err)
 		}
+		if !ValidSubscriptionUserAgent(item.UserAgent) {
+			return fmt.Errorf("subscriptions.toml: subscription.user_agent: must be printable ASCII at most 256 bytes")
+		}
 		if _, ok := subscriptionRoutes[item.Route]; !ok {
 			return fmt.Errorf("subscriptions.toml: subscription.route: unknown route %q", item.Route)
 		}
@@ -549,6 +552,18 @@ func validateSubscriptionURL(raw string, allowHTTP bool) error {
 		return nil
 	}
 	return fmt.Errorf("must use https")
+}
+
+func ValidSubscriptionUserAgent(value string) bool {
+	if len(value) > 256 {
+		return false
+	}
+	for _, r := range value {
+		if r < 0x20 || r > 0x7e {
+			return false
+		}
+	}
+	return true
 }
 
 func validateSourceOrPath(raw string, allowPath bool) error {

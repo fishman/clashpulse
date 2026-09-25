@@ -54,6 +54,7 @@ const (
 	subscriptionFieldID = iota
 	subscriptionFieldName
 	subscriptionFieldURL
+	subscriptionFieldUserAgent
 	subscriptionFieldEnabled
 	subscriptionFieldRefreshInterval
 	subscriptionFieldTimeout
@@ -1176,6 +1177,8 @@ func subscriptionFieldMaxBytes(field int) int {
 		return 128
 	case subscriptionFieldURL:
 		return 4096
+	case subscriptionFieldUserAgent:
+		return 256
 	default:
 		return 64
 	}
@@ -1198,6 +1201,18 @@ func validateSubscriptionField(form subscriptionForm, field int) string {
 		}
 		if len(value) > 4096 {
 			return "Source URL must be at most 4096 bytes."
+		}
+	case subscriptionFieldUserAgent:
+		if value == "-" && form.edit {
+			break
+		}
+		if len(value) > 256 {
+			return "User-Agent must be printable ASCII at most 256 bytes."
+		}
+		for _, r := range value {
+			if r < 0x20 || r > 0x7e {
+				return "User-Agent must be printable ASCII at most 256 bytes."
+			}
 		}
 	case subscriptionFieldEnabled, subscriptionFieldAllowHTTP, subscriptionFieldAllowInvalidTLS:
 		if value != "" && !validYesNo(value) {
@@ -1231,6 +1246,12 @@ func subscriptionIntent(form subscriptionForm) (*ipc.Command, string) {
 		patch.URL = &source
 	} else if !form.edit {
 		return nil, "A source URL is required for a new subscription."
+	}
+	if agent := form.values[subscriptionFieldUserAgent]; agent != "" {
+		if agent == "-" && form.edit {
+			agent = ""
+		}
+		patch.UserAgent = &agent
 	}
 	setBool := func(field int, target **bool, createDefault bool) {
 		value := strings.ToLower(form.values[field])
@@ -1269,7 +1290,7 @@ func subscriptionIntent(form subscriptionForm) (*ipc.Command, string) {
 	if route := form.values[subscriptionFieldRoute]; route != "" {
 		patch.Route = &route
 	}
-	if patch.Name == nil && patch.URL == nil && patch.Enabled == nil && patch.RefreshIntervalSeconds == nil && patch.TimeoutSeconds == nil && patch.Route == nil && patch.AllowHTTP == nil && patch.AllowInvalidTLS == nil {
+	if patch.Name == nil && patch.URL == nil && patch.UserAgent == nil && patch.Enabled == nil && patch.RefreshIntervalSeconds == nil && patch.TimeoutSeconds == nil && patch.Route == nil && patch.AllowHTTP == nil && patch.AllowInvalidTLS == nil {
 		return nil, "Enter at least one value to update."
 	}
 	return &ipc.Command{Kind: ipc.CommandPutSubscription, SubscriptionID: form.targetID, Subscription: patch}, ""
@@ -1327,6 +1348,12 @@ func subscriptionModalPrompt(modal *Modal) string {
 			field = "Source URL (blank keeps private URL)"
 		} else {
 			field = "Source URL (required)"
+		}
+	case subscriptionFieldUserAgent:
+		if form.edit {
+			field = "User-Agent (blank keeps; - resets to clash-pulse)"
+		} else {
+			field = "User-Agent (blank uses clash-pulse)"
 		}
 	case subscriptionFieldEnabled:
 		if form.edit {

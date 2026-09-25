@@ -234,7 +234,7 @@ func modalDisplayInput(modal *Modal) string {
 	if modal == nil {
 		return ""
 	}
-	if modal.Kind == ModalSubscription && modal.subscription.step == subscriptionFieldURL ||
+	if modal.Kind == ModalSubscription && (modal.subscription.step == subscriptionFieldURL || modal.subscription.step == subscriptionFieldUserAgent) ||
 		modal.Kind == ModalResource && modal.managed.step == resourceFieldURL ||
 		modal.Kind == ModalDNSResolver && modal.dns.step == dnsSetEndpoints ||
 		modal.Kind == ModalMonitorSetting && modal.monitor == monitorTestURL {

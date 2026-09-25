@@ -39,6 +39,7 @@ type subscriptionDoc struct {
 	ID              string  `toml:"id"`
 	Name            string  `toml:"name"`
 	URL             string  `toml:"url"`
+	UserAgent       string  `toml:"user_agent"`
 	Enabled         bool    `toml:"enabled"`
 	RefreshInterval *string `toml:"refresh_interval"`
 	Timeout         *string `toml:"timeout"`
@@ -220,6 +221,7 @@ func loadSubscriptions(path string) ([]Subscription, error) {
 			ID:              entry.ID,
 			Name:            entry.Name,
 			URL:             entry.URL,
+			UserAgent:       entry.UserAgent,
 			Enabled:         entry.Enabled,
 			RefreshInterval: refresh,
 			Timeout:         timeout,

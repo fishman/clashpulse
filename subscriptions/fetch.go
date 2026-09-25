@@ -96,6 +96,7 @@ func (s *Service) refresh(ctx context.Context, id string, supplied *config.Subsc
 		LastModified: record.LastModified,
 		MaxBytes:     s.options.MaxBytes,
 		AllowHTTP:    record.Subscription.AllowHTTP,
+		UserAgent:    record.Subscription.UserAgent,
 	})
 	if err != nil {
 		checkedAt := time.Now()

@@ -14,6 +14,7 @@ import (
 type SubscriptionEdit struct {
 	Name            *string
 	URL             *string
+	UserAgent       *string
 	Enabled         *bool
 	RefreshInterval *time.Duration
 	Timeout         *time.Duration
@@ -52,6 +53,9 @@ func PatchSubscription(path string, current Snapshot, id string, patch Subscript
 	}
 	if patch.URL != nil {
 		item.URL, state.URL = *patch.URL, *patch.URL
+	}
+	if patch.UserAgent != nil {
+		item.UserAgent, state.UserAgent = *patch.UserAgent, *patch.UserAgent
 	}
 	if patch.Enabled != nil {
 		item.Enabled, state.Enabled = *patch.Enabled, *patch.Enabled

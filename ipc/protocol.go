@@ -12,7 +12,7 @@ import (
 
 const (
 	// ProtocolVersion is negotiated in the first frame on every connection.
-	ProtocolVersion uint16 = 1
+	ProtocolVersion uint16 = 2
 	// MaxFrameSize bounds both incoming and outgoing JSON frames.
 	MaxFrameSize = 1 << 20
 )
@@ -88,6 +88,7 @@ type ConfigPatch struct {
 type SubscriptionEdit struct {
 	Name                   *string `json:"name,omitempty"`
 	URL                    *string `json:"url,omitempty"`
+	UserAgent              *string `json:"user_agent,omitempty"`
 	Enabled                *bool   `json:"enabled,omitempty"`
 	RefreshIntervalSeconds *uint32 `json:"refresh_interval_seconds,omitempty"`
 	TimeoutSeconds         *uint32 `json:"timeout_seconds,omitempty"`
@@ -222,11 +223,21 @@ func (c Command) validate() error {
 			return errors.New("invalid subscription edit command")
 		}
 		p := c.Subscription
-		if p.Name == nil && p.URL == nil && p.Enabled == nil && p.RefreshIntervalSeconds == nil && p.TimeoutSeconds == nil && p.Route == nil && p.AllowHTTP == nil && p.AllowInvalidTLS == nil {
+		if p.Name == nil && p.URL == nil && p.UserAgent == nil && p.Enabled == nil && p.RefreshIntervalSeconds == nil && p.TimeoutSeconds == nil && p.Route == nil && p.AllowHTTP == nil && p.AllowInvalidTLS == nil {
 			return errors.New("empty subscription edit")
 		}
 		if p.Name != nil && (len(*p.Name) > 128 || strings.ContainsAny(*p.Name, "\x00\r\n")) || p.URL != nil && (len(*p.URL) > 4096 || strings.ContainsAny(*p.URL, "\x00\r\n")) {
 			return errors.New("invalid subscription edit field")
+		}
+		if p.UserAgent != nil {
+			if len(*p.UserAgent) > 256 {
+				return errors.New("invalid subscription user agent")
+			}
+			for _, r := range *p.UserAgent {
+				if r < 0x20 || r > 0x7e {
+					return errors.New("invalid subscription user agent")
+				}
+			}
 		}
 		if p.RefreshIntervalSeconds != nil && (*p.RefreshIntervalSeconds < 60 || *p.RefreshIntervalSeconds > 86400*30) || p.TimeoutSeconds != nil && (*p.TimeoutSeconds < 1 || *p.TimeoutSeconds > 300) {
 			return errors.New("subscription schedule out of range")

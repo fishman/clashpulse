@@ -52,6 +52,27 @@ func TestSubscriptionAddSendsTypedIntentAndClearsSourceAfterSubmit(t *testing.T)
 	}
 }
 
+func TestSubscriptionEditorSendsPrivateUserAgentOverride(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	w := a.NewWindow("ClashPulse")
+	var sent []ipc.Command
+	page := newSubscriptionPage(func(command ipc.Command) { sent = append(sent, command) }, w)
+	page.add.OnTapped()
+	e := page.editor
+	if !e.agent.Password {
+		t.Fatal("subscription user agent is exposed in editor")
+	}
+	e.id.SetText("agent")
+	e.name.SetText("Provider")
+	e.source.SetText("https://provider.invalid/private")
+	e.agent.SetText("clash-verge/v2.5.6")
+	e.dialog.Submit()
+	if len(sent) != 1 || sent[0].Subscription == nil || sent[0].Subscription.UserAgent == nil || *sent[0].Subscription.UserAgent != "clash-verge/v2.5.6" || e.agent.Text != "" {
+		t.Fatal("agent override was lost or retained in the editor")
+	}
+}
+
 func TestSubscriptionRenameRetainsPrivateSourceAndWaitsForSnapshot(t *testing.T) {
 	app := test.NewApp()
 	defer app.Quit()
@@ -77,7 +98,7 @@ func TestSubscriptionRenameRetainsPrivateSourceAndWaitsForSnapshot(t *testing.T)
 		t.Fatal("rename did not send a typed subscription intent")
 	}
 	edit := command.Subscription
-	if edit.URL != nil || edit.Enabled != nil || edit.RefreshIntervalSeconds != nil || edit.TimeoutSeconds != nil || edit.Route != nil || edit.AllowHTTP != nil || edit.AllowInvalidTLS != nil || editor.source.Text != "" {
+	if edit.URL != nil || edit.UserAgent != nil || edit.Enabled != nil || edit.RefreshIntervalSeconds != nil || edit.TimeoutSeconds != nil || edit.Route != nil || edit.AllowHTTP != nil || edit.AllowInvalidTLS != nil || editor.source.Text != "" || editor.agent.Text != "" {
 		t.Fatal("rename overwrote omitted private source or settings")
 	}
 	if item.name.Text != "Before" {

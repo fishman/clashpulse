@@ -50,6 +50,40 @@ func TestFetchUsesRouteValidatorsAndBodyLimit(t *testing.T) {
 	}
 }
 
+func TestFetchUsesSourceUserAgentAgainst406Gate(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.UserAgent() != "clash-verge/v2.5.6" {
+			w.WriteHeader(http.StatusNotAcceptable)
+			return
+		}
+		_, _ = io.WriteString(w, "profile")
+	}))
+	defer server.Close()
+	client := NewClient(func(Route) (http.RoundTripper, error) { return server.Client().Transport, nil })
+	response, err := client.Fetch(context.Background(), Request{
+		URL: server.URL, Route: Direct, MaxBytes: 32, UserAgent: "clash-verge/v2.5.6",
+	})
+	if err != nil || string(response.Body) != "profile" {
+		t.Fatalf("configured user agent did not pass source gate: status=%d err=%v", response.StatusCode, err)
+	}
+}
+
+func TestFetchUsesClashPulseUserAgentByDefault(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.UserAgent() != "clash-pulse" {
+			w.WriteHeader(http.StatusNotAcceptable)
+			return
+		}
+		_, _ = io.WriteString(w, "profile")
+	}))
+	defer server.Close()
+	client := NewClient(func(Route) (http.RoundTripper, error) { return server.Client().Transport, nil })
+	response, err := client.Fetch(context.Background(), Request{URL: server.URL, Route: Direct, MaxBytes: 32})
+	if err != nil || string(response.Body) != "profile" {
+		t.Fatalf("default user agent did not identify ClashPulse: status=%d err=%v", response.StatusCode, err)
+	}
+}
+
 func TestFetchRejectsHTTPAndUserinfo(t *testing.T) {
 	client := NewClient(func(Route) (http.RoundTripper, error) { return http.DefaultTransport, nil })
 	for _, req := range []Request{
@@ -140,6 +174,9 @@ func TestFetchConditionalHeadersStayOnOriginalAndSameOriginOnly(t *testing.T) {
 			if got := r.Header.Get("If-Modified-Since"); got != "" {
 				t.Fatalf("target If-Modified-Since = %q", got)
 			}
+			if got := r.UserAgent(); got != "clash-pulse" {
+				t.Fatalf("cross-origin override leaked")
+			}
 			w.Header().Set("ETag", `"other-origin-secret"`)
 			w.Header().Set("Last-Modified", time.Unix(1700000100, 0).UTC().Format(http.TimeFormat))
 			_, _ = io.WriteString(w, "ok")
@@ -153,6 +190,9 @@ func TestFetchConditionalHeadersStayOnOriginalAndSameOriginOnly(t *testing.T) {
 			if got := r.Header.Get("If-Modified-Since"); got != time.Unix(1700000000, 0).UTC().Format(http.TimeFormat) {
 				t.Fatalf("origin If-Modified-Since = %q", got)
 			}
+			if got := r.UserAgent(); got != "source-specific-agent" {
+				t.Fatal("origin did not receive its configured agent")
+			}
 			http.Redirect(w, r, target.URL, http.StatusFound)
 		}))
 		defer origin.Close()
@@ -165,6 +205,7 @@ func TestFetchConditionalHeadersStayOnOriginalAndSameOriginOnly(t *testing.T) {
 			LastModified: time.Unix(1700000000, 0).UTC().Format(http.TimeFormat),
 			MaxBytes:     8,
 			AllowHTTP:    true,
+			UserAgent:    "source-specific-agent",
 		})
 		if err != nil {
 			t.Fatal(err)

@@ -116,9 +116,9 @@ func TestSubscriptionCreateEmitsTypedIntent(t *testing.T) {
 	if model.Modal == nil || model.Focus != FocusModal || !contains(model.Help(), "n new subscription") {
 		t.Fatalf("new subscription did not open from the binding: %#v", model)
 	}
-	for i, field := range []string{"new-feed", "News", "https://feeds.example/news?token=private", "yes", "3600", "12", "direct", "no", "yes"} {
+	for i, field := range []string{"new-feed", "News", "https://feeds.example/news?token=private", "", "yes", "3600", "12", "direct", "no", "yes"} {
 		model, command = fillModalField(t, model, field)
-		if i < 8 && command != nil {
+		if i < 9 && command != nil {
 			t.Fatalf("field %d unexpectedly emitted intent: %#v", i, command)
 		}
 	}
@@ -126,11 +126,24 @@ func TestSubscriptionCreateEmitsTypedIntent(t *testing.T) {
 		t.Fatalf("create intent = %#v", command)
 	}
 	patch := command.Subscription
-	if patch.Name == nil || *patch.Name != "News" || patch.URL == nil || *patch.URL != "https://feeds.example/news?token=private" || patch.Enabled == nil || !*patch.Enabled || patch.RefreshIntervalSeconds == nil || *patch.RefreshIntervalSeconds != 3600 || patch.TimeoutSeconds == nil || *patch.TimeoutSeconds != 12 || patch.Route == nil || *patch.Route != "direct" || patch.AllowHTTP == nil || *patch.AllowHTTP || patch.AllowInvalidTLS == nil || !*patch.AllowInvalidTLS {
+	if patch.Name == nil || *patch.Name != "News" || patch.URL == nil || *patch.URL != "https://feeds.example/news?token=private" || patch.UserAgent != nil || patch.Enabled == nil || !*patch.Enabled || patch.RefreshIntervalSeconds == nil || *patch.RefreshIntervalSeconds != 3600 || patch.TimeoutSeconds == nil || *patch.TimeoutSeconds != 12 || patch.Route == nil || *patch.Route != "direct" || patch.AllowHTTP == nil || *patch.AllowHTTP || patch.AllowInvalidTLS == nil || !*patch.AllowInvalidTLS {
 		t.Fatalf("create fields = %#v", patch)
 	}
 	if model.Modal != nil || model.Focus != FocusContent || model.Selection[TabSubscriptions] != "subscription:existing" {
 		t.Fatalf("create changed focus or selection: %#v", model)
+	}
+}
+
+func TestSubscriptionCreateIncludesUserAgent(t *testing.T) {
+	model := NewModel()
+	model.Tab = TabSubscriptions
+	model, _, _ = model.HandleKey("n")
+	var command *ipc.Command
+	for _, field := range []string{"agent-feed", "Provider", "https://provider.invalid/profile", "clash-verge/v2.5.6", "yes", "3600", "30", "direct", "no", "no"} {
+		model, command = fillModalField(t, model, field)
+	}
+	if command == nil || command.Subscription == nil || command.Subscription.UserAgent == nil || *command.Subscription.UserAgent != "clash-verge/v2.5.6" {
+		t.Fatal("subscription wizard did not send custom user agent")
 	}
 }
 
@@ -143,9 +156,9 @@ func TestSubscriptionEditEmitsPatchWithoutPrivateURL(t *testing.T) {
 		t.Fatalf("edit subscription did not open from the binding: %#v", model)
 	}
 	var command *ipc.Command
-	for i, field := range []string{"Renamed", "", "no", "900", "", "mihomo_proxy", "", "no"} {
+	for i, field := range []string{"Renamed", "", "", "no", "900", "", "mihomo_proxy", "", "no"} {
 		model, command = fillModalField(t, model, field)
-		if i < 7 && command != nil {
+		if i < 8 && command != nil {
 			t.Fatalf("field %d unexpectedly emitted intent: %#v", i, command)
 		}
 	}
@@ -153,7 +166,7 @@ func TestSubscriptionEditEmitsPatchWithoutPrivateURL(t *testing.T) {
 		t.Fatalf("edit intent = %#v", command)
 	}
 	patch := command.Subscription
-	if patch.Name == nil || *patch.Name != "Renamed" || patch.URL != nil || patch.Enabled == nil || *patch.Enabled || patch.RefreshIntervalSeconds == nil || *patch.RefreshIntervalSeconds != 900 || patch.TimeoutSeconds != nil || patch.Route == nil || *patch.Route != "mihomo_proxy" || patch.AllowHTTP != nil || patch.AllowInvalidTLS == nil || *patch.AllowInvalidTLS {
+	if patch.Name == nil || *patch.Name != "Renamed" || patch.URL != nil || patch.UserAgent != nil || patch.Enabled == nil || *patch.Enabled || patch.RefreshIntervalSeconds == nil || *patch.RefreshIntervalSeconds != 900 || patch.TimeoutSeconds != nil || patch.Route == nil || *patch.Route != "mihomo_proxy" || patch.AllowHTTP != nil || patch.AllowInvalidTLS == nil || *patch.AllowInvalidTLS {
 		t.Fatalf("edit fields = %#v", patch)
 	}
 	if model.Modal != nil || model.Focus != FocusContent || model.Selection[TabSubscriptions] != "subscription:sub-7" {
@@ -171,9 +184,9 @@ func TestSubscriptionEditCanReplaceSource(t *testing.T) {
 	model.Selection[TabSubscriptions] = "subscription:sub-source"
 	model, _, _ = model.HandleKey("e")
 	var command *ipc.Command
-	for i, field := range []string{"", "https://new.example/feed?token=private", "", "", "", "", "", ""} {
+	for i, field := range []string{"", "https://new.example/feed?token=private", "", "", "", "", "", "", ""} {
 		model, command = fillModalField(t, model, field)
-		if i < 7 && command != nil {
+		if i < 8 && command != nil {
 			t.Fatalf("field %d unexpectedly emitted intent: %#v", i, command)
 		}
 	}

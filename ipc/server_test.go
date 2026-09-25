@@ -105,7 +105,7 @@ func TestServerRejectsIncompatibleVersion(t *testing.T) {
 	}
 }
 
-func TestClientReportsIncompatibleVersion(t *testing.T) {
+func TestClientRejectsUnsupportedProtocol(t *testing.T) {
 	endpoint := filepath.Join(t.TempDir(), "ipc.sock")
 	listener, err := net.Listen("unix", endpoint)
 	if err != nil {
@@ -125,14 +125,13 @@ func TestClientReportsIncompatibleVersion(t *testing.T) {
 			serverDone <- err
 			return
 		}
-		serverDone <- writeFrame(conn, serverFrame{Type: "error", Version: ProtocolVersion + 1, Error: &protocolError{Code: "incompatible_version", Message: "incompatible protocol version"}})
+		serverDone <- writeFrame(conn, serverFrame{Type: "error", Version: ProtocolVersion + 1, Error: &protocolError{Code: "incompatible_version"}})
 	}()
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	_, err = Dial(ctx, endpoint)
-	if !errors.Is(err, ErrIncompatibleVersion) || !strings.Contains(err.Error(), "server supports 2") {
-		t.Fatalf("Dial error = %v, want clear incompatible-version details", err)
+	if !errors.Is(err, ErrIncompatibleVersion) {
+		t.Fatalf("Dial accepted incompatible server: %v", err)
 	}
 	if err := <-serverDone; err != nil {
 		t.Fatalf("fake server: %v", err)

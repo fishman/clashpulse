@@ -776,6 +776,9 @@ func normalizeSubscription(subscription config.Subscription, generateID bool) (c
 	if !validURL(subscription.URL, subscription.AllowHTTP) {
 		return config.Subscription{}, ErrInvalid
 	}
+	if !config.ValidSubscriptionUserAgent(subscription.UserAgent) {
+		return config.Subscription{}, ErrInvalid
+	}
 	return subscription, nil
 }
 

@@ -19,6 +19,24 @@ import (
 	"github.com/fishman/clashpulse/download"
 )
 
+func TestRefreshUsesConfiguredUserAgent(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.UserAgent() != "clash-verge/v2.5.6" {
+			w.WriteHeader(http.StatusNotAcceptable)
+			return
+		}
+		_, _ = w.Write([]byte("proxies:\n  - name: selected\n    type: direct\n"))
+	}))
+	defer server.Close()
+	_, service := makeService(t, server, nil, nil)
+	if _, err := service.Add(config.Subscription{ID: "agent", URL: server.URL, UserAgent: "clash-verge/v2.5.6"}); err != nil {
+		t.Fatal(err)
+	}
+	if result, err := service.Refresh(context.Background(), "agent"); err != nil || !result.Changed {
+		t.Fatalf("profile was not fetched with configured agent: changed=%t err=%v", result.Changed, err)
+	}
+}
+
 func TestRefresh304AndIdenticalHashDoNotWriteState(t *testing.T) {
 	profile := []byte("proxies:\n  - name: stable\n    type: direct\n")
 	requests := 0

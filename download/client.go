@@ -28,6 +28,7 @@ type Request struct {
 	LastModified string
 	MaxBytes     int64
 	AllowHTTP    bool
+	UserAgent    string
 }
 
 type Response struct {
@@ -54,6 +55,14 @@ func (c *Client) Fetch(ctx context.Context, req Request) (Response, error) {
 	}
 	if req.MaxBytes <= 0 {
 		return Response{}, fmt.Errorf("download: max bytes must be positive")
+	}
+	if len(req.UserAgent) > 256 {
+		return Response{}, fmt.Errorf("download: invalid user agent")
+	}
+	for _, r := range req.UserAgent {
+		if r < 0x20 || r > 0x7e {
+			return Response{}, fmt.Errorf("download: invalid user agent")
+		}
 	}
 
 	transport, err := c.transport(req.Route)
@@ -144,6 +153,11 @@ func (c *Client) do(ctx context.Context, client *http.Client, target *url.URL, r
 	if err != nil {
 		return nil, fmt.Errorf("download: invalid request")
 	}
+	agent := "clash-pulse"
+	if sameOrigin(target, origin) && req.UserAgent != "" {
+		agent = req.UserAgent
+	}
+	httpReq.Header.Set("User-Agent", agent)
 	if sameOrigin(target, origin) {
 		if req.ETag != "" {
 			httpReq.Header.Set("If-None-Match", req.ETag)

@@ -50,7 +50,7 @@ func (s *runtimeService) putSubscription(ctx context.Context, id string, edit *i
 		return fmt.Errorf("clashpulse: subscription edit is required")
 	}
 	change := config.SubscriptionEdit{
-		Name: edit.Name, URL: edit.URL, Enabled: edit.Enabled, Route: edit.Route,
+		Name: edit.Name, URL: edit.URL, UserAgent: edit.UserAgent, Enabled: edit.Enabled, Route: edit.Route,
 		AllowHTTP: edit.AllowHTTP, AllowInvalidTLS: edit.AllowInvalidTLS,
 	}
 	if edit.RefreshIntervalSeconds != nil {

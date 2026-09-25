@@ -49,6 +49,7 @@ type Subscription struct {
 	ID              string
 	Name            string
 	URL             string
+	UserAgent       string
 	Enabled         bool
 	RefreshInterval time.Duration
 	Timeout         time.Duration

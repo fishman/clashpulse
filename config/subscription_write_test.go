@@ -44,3 +44,30 @@ func TestPatchSubscriptionPreservesPrivateSourceAndRejectsInvalidUpdate(t *testi
 		t.Fatal("invalid edit changed user intent")
 	}
 }
+
+func TestPatchSubscriptionStoresUserAgentWithoutChangingPrivateURL(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "subscriptions.toml")
+	if err := Write(path, []byte("[[subscription]]\nid = \"daily\"\nurl = \"https://provider.invalid/profile?token=private\"\n")); err != nil {
+		t.Fatal(err)
+	}
+	current, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := "clash-verge/v2.5.6"
+	if err := PatchSubscription(path, current, "daily", SubscriptionEdit{UserAgent: &agent}); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := updated.Subscriptions[0]; got.UserAgent != agent || got.URL != current.Subscriptions[0].URL {
+		t.Fatal("user agent edit changed the private source or failed to persist")
+	}
+	bad := "browser\r\nAuthorization: private"
+	if err := PatchSubscription(path, updated, "daily", SubscriptionEdit{UserAgent: &bad}); err == nil {
+		t.Fatal("HTTP header injection was accepted")
+	}
+}

@@ -16,6 +16,10 @@ func TestPrivateSourceModalNeverDisplaysEnteredURL(t *testing.T) {
 			t.Fatalf("private URL shown in %s modal: %q", modal.Kind, text)
 		}
 	}
+	agent := &Modal{Kind: ModalSubscription, Input: "clash-verge/v2.5.6", subscription: subscriptionForm{step: subscriptionFieldUserAgent}}
+	if got := modalDisplayInput(agent); got != "[hidden]" {
+		t.Fatalf("source user agent displayed: %q", got)
+	}
 	ordinary := &Modal{Kind: ModalSubscription, Input: "Daily", subscription: subscriptionForm{step: subscriptionFieldName}}
 	if got := modalDisplayInput(ordinary); got != "Daily" {
 		t.Fatalf("nonsecret field hidden: %q", got)

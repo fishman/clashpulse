@@ -291,6 +291,7 @@ func (p *subscriptionPage) openSubscriptionEditor(existing *core.SubscriptionSna
 	e.name = widget.NewEntry()
 	e.name.SetPlaceHolder("Display name")
 	e.source = widget.NewPasswordEntry()
+	e.agent = widget.NewPasswordEntry()
 	e.refresh = widget.NewEntry()
 	e.timeout = widget.NewEntry()
 	e.enabled = widget.NewCheck("Enabled", nil)
@@ -310,6 +311,7 @@ func (p *subscriptionPage) openSubscriptionEditor(existing *core.SubscriptionSna
 		e.id = widget.NewEntry()
 		e.id.SetPlaceHolder("Stable subscription ID")
 		e.source.SetPlaceHolder("HTTPS URL; insecure HTTP requires explicit opt-in")
+		e.agent.SetPlaceHolder("Optional User-Agent; default clash-pulse")
 		e.refresh.SetText("43200")
 		e.timeout.SetText("30")
 		e.enabled.SetChecked(true)
@@ -321,6 +323,7 @@ func (p *subscriptionPage) openSubscriptionEditor(existing *core.SubscriptionSna
 		e.name.SetText(existing.Name)
 		e.source.SetPlaceHolder("Leave blank to keep the current private URL")
 		e.refresh.SetPlaceHolder("Leave blank to keep current")
+		e.agent.SetPlaceHolder("Blank keeps current; '-' resets to clash-pulse")
 		e.timeout.SetPlaceHolder("Leave blank to keep current")
 		e.enabled.SetChecked(existing.Enabled)
 		e.route.SetSelected("Keep current")
@@ -331,6 +334,7 @@ func (p *subscriptionPage) openSubscriptionEditor(existing *core.SubscriptionSna
 	items = append(items,
 		widget.NewFormItem("Display name", e.name),
 		widget.NewFormItem("Source URL", e.source),
+		widget.NewFormItem("User-Agent", e.agent),
 		widget.NewFormItem("", e.enabled),
 		widget.NewFormItem("Refresh interval (seconds)", e.refresh),
 		widget.NewFormItem("Timeout (seconds)", e.timeout),
@@ -346,11 +350,13 @@ func (p *subscriptionPage) openSubscriptionEditor(existing *core.SubscriptionSna
 	e.dialog = dialog.NewForm(title, confirm, "Cancel", items, func(confirmed bool) {
 		if !confirmed {
 			e.source.SetText("")
+			e.agent.SetText("")
 			p.editor = nil
 			return
 		}
 		command, changed, err := e.command()
 		e.source.SetText("")
+		e.agent.SetText("")
 		p.editor = nil
 		if err != nil {
 			dialog.ShowError(err, p.window)
@@ -368,6 +374,7 @@ type subscriptionEditor struct {
 	id       *widget.Entry
 	name     *widget.Entry
 	source   *widget.Entry
+	agent    *widget.Entry
 	enabled  *widget.Check
 	refresh  *widget.Entry
 	timeout  *widget.Entry
@@ -406,6 +413,20 @@ func (e *subscriptionEditor) command() (ipc.Command, bool, error) {
 		}
 		patch.URL = &urlValue
 	}
+	if value := strings.TrimSpace(e.agent.Text); value != "" {
+		if value == "-" {
+			value = ""
+		}
+		if len(value) > 256 {
+			return ipc.Command{}, false, fmt.Errorf("User-Agent must be printable ASCII at most 256 bytes")
+		}
+		for _, r := range value {
+			if r < 0x20 || r > 0x7e {
+				return ipc.Command{}, false, fmt.Errorf("User-Agent must be printable ASCII at most 256 bytes")
+			}
+		}
+		patch.UserAgent = &value
+	}
 	if creating || e.enabled.Checked != e.existing.Enabled {
 		enabled := e.enabled.Checked
 		patch.Enabled = &enabled
@@ -440,7 +461,7 @@ func (e *subscriptionEditor) command() (ipc.Command, bool, error) {
 	if creating || tlsChanged {
 		patch.AllowInvalidTLS = allowTLS
 	}
-	changed := patch.Name != nil || patch.URL != nil || patch.Enabled != nil || patch.RefreshIntervalSeconds != nil || patch.TimeoutSeconds != nil || patch.Route != nil || patch.AllowHTTP != nil || patch.AllowInvalidTLS != nil
+	changed := patch.Name != nil || patch.URL != nil || patch.UserAgent != nil || patch.Enabled != nil || patch.RefreshIntervalSeconds != nil || patch.TimeoutSeconds != nil || patch.Route != nil || patch.AllowHTTP != nil || patch.AllowInvalidTLS != nil
 	if !changed {
 		return ipc.Command{}, false, nil
 	}

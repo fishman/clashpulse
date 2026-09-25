@@ -51,6 +51,17 @@ func TestSubscriptionEditCommandRequiresScopedFields(t *testing.T) {
 	}
 }
 
+func TestSubscriptionUserAgentEditRejectsHeaderInjection(t *testing.T) {
+	good := "clash-verge/v2.5.6"
+	bad := "client\r\nAuthorization: private"
+	if err := (Command{Kind: CommandPutSubscription, SubscriptionID: "daily", Subscription: &SubscriptionEdit{UserAgent: &good}}).validate(); err != nil {
+		t.Fatalf("safe source agent rejected: %v", err)
+	}
+	if err := (Command{Kind: CommandPutSubscription, SubscriptionID: "daily", Subscription: &SubscriptionEdit{UserAgent: &bad}}).validate(); err == nil {
+		t.Fatal("header injection accepted")
+	}
+}
+
 func TestResourceAndFilterEditCommandsAreScoped(t *testing.T) {
 	source := "https://resource.invalid/cn.yaml?token=private"
 	resourceID := "cn"
