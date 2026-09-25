@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
@@ -74,5 +75,43 @@ func TestTrayLatencyUsesMedianAcrossSelectedGroups(t *testing.T) {
 	state.Proxies = state.Proxies[:1]
 	if _, ok := selectedProfileLatency(state); ok {
 		t.Fatal("missing group sample claimed profile latency")
+	}
+}
+
+func TestTraySystemProxyToggleWaitsForSnapshot(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	d := &desktopUI{connected: true, window: a.NewWindow("ClashPulse"), actions: make(chan ipc.Command, 2)}
+	itemFor := func(state core.Snapshot) *fyne.MenuItem {
+		for _, item := range d.trayMenu(state).Items {
+			if strings.HasPrefix(item.Label, "System Proxy") {
+				return item
+			}
+		}
+		return nil
+	}
+	state := core.Snapshot{}
+	item := itemFor(state)
+	if item == nil || item.Checked || item.Disabled {
+		t.Fatalf("system proxy toggle unavailable in connected tray: %+v", item)
+	}
+	before := trayStateSignature(state, true)
+	item.Action()
+	command := <-d.actions
+	if command.Kind != ipc.CommandUpdateConfiguration || command.Config == nil || command.Config.SystemProxyEnabled == nil || !*command.Config.SystemProxyEnabled || item.Checked {
+		t.Fatalf("enable changed state before an IPC snapshot or sent wrong command: %+v", command)
+	}
+	state.SystemProxy.Enabled = true
+	if trayStateSignature(state, true) == before {
+		t.Fatal("system proxy snapshot change did not refresh tray menu")
+	}
+	item = itemFor(state)
+	if item == nil || !item.Checked || !strings.Contains(item.Label, "inactive") {
+		t.Fatalf("requested but inactive system proxy status is misleading: %+v", item)
+	}
+	item.Action()
+	command = <-d.actions
+	if command.Config == nil || command.Config.SystemProxyEnabled == nil || *command.Config.SystemProxyEnabled {
+		t.Fatalf("disable did not send a typed system proxy command: %+v", command)
 	}
 }

@@ -182,15 +182,35 @@ func (d *desktopUI) enqueue(command ipc.Command) {
 }
 
 func (d *desktopUI) runIPC() {
+	for d.ctx.Err() == nil {
+		d.runIPCSession()
+		if d.ctx.Err() != nil {
+			return
+		}
+		d.postDisconnected()
+		for draining := true; draining; {
+			select {
+			case <-d.actions:
+			default:
+				draining = false
+			}
+		}
+		select {
+		case <-d.ctx.Done():
+			return
+		case <-time.After(time.Second):
+		}
+	}
+}
+
+func (d *desktopUI) runIPCSession() {
 	client, err := ipc.Dial(d.ctx, d.endpoint)
 	if err != nil {
-		d.postDisconnected()
 		return
 	}
 	defer client.Close()
 	snapshot, err := client.Snapshot(d.ctx)
 	if err != nil {
-		d.postDisconnected()
 		return
 	}
 	d.postSnapshot(snapshot)
@@ -208,7 +228,6 @@ func (d *desktopUI) runIPC() {
 			return
 		case event, ok := <-client.Events():
 			if !ok {
-				d.postDisconnected()
 				return
 			}
 			latest = event.Snapshot

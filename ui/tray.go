@@ -138,7 +138,20 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 	}
 	proxyMenu := fyne.NewMenuItem("Proxies", nil)
 	proxyMenu.ChildMenu = fyne.NewMenu("Proxies", groups...)
-	return fyne.NewMenu("ClashPulse", status, profileMenu, proxyMenu, fyne.NewMenuItemSeparator(), fyne.NewMenuItem("Show ClashPulse", d.window.Show), fyne.NewMenuItem("Quit", d.quit))
+	systemProxy := fyne.NewMenuItem("System Proxy", func() {
+		enabled := !snapshot.SystemProxy.Enabled
+		if snapshot.SystemProxy.Active && !snapshot.SystemProxy.Enabled {
+			enabled = false
+		}
+		d.enqueue(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{SystemProxyEnabled: &enabled}})
+	})
+	systemProxy.Checked = snapshot.SystemProxy.Enabled
+	if snapshot.SystemProxy.Enabled && !snapshot.SystemProxy.Active {
+		systemProxy.Label = "System Proxy (requested, inactive)"
+	} else if !snapshot.SystemProxy.Enabled && snapshot.SystemProxy.Active {
+		systemProxy.Label = "System Proxy (restore needed)"
+	}
+	return fyne.NewMenu("ClashPulse", status, profileMenu, proxyMenu, systemProxy, fyne.NewMenuItemSeparator(), fyne.NewMenuItem("Show ClashPulse", d.window.Show), fyne.NewMenuItem("Quit", d.quit))
 }
 
 func trayStateSignature(snapshot core.Snapshot, connected bool) string {
@@ -147,6 +160,7 @@ func trayStateSignature(snapshot core.Snapshot, connected bool) string {
 	}
 	var key strings.Builder
 	key.WriteString(profileTrayTitle(snapshot))
+	fmt.Fprintf(&key, "|system-proxy:%t:%t", snapshot.SystemProxy.Enabled, snapshot.SystemProxy.Active)
 	for _, sub := range snapshot.Subscriptions {
 		fmt.Fprintf(&key, "|%s:%s:%t:%t:%t:%s", sub.ID, sub.SourceHost, sub.Enabled, sub.Active, sub.PendingActivation, sub.HashPrefix)
 	}
