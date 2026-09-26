@@ -130,9 +130,6 @@ func (r *Registry) migrateV1(previous stateDocument) (stateDocument, error) {
 		if err := writeStaged(path, stageDir, body); err != nil {
 			return stateDocument{}, err
 		}
-		if err := os.Chmod(path, 0o400); err != nil {
-			return stateDocument{}, err
-		}
 		paths[id] = path
 	}
 	transactionDir, err := r.promote(previous, candidate, paths)
@@ -655,6 +652,9 @@ func removeLegacyGenerations(root string) error {
 	}
 	for _, entry := range entries {
 		if entry.IsDir() && validGeneration(entry.Name()) {
+			if err := prepareLegacyRemoval(filepath.Join(root, entry.Name())); err != nil {
+				return fmt.Errorf("resources: prepare legacy generation cleanup: %w", err)
+			}
 			if err := os.RemoveAll(filepath.Join(root, entry.Name())); err != nil {
 				return err
 			}

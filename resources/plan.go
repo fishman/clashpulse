@@ -134,9 +134,6 @@ func (r *Registry) stageDue(ctx context.Context, snapshot config.Snapshot, route
 		if err := writeStaged(path, stageDir, body); err != nil {
 			return nil, fmt.Errorf("resource %q: %w", id, err)
 		}
-		if err := os.Chmod(path, 0o400); err != nil {
-			return nil, fmt.Errorf("resource %q: secure staged file: %w", id, err)
-		}
 		plan.paths[id] = path
 		plan.resources[id] = item.state
 	}
