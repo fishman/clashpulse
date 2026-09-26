@@ -162,6 +162,17 @@ type runtimeBackup struct {
 	durableExisted bool
 }
 
+func activationResourceError(err error) error {
+	if _, ok := core.PublicActivation(err); ok || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	var resource *resources.ResourceFailure
+	if errors.As(err, &resource) {
+		return core.WrapActivationResource(core.ActivationResources, resource.ResourceID, err)
+	}
+	return core.WrapActivation(core.ActivationResources, err)
+}
+
 func (s *runtimeService) applyGenerated(ctx context.Context, profile []byte) error {
 	capability, err := s.selectedCapability(ctx)
 	if err != nil {
@@ -178,24 +189,17 @@ func (s *runtimeService) applyGenerated(ctx context.Context, profile []byte) err
 	}
 	plan, err := s.registry.Stage(ctx, intent, download.Direct)
 	if err != nil {
-		var resource *resources.ResourceFailure
-		if errors.As(err, &resource) {
-			return core.WrapActivationResource(core.ActivationResources, resource.ResourceID, err)
-		}
-		return core.WrapActivation(core.ActivationResources, err)
+		return activationResourceError(err)
 	}
 	if err := plan.Validate(func(home string, paths map[string]string) error {
 		_, validationErr := s.validatedCandidate(ctx, profile, intent, home, paths, capability)
 		return validationErr
 	}); err != nil {
 		_ = plan.Abort()
-		return err
+		return activationResourceError(err)
 	}
 	if err := s.applyResourcePlan(ctx, plan, profile, capability, true); err != nil {
-		if _, ok := core.PublicActivation(err); ok || ctx.Err() != nil {
-			return err
-		}
-		return core.WrapActivation(core.ActivationResources, err)
+		return activationResourceError(err)
 	}
 	return nil
 }
@@ -731,16 +735,19 @@ func (s *runtimeService) start(ctx context.Context) error {
 	}
 	plan, err := s.registry.Stage(ctx, intent, download.Direct)
 	if err != nil {
-		return err
+		return activationResourceError(err)
 	}
 	if err := plan.Validate(func(home string, paths map[string]string) error {
 		_, validationErr := s.validatedCandidate(ctx, profile, intent, home, paths, capability)
 		return validationErr
 	}); err != nil {
 		_ = plan.Abort()
-		return err
+		return activationResourceError(err)
 	}
-	return s.applyResourcePlan(ctx, plan, profile, capability, false)
+	if err := s.applyResourcePlan(ctx, plan, profile, capability, false); err != nil {
+		return activationResourceError(err)
+	}
+	return nil
 }
 
 func monitorPolicy(settings config.Monitor) monitor.Policy {

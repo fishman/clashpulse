@@ -327,8 +327,24 @@ func TestStaticSystemProxyApplyFailureReportsSafeStage(t *testing.T) {
 	if !ok || public.Stage != core.ActivationSystemProxy || h.service.controller != nil || h.service.proxyActive {
 		t.Fatalf("failed proxy activation state = %v, controller=%t proxy=%t", err, h.service.controller != nil, h.service.proxyActive)
 	}
+
 	if !equalJSONMap(before, readJSONFile(t, h.proxyState)) {
 		t.Fatal("failed System Proxy Apply did not restore prior settings")
+	}
+}
+func TestLocalProfileResourceFailureReportsStableID(t *testing.T) {
+	h := newStaticRuntime(t)
+	profile := filepath.Join(h.root, "source with password=private.yaml")
+	if err := os.WriteFile(profile, []byte("proxies:\n  - name: node-a\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(h.resourceFiles["list-a"]); err != nil {
+		t.Fatal(err)
+	}
+	err := RunFileAt(h.ctx, h.configDir, h.stateDir, filepath.Join(h.root, "local.sock"), profile, nil)
+	public, ok := core.PublicActivation(err)
+	if !ok || public.Stage != core.ActivationResources || public.ResourceID != "list-a" || strings.Contains(err.Error(), "private") {
+		t.Fatalf("managed resource failure lost safe identity: %v", err)
 	}
 }
 func TestLocalActiveSourceDoesNotMarkSavedSubscriptionRunning(t *testing.T) {
@@ -338,6 +354,43 @@ func TestLocalActiveSourceDoesNotMarkSavedSubscriptionRunning(t *testing.T) {
 	state := h.service.stateSnapshot()
 	if state.ActiveSource != "local" || len(state.Subscriptions) != 1 || state.Subscriptions[0].Active {
 		t.Fatalf("local source was shown as active subscription: %+v", state.Subscriptions)
+	}
+}
+
+func TestLocalProfileSystemProxyRestoredOnCancel(t *testing.T) {
+	h := newStaticRuntime(t)
+	profile := filepath.Join(h.root, "local.yaml")
+	if err := os.WriteFile(profile, []byte("proxies:\n  - name: node-a\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before := readJSONFile(t, h.proxyState)
+	ctx, cancel := context.WithCancel(h.ctx)
+	defer cancel()
+	ready, done := make(chan struct{}, 1), make(chan error, 1)
+	go func() {
+		done <- RunFileAt(ctx, h.configDir, h.stateDir, filepath.Join(h.root, "socket", "local.sock"), profile, func() error { ready <- struct{}{}; return nil })
+	}()
+	select {
+	case <-ready:
+	case err := <-done:
+		t.Fatalf("local activation failed: %v", err)
+	case <-time.After(6 * time.Second):
+		t.Fatal("local controller not ready")
+	}
+	if equalJSONMap(before, readJSONFile(t, h.proxyState)) {
+		t.Fatal("requested System Proxy never applied")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("local shutdown: %v", err)
+		}
+	case <-time.After(7 * time.Second):
+		t.Fatal("local shutdown blocked")
+	}
+	if !equalJSONMap(before, readJSONFile(t, h.proxyState)) {
+		t.Fatal("local shutdown did not restore System Proxy")
 	}
 }
 
@@ -444,21 +497,22 @@ func TestLocalResourceActivationRollbackRestoresDurableConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := h.service.applyResourcePlan(h.ctx, plan, profile, h.service.cap, true); err != nil {
-		t.Fatal(err)
+		t.Fatalf("resource activation: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(h.stateDir, "generated.yaml")); err != nil {
 		t.Fatalf("candidate durable config missing: %v", err)
 	}
 	backup := h.service.activationBackup
 	h.service.activationBackup = nil
-	if err := h.service.restoreResourceRuntime(h.ctx, backup, errors.New("proxy selection failed"), true); err == nil {
+	rollbackErr := h.service.restoreResourceRuntime(h.ctx, backup, errors.New("proxy selection failed"), true)
+	if rollbackErr == nil {
 		t.Fatal("rollback lost original failure")
 	}
 	if _, err := os.Stat(filepath.Join(h.stateDir, "generated.yaml")); !os.IsNotExist(err) {
 		t.Fatalf("rollback retained candidate durable config: %v", err)
 	}
 	if h.service.controller == nil || h.service.localProfile == nil || h.service.generatedPath == "" {
-		t.Fatal("rollback did not restore local runtime")
+		t.Fatalf("rollback did not restore local runtime: %v", rollbackErr)
 	}
 }
 
@@ -700,6 +754,7 @@ with open(sys.argv[3], 'a', encoding='utf-8') as out: out.write(json.dumps({os.p
 subprocess.Popen([sys.executable, __file__, '--watch', str(os.getpid()), json.dumps(paths), json.dumps(initial), sys.argv[4]], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 class ProxyHandler(socketserver.BaseRequestHandler):
     def handle(self): self.request.close()
+socketserver.ThreadingTCPServer.allow_reuse_address = True
 proxy = socketserver.ThreadingTCPServer(('127.0.0.1', port), ProxyHandler)
 threading.Thread(target=proxy.serve_forever, daemon=True).start()
 selected = ['node-a']

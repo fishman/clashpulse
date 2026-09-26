@@ -10,6 +10,9 @@ import (
 	"testing"
 
 	"github.com/fishman/clashpulse/download"
+	"time"
+
+	"github.com/fishman/clashpulse/core"
 )
 
 func TestCLIUsesDesktopByDefault(t *testing.T) {
@@ -150,5 +153,68 @@ func TestCLIPropagatesActionError(t *testing.T) {
 	actions := cliActions{refresh: func(context.Context, string, string, bool) error { return errors.New("refresh failed") }}
 	if code := runCLI(context.Background(), []string{"clashpulse", "refresh"}, stdout, stderr, actions); code != 1 || stderr.String() != "refresh failed\n" {
 		t.Fatalf("action error: exit=%d stderr=%q", code, stderr.String())
+	}
+}
+
+func TestCLIActivateLocalFile(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ready, announced := make(chan struct{}), make(chan struct{})
+	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+	called := 0
+	actions := cliActions{activateFile: func(ctx context.Context, path string, announce func() error) error {
+		called++
+		if path != "my profile.yaml" {
+			t.Fatalf("path = %q", path)
+		}
+		<-ready
+		if err := announce(); err != nil {
+			return err
+		}
+		close(announced)
+		<-ctx.Done()
+		return nil
+	}}
+	done := make(chan int, 1)
+	go func() {
+		done <- runCLI(ctx, []string{"clashpulse", "activate", "my profile.yaml"}, stdout, stderr, actions)
+	}()
+	select {
+	case code := <-done:
+		t.Fatalf("returned before readiness: %d", code)
+	default:
+	}
+	close(ready)
+	select {
+	case <-announced:
+	case <-time.After(time.Second):
+		t.Fatal("readiness was not announced")
+	}
+	if got := stdout.String(); got != "local profile active; press Ctrl-C to stop\n" {
+		t.Fatalf("success output = %q", got)
+	}
+	select {
+	case code := <-done:
+		t.Fatalf("exited while active: %d", code)
+	default:
+	}
+	cancel()
+	if code := <-done; code != 0 || stderr.Len() != 0 || called != 1 {
+		t.Fatalf("shutdown exit=%d stderr=%q calls=%d", code, stderr.String(), called)
+	}
+	for _, args := range [][]string{{"clashpulse", "activate"}, {"clashpulse", "activate", "a", "b"}} {
+		before := called
+		if code := runCLI(context.Background(), args, new(bytes.Buffer), new(bytes.Buffer), actions); code == 0 || called != before {
+			t.Fatalf("invalid args %v: code=%d calls=%d", args, code, called)
+		}
+	}
+	private := "password=private"
+	bad := cliActions{activateFile: func(context.Context, string, func() error) error {
+		return core.WrapActivation(core.ActivationControllerReadiness, errors.New(private))
+	}}
+	stdout.Reset()
+	stderr.Reset()
+	if code := runCLI(context.Background(), []string{"clashpulse", "activate", "secret profile.yaml"}, stdout, stderr, bad); code != 1 || stdout.Len() != 0 || stderr.String() != core.ActivationControllerReadiness.Message()+"\n" || strings.Contains(stderr.String(), "secret profile.yaml") {
+		t.Fatalf("unsafe failure: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 }

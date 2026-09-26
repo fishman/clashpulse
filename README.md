@@ -25,6 +25,14 @@ The GUI needs a graphical desktop session (X11 or Wayland on Linux). Its tray us
 
 In the GUI, add an HTTPS subscription, refresh it to fetch and validate the candidate profile, then activate it. Open a second terminal for `./clashpulse tui`; the TUI connects to the running desktop service and does not start one itself. On Windows use `.\clashpulse.exe` and `.\clashpulse.exe tui`.
 
+To run a local profile without the GUI:
+
+```sh
+./clashpulse activate 'my profile.yaml'
+```
+
+The command reads the file once, validates it with the selected Mihomo, and prints `local profile active; press Ctrl-C to stop` only after controller readiness. It owns the same local IPC service, so the TUI can connect while it runs. Ctrl-C stops Mihomo and restores System Proxy settings. The source is never edited or imported as a subscription; its path and proxy credentials are not shown over IPC. The private generated config is removed on shutdown. Activation failures print a fixed, credential-safe stage and exit nonzero.
+
 Close the desktop before direct commands; they take the same private-state lock and refuse concurrent service access.
 
 ```sh

@@ -7,16 +7,18 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/download"
 	"github.com/urfave/cli/v3"
 )
 
 type cliActions struct {
-	run      func(context.Context) error
-	desktop  func(context.Context, func(context.Context) error) error
-	tui      func(context.Context) error
-	refresh  func(context.Context, string, string, bool) error
-	download func(context.Context, string, bool) error
+	run          func(context.Context) error
+	desktop      func(context.Context, func(context.Context) error) error
+	tui          func(context.Context) error
+	refresh      func(context.Context, string, string, bool) error
+	download     func(context.Context, string, bool) error
+	activateFile func(context.Context, string, func() error) error
 }
 
 func runCLI(ctx context.Context, args []string, stdout, stderr io.Writer, actions cliActions) int {
@@ -89,6 +91,26 @@ func newCLICommand(stdout, stderr io.Writer, actions cliActions) *cli.Command {
 					return errors.New("clashpulse: TUI is unavailable")
 				}
 				return actions.tui(ctx)
+			}},
+			{Name: "activate", Usage: "run a local profile until interrupted", ArgsUsage: "<profile.yaml>", Arguments: []cli.Argument{&cli.StringArgs{Name: "path", Min: 1, Max: 1}}, Action: func(ctx context.Context, command *cli.Command) error {
+				paths := command.StringArgs("path")
+				if command.Args().Len() != 0 || len(paths) != 1 {
+					return errors.New("activate requires one file")
+				}
+				if actions.activateFile == nil {
+					return errors.New("clashpulse: activation is unavailable")
+				}
+				err := actions.activateFile(ctx, paths[0], func() error {
+					_, writeErr := fmt.Fprintln(command.Root().Writer, "local profile active; press Ctrl-C to stop")
+					return writeErr
+				})
+				if err != nil {
+					if public, ok := core.PublicActivation(err); ok {
+						return public
+					}
+					return core.WrapActivation(core.ActivationStateCommit, err)
+				}
+				return nil
 			}},
 			refresh,
 			download,

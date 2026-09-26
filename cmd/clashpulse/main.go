@@ -21,6 +21,7 @@ func main() {
 	defer stop()
 	actions := cliActions{
 		run: app.Run, desktop: runDesktop, tui: func(ctx context.Context) error { return tui.Run(ctx, "") },
+		activateFile: app.RunFile,
 		refresh: func(ctx context.Context, kind, id string, show bool) error {
 			return app.RefreshWithOptions(ctx, kind, id, app.RefreshOptions{ShowResponse: show})
 		},
