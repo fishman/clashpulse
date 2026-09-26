@@ -185,6 +185,19 @@ func TestSnapshotRejectsSourcePath(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigOverrideSnapshotRejectsPrivateValues(t *testing.T) {
+	valid := core.Snapshot{ConfigOverrides: []core.ConfigOverrideSnapshot{{Key: "dns.listen", Change: "replaced"}, {Key: "secret", Change: "added"}}}
+	if err := validateSnapshot(valid); err != nil {
+		t.Fatalf("safe override report rejected: %v", err)
+	}
+	for _, override := range []core.ConfigOverrideSnapshot{{Key: "password=private", Change: "added"}, {Key: "dns.listen", Change: "https://secret.invalid"}, {Key: "/tmp/private.yaml", Change: "removed"}} {
+		err := validateSnapshot(core.Snapshot{ConfigOverrides: []core.ConfigOverrideSnapshot{override}})
+		if err == nil || strings.Contains(err.Error(), "private") || strings.Contains(err.Error(), "secret.invalid") {
+			t.Fatalf("unsafe override passed or leaked: %v", err)
+		}
+	}
+}
 func TestReadFrameRejectsOversizedLengthBeforeBody(t *testing.T) {
 	var header [4]byte
 	binary.BigEndian.PutUint32(header[:], MaxFrameSize+1)

@@ -201,7 +201,7 @@ func tabRowsChanged(before, after ipc.Event, tab Tab) bool {
 	old, next := before.Snapshot, after.Snapshot
 	switch tab {
 	case TabOverview:
-		return !reflect.DeepEqual(old.Binary, next.Binary) || !reflect.DeepEqual(old.Switches, next.Switches) || !reflect.DeepEqual(old.Jobs, next.Jobs) || !reflect.DeepEqual(old.Errors, next.Errors)
+		return !reflect.DeepEqual(old.Binary, next.Binary) || !reflect.DeepEqual(old.ConfigOverrides, next.ConfigOverrides) || !reflect.DeepEqual(old.Switches, next.Switches) || !reflect.DeepEqual(old.Jobs, next.Jobs) || !reflect.DeepEqual(old.Errors, next.Errors)
 	case TabProxies:
 		return !reflect.DeepEqual(old.Groups, next.Groups) || !reflect.DeepEqual(old.Proxies, next.Proxies)
 	case TabSubscriptions:
@@ -1518,6 +1518,17 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 	switch tab {
 	case TabOverview:
 		rows := []Row{{ID: "binary", Title: "Mihomo binary", Detail: binaryDetail(snapshot.Binary.Desired, snapshot.Binary.ObservedVersion, snapshot.Binary.LastCompatibilityFailure, snapshot.Binary.Capabilities)}}
+		if len(snapshot.ConfigOverrides) == 0 {
+			rows = append(rows, Row{ID: "override:summary", Title: "Generated config changes", Detail: "No managed overrides"})
+		} else {
+			rows = append(rows, Row{ID: "override:summary", Title: "Generated config changes", Detail: "App-owned fields in effective config"})
+			for _, override := range snapshot.ConfigOverrides {
+				if !override.Valid() {
+					continue
+				}
+				rows = append(rows, Row{ID: "override:" + override.Key, Title: override.Key, Detail: override.Change + " - " + override.Description()})
+			}
+		}
 		if len(snapshot.Switches) > 0 {
 			switchEvent := snapshot.Switches[len(snapshot.Switches)-1]
 			measurements := make([]string, 0, len(switchEvent.Evidence))

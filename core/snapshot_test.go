@@ -1,6 +1,9 @@
 package core
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestSnapshotCopiesSlices(t *testing.T) {
 	groups := []GroupSnapshot{{ID: "auto", Selected: "alpha"}}
@@ -47,3 +50,29 @@ func TestSnapshotClonesDiagnostics(t *testing.T) {
 	}
 }
 
+func TestConfigOverrideSnapshotIsImmutable(t *testing.T) {
+	source := Snapshot{ConfigOverrides: []ConfigOverrideSnapshot{{Key: "dns.listen", Change: "replaced"}}}
+	copy := CloneSnapshot(source)
+	source.ConfigOverrides[0].Key = "password=private"
+	if copy.ConfigOverrides[0].Key != "dns.listen" {
+		t.Fatal("config override snapshot retained mutable caller memory")
+	}
+}
+
+func TestConfigOverrideDescriptionNamesManagedReason(t *testing.T) {
+	for _, test := range []struct{ key, reason string }{
+		{"external-controller", "local controller"},
+		{"secret", "private controller"},
+		{"dns.listen", "loopback DNS"},
+		{"dns.nameserver-policy", "DNS routing"},
+		{"rules", "managed filter"},
+	} {
+		entry := ConfigOverrideSnapshot{Key: test.key, Change: "replaced"}
+		if got := entry.Description(); !strings.Contains(got, test.reason) {
+			t.Fatalf("%s reason = %q", test.key, got)
+		}
+	}
+	if got := (ConfigOverrideSnapshot{Key: "password=private", Change: "added"}).Description(); got != "" {
+		t.Fatalf("untrusted key received display text: %q", got)
+	}
+}

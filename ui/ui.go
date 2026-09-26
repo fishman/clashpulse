@@ -99,6 +99,8 @@ type desktopUI struct {
 	overviewCountValues []*widget.Label
 	binarySummary       *widget.Form
 	binaryValues        [4]*widget.Label
+	overridesRows       *fyne.Container
+	overrideLabels      []*widget.Label
 	switchSummary       *widget.Label
 	errorSummary        *widget.Label
 	proxyPage           *proxyPage
@@ -127,6 +129,17 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 	}
 	d.overviewCounts = widget.NewForm(countItems...)
 	d.binarySummary, d.binaryValues = newBinaryForm()
+	d.overrideLabels = make([]*widget.Label, 14)
+	rows := make([]fyne.CanvasObject, len(d.overrideLabels))
+	for i := range d.overrideLabels {
+		d.overrideLabels[i] = widget.NewLabel("")
+		d.overrideLabels[i].Wrapping = fyne.TextWrapWord
+		d.overrideLabels[i].Hide()
+		rows[i] = d.overrideLabels[i]
+	}
+	d.overrideLabels[0].SetText("No managed overrides")
+	d.overrideLabels[0].Show()
+	d.overridesRows = container.NewVBox(rows...)
 	d.switchSummary = widget.NewLabel("No automatic switches recorded")
 	d.switchSummary.Wrapping = fyne.TextWrapWord
 	d.errorSummary = widget.NewLabel("No service errors")
@@ -164,7 +177,7 @@ func (d *desktopUI) overviewView() fyne.CanvasObject {
 		widget.NewButton("Reload configuration", func() { d.enqueue(ipc.Command{Kind: ipc.CommandReloadConfiguration}) }),
 		widget.NewButton("View activity", d.openActivity),
 	)
-	return container.NewVBox(title, d.overviewCounts, widget.NewLabelWithStyle("Mihomo binary", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), d.binarySummary, d.switchSummary, d.errorSummary, controls)
+	return container.NewVScroll(container.NewVBox(title, d.overviewCounts, widget.NewLabelWithStyle("Mihomo binary", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), d.binarySummary, widget.NewLabelWithStyle("Generated config changes", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), d.overridesRows, d.switchSummary, d.errorSummary, controls))
 }
 
 func (d *desktopUI) showView(name string) {
@@ -266,6 +279,28 @@ func (d *desktopUI) runIPCSession() {
 	}
 }
 
+func (d *desktopUI) updateOverrides(changes []core.ConfigOverrideSnapshot) {
+	count := 0
+	for _, item := range changes {
+		if !item.Valid() || count == len(d.overrideLabels) {
+			continue
+		}
+		label := d.overrideLabels[count]
+		label.SetText(item.Key + " (" + item.Change + "): " + item.Description())
+		label.Show()
+		count++
+	}
+	if count == 0 {
+		d.overrideLabels[0].SetText("No managed overrides")
+		d.overrideLabels[0].Show()
+		count = 1
+	}
+	for _, label := range d.overrideLabels[count:] {
+		label.Hide()
+	}
+	d.overridesRows.Refresh()
+}
+
 func (d *desktopUI) postSnapshot(snapshot core.Snapshot) {
 	// IPC clones snapshots before returning or publishing them. Keep that
 	// immutable value captured by the Fyne callback rather than cloning again.
@@ -297,6 +332,10 @@ func (d *desktopUI) postSnapshot(snapshot core.Snapshot) {
 					d.binaryValues[i].SetText(value)
 				}
 			}
+		}
+		if first || !reflect.DeepEqual(previous.ConfigOverrides, immutable.ConfigOverrides) {
+			d.updateOverrides(immutable.ConfigOverrides)
+			d.views["Overview"].Refresh()
 		}
 		if first || !reflect.DeepEqual(previous.Switches, immutable.Switches) {
 			d.switchSummary.SetText(lastSwitchSummary(immutable))

@@ -33,6 +33,8 @@ To run a local profile without the GUI:
 
 The command reads the file once, validates it with the selected Mihomo, and prints `local profile active; press Ctrl-C to stop` only after controller readiness. It owns the same local IPC service, so the TUI can connect while it runs. Ctrl-C stops Mihomo and restores System Proxy settings. The source is never edited or imported as a subscription; its path and proxy credentials are not shown over IPC. The private generated config is removed on shutdown. Activation failures print a fixed, credential-safe stage and exit nonzero.
 
+The GUI and TUI Overview show **Generated config changes** for the active profile. Each entry names an app-managed field, whether it was added, replaced, or removed, and a fixed reason. The report is not a full YAML diff: it carries no source or generated values, credentials, network endpoints, or URLs. Unchanged fields are omitted; a stopped service shows no active override report.
+
 Close the desktop before direct commands; they take the same private-state lock and refuse concurrent service access.
 
 ```sh

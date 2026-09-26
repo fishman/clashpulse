@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"testing"
 	"time"
@@ -233,6 +234,9 @@ func TestFailedPostRestartRefreshRestoresRuntimeState(t *testing.T) {
 	prior := waitAppSnapshot(t, ctx, client, func(state core.Snapshot) bool {
 		return len(state.Groups) == 1 && state.Groups[0].Selected == opaqueID("node-b") && len(state.Jobs) == 0
 	})
+	if len(prior.ConfigOverrides) == 0 {
+		t.Fatal("active profile has no generated-config explanation")
+	}
 	generatedPath := filepath.Join(stateDir, "generated.yaml")
 	generatedBefore, err := os.ReadFile(generatedPath)
 	if err != nil {
@@ -250,6 +254,9 @@ func TestFailedPostRestartRefreshRestoresRuntimeState(t *testing.T) {
 	})
 	if state.Binary.Desired != binary || state.Binary.ObservedVersion != prior.Binary.ObservedVersion || state.Monitor.Enabled != prior.Monitor.Enabled || len(state.Groups) != 1 || state.Groups[0].Selected != opaqueID("node-b") {
 		t.Fatalf("failed post-restart reload changed runtime: before=%+v after=%+v", prior, state)
+	}
+	if !reflect.DeepEqual(state.ConfigOverrides, prior.ConfigOverrides) {
+		t.Fatalf("failed reload changed active override explanation: before=%+v after=%+v", prior.ConfigOverrides, state.ConfigOverrides)
 	}
 	generatedAfter, err := os.ReadFile(generatedPath)
 	if err != nil || string(generatedAfter) != string(generatedBefore) {

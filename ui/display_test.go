@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -108,6 +109,68 @@ func TestLocalActiveSourceGUIStatus(t *testing.T) {
 	}
 	if title := profileTrayTitle(state); !strings.Contains(title, "local profile") || strings.Contains(title, "private-path.yaml") {
 		t.Fatalf("unsafe tray title: %q", title)
+	}
+}
+
+func TestConfigOverrideOverviewShowsFixedReasonsOnly(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	view := newDesktopUI(t.Context(), "", app.NewWindow("ClashPulse"))
+	if labels := rowLabels(view.views["Overview"]); !slices.Contains(labels, "No managed overrides") {
+		t.Fatalf("empty override state = %v", labels)
+	}
+	view.postSnapshot(core.Snapshot{ConfigOverrides: []core.ConfigOverrideSnapshot{{Key: "dns.listen", Change: "replaced"}, {Key: "password=private", Change: "added"}}})
+	fyne.DoAndWait(func() {})
+	got := strings.Join(rowLabels(view.views["Overview"]), "\n")
+	if !strings.Contains(got, "dns.listen") || !strings.Contains(got, "loopback DNS") || strings.Contains(got, "password=private") {
+		t.Fatalf("unsafe or missing GUI explanation: %q", got)
+	}
+	view.postSnapshot(core.Snapshot{Groups: []core.GroupSnapshot{{ID: "other"}}, ConfigOverrides: []core.ConfigOverrideSnapshot{{Key: "dns.listen", Change: "replaced"}}})
+	fyne.DoAndWait(func() {})
+	if labels := rowLabels(view.views["Overview"]); !slices.Contains(labels, "dns.listen (replaced): loopback DNS listener") {
+		t.Fatalf("unrelated update changed override explanation: %v", labels)
+	}
+}
+
+func TestConfigOverrideOverviewRowsDoNotOverlap(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	w := app.NewWindow("ClashPulse")
+	w.Resize(fyne.NewSize(980, 700))
+	view := newDesktopUI(t.Context(), "", w)
+	view.postSnapshot(core.Snapshot{ConfigOverrides: []core.ConfigOverrideSnapshot{{Key: "mixed-port", Change: "replaced"}, {Key: "external-controller", Change: "replaced"}, {Key: "secret", Change: "added"}, {Key: "allow-lan", Change: "replaced"}, {Key: "dns.listen", Change: "replaced"}}})
+	fyne.DoAndWait(func() {})
+	_ = w.Canvas().Capture()
+	if view.overridesRows.Size().Height < view.overridesRows.MinSize().Height {
+		t.Fatalf("report rows clipped: allocated %v, need %v", view.overridesRows.Size(), view.overridesRows.MinSize())
+	}
+	var objects []fyne.CanvasObject
+	for _, item := range view.overridesRows.Objects {
+		if item.Visible() {
+			objects = append(objects, item)
+		}
+	}
+	if len(objects) != 5 {
+		t.Fatalf("override rows = %d, want 5", len(objects))
+	}
+	for index := 1; index < len(objects); index++ {
+		if objects[index].Position().Y < objects[index-1].Position().Y+objects[index-1].Size().Height {
+			t.Fatalf("rows %d and %d overlap", index-1, index)
+		}
+	}
+}
+
+func TestConfigOverrideOverviewFitsNarrowWindow(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	w := app.NewWindow("ClashPulse")
+	w.Resize(fyne.NewSize(360, 540))
+	view := newDesktopUI(t.Context(), "", w)
+	view.postSnapshot(core.Snapshot{ConfigOverrides: []core.ConfigOverrideSnapshot{{Key: "external-controller", Change: "replaced"}}})
+	fyne.DoAndWait(func() {})
+	_ = w.Canvas().Capture()
+	if view.overridesRows.Size().Width > w.Canvas().Size().Width {
+		t.Fatalf("override report clipped horizontally: report %v, canvas %v", view.overridesRows.Size(), w.Canvas().Size())
 	}
 }
 

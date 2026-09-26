@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -461,8 +462,44 @@ func TestLocalProfileResourceRefresh(t *testing.T) {
 	}
 }
 
+func TestConfigOverrideHiddenDuringPendingAndFailedRollback(t *testing.T) {
+	h := localStaticRuntime(t)
+	other := []byte("proxies:\n  - name: node-a\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a]\n")
+	if err := h.service.applyGenerated(h.ctx, other); err != nil {
+		t.Fatalf("candidate apply: %v", err)
+	}
+	if h.service.controller == nil || len(h.service.stateSnapshot().ConfigOverrides) != 0 {
+		t.Fatal("candidate runtime exposed previous source override report before durable commit")
+	}
+	marker := filepath.Join(h.root, "fail-proxy-restore-once")
+	if err := os.WriteFile(marker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CLASHPULSE_FAKE_GSETTINGS_FAIL_ONCE", marker)
+	if err := h.service.restoreActivation(h.ctx, h.service.localProfile); err == nil {
+		t.Fatal("candidate unexpectedly restored previous runtime")
+	}
+	if h.service.controller != nil && len(h.service.stateSnapshot().ConfigOverrides) != 0 {
+		t.Fatal("failed rollback exposed prior source override report on candidate runtime")
+	}
+}
+
 func TestLocalProfileRollbackAfterSubscriptionFailure(t *testing.T) {
 	h := localStaticRuntime(t)
+	h.service.localProfile = append(bytes.Clone(h.service.localProfile), []byte("mixed-port: 7890\n")...)
+	if err := h.service.start(h.ctx); err != nil {
+		t.Fatalf("restart local profile with source port: %v", err)
+	}
+	localReport := append([]core.ConfigOverrideSnapshot(nil), h.service.stateSnapshot().ConfigOverrides...)
+	localPort := false
+	for _, change := range localReport {
+		if change.Key == "mixed-port" && change.Change == "replaced" {
+			localPort = true
+		}
+	}
+	if !localPort {
+		t.Fatalf("source port override not explained: %+v", localReport)
+	}
 	localPath, localBytes := h.service.generatedPath, bytes.Clone(h.service.localProfile)
 	generated, err := os.ReadFile(localPath)
 	if err != nil {
@@ -481,6 +518,9 @@ func TestLocalProfileRollbackAfterSubscriptionFailure(t *testing.T) {
 	if source := h.service.stateSnapshot().ActiveSource; source != "local" {
 		t.Fatalf("failed activation source = %q", source)
 	}
+	if !reflect.DeepEqual(localReport, h.service.stateSnapshot().ConfigOverrides) {
+		t.Fatal("failed activation replaced prior effective config explanation")
+	}
 	if body, err := os.ReadFile(localPath); err != nil || !bytes.Equal(body, generated) {
 		t.Fatalf("failed activation changed local config: %q, %v", body, err)
 	}
@@ -493,11 +533,26 @@ func TestLocalProfileRollbackAfterSubscriptionFailure(t *testing.T) {
 	if source := h.service.stateSnapshot().ActiveSource; source != "subscription" {
 		t.Fatalf("committed activation source = %q", source)
 	}
+	portAdded := false
+	for _, change := range h.service.stateSnapshot().ConfigOverrides {
+		if change.Key == "mixed-port" && change.Change == "added" {
+			portAdded = true
+		}
+	}
+	if !portAdded {
+		t.Fatalf("committed subscription retained local override report: %+v", h.service.stateSnapshot().ConfigOverrides)
+	}
 	if _, err := os.Stat(localPath); !os.IsNotExist(err) {
 		t.Fatalf("local config survived subscription cutover: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(h.stateDir, "generated.yaml")); err != nil {
 		t.Fatalf("durable config missing: %v", err)
+	}
+	if err := h.service.stop(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.service.stateSnapshot().ConfigOverrides) != 0 {
+		t.Fatal("stopped service exposed previous effective config explanation")
 	}
 }
 

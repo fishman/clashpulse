@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -203,5 +204,37 @@ func TestRenderRejectsUnsupportedTUNAndRemoteListeners(t *testing.T) {
 		if _, err := Render([]byte(source), config.Snapshot{}, nil, controller, Capability{}); err == nil {
 			t.Fatalf("accepted unsupported data-plane listener: %s", source)
 		}
+	}
+}
+
+func TestExplainOverridesRedactsSourceValues(t *testing.T) {
+	profile := []byte("proxies:\n  - name: https://private.example/proxy\n    type: direct\n    password: bearer-private\nsecret: private-controller\nexternal-controller: 0.0.0.0:9090\nexternal-controller-tls: 0.0.0.0:9443\nmixed-port: 7890\nallow-lan: true\nbind-address: '*'\ndns:\n  enable: true\n  listen: 0.0.0.0:53\n  nameserver: [https://private.example/dns]\ncustom-url: https://private.example/config\n")
+	original := bytes.Clone(profile)
+	generated, err := Render(profile, config.Snapshot{}, nil, ControllerSettings{Address: "127.0.0.1:9090", Secret: "generated-secret", ProxyPort: 7897}, Capability{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ExplainOverrides(profile, generated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []ConfigOverride{{Key: "mixed-port", Change: "replaced"}, {Key: "port", Change: "added"}, {Key: "socks-port", Change: "added"}, {Key: "external-controller", Change: "replaced"}, {Key: "secret", Change: "replaced"}, {Key: "allow-lan", Change: "replaced"}, {Key: "bind-address", Change: "replaced"}, {Key: "dns.listen", Change: "replaced"}, {Key: "external-controller-tls", Change: "removed"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("override fields = %+v, want %+v", got, want)
+	}
+	encoded, err := yaml.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"private.example", "bearer-private", "generated-secret", "private-controller", "0.0.0.0", "7897"} {
+		if bytes.Contains(encoded, []byte(secret)) {
+			t.Fatalf("report exposed a source or generated value")
+		}
+	}
+	if !bytes.Equal(profile, original) {
+		t.Fatal("source profile mutated while explaining overrides")
+	}
+	if _, err := ExplainOverrides([]byte("dns: ["), generated); err == nil || strings.Contains(err.Error(), "dns:") {
+		t.Fatalf("malformed source leaked through report error: %v", err)
 	}
 }

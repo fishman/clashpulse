@@ -105,7 +105,19 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 	}
 	setLine(cache.current, 1, layout.Line(headings, sizes), roleMuted)
 	rows := model.Rows()
+	var overrideDetail []string
+	if model.Tab == TabOverview && len(indexes) == 1 && height >= 8 {
+		for _, row := range rows {
+			if row.Selected && strings.HasPrefix(row.ID, "override:") && row.ID != "override:summary" {
+				overrideDetail, _, _ = modal.Wrap(row.Detail, len(row.Detail), max(1, width), 2)
+				break
+			}
+		}
+	}
 	contentHeight := height - 6
+	if len(overrideDetail) > 1 {
+		contentHeight--
+	}
 	if contentHeight < 0 {
 		contentHeight = 0
 	}
@@ -129,7 +141,12 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 	if len(rows) == 0 && contentHeight > 0 {
 		setLine(cache.current, 2, " No items are currently reported by the service.", roleMuted)
 	}
-	if height >= 6 && model.Tab != TabOverview {
+	if len(overrideDetail) > 0 {
+		if len(overrideDetail) > 1 {
+			setLine(cache.current, height-5, overrideDetail[0], roleMuted)
+		}
+		setLine(cache.current, height-4, overrideDetail[len(overrideDetail)-1], roleMuted)
+	} else if height >= 6 && model.Tab != TabOverview {
 		for _, row := range rows {
 			if row.Selected {
 				setLine(cache.current, height-4, row.Detail, roleMuted)

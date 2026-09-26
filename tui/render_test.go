@@ -181,6 +181,39 @@ func TestLocalActiveSourceStatusDoesNotShowOldSubscription(t *testing.T) {
 	}
 }
 
+func TestConfigOverrideOverviewRendersSafeReasonsAndKeepsCursor(t *testing.T) {
+	state := core.Snapshot{ConfigOverrides: []core.ConfigOverrideSnapshot{{Key: "dns.listen", Change: "replaced"}, {Key: "password=private", Change: "added"}}}
+	model := NewModel().Apply(ipc.Event{Snapshot: state})
+	model.Selection[TabOverview] = "override:dns.listen"
+	rows := strings.Join(mockRender(t, model, 90, 14), "\n")
+	if !strings.Contains(rows, "Generated config changes") || !strings.Contains(rows, "dns.listen") || !strings.Contains(rows, "loopback DNS") || strings.Contains(rows, "password=private") {
+		t.Fatalf("unsafe or missing override row: %q", rows)
+	}
+	state.Groups = []core.GroupSnapshot{{ID: "other"}}
+	model = model.Apply(ipc.Event{Snapshot: state})
+	if model.Selection[TabOverview] != "override:dns.listen" {
+		t.Fatalf("unrelated group update moved override cursor: %q", model.Selection[TabOverview])
+	}
+	empty := NewModel().Rows()
+	found := false
+	for _, row := range empty {
+		found = found || row.Title == "Generated config changes" && row.Detail == "No managed overrides"
+	}
+	if !found {
+		t.Fatal("empty report did not explain absence of managed overrides")
+	}
+}
+
+func TestConfigOverrideNarrowOverviewShowsSelectedReason(t *testing.T) {
+	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{ConfigOverrides: []core.ConfigOverrideSnapshot{{Key: "dns.listen", Change: "replaced"}}}})
+	model.Selection[TabOverview] = "override:dns.listen"
+	rows := mockRender(t, model, 29, 12)
+	detail := rows[7] + rows[8]
+	if !strings.Contains(detail, "replaced") || !strings.Contains(detail, "loopback DNS") || !strings.Contains(detail, "listener") {
+		t.Fatalf("narrow Overview lost selected override reason: %q", detail)
+	}
+}
+
 func TestRenderLogKeepsBottomStatus(t *testing.T) {
 	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Diagnostics: []core.DiagnosticSnapshot{
 		{At: 100, Severity: "error", Kind: "subscription", SourceID: "feed", Message: "HTTP 406"},

@@ -69,6 +69,8 @@ type runtimeService struct {
 	proxyActive               bool
 	generated                 []byte
 	resourceHome              string
+	configOverrides           []core.ConfigOverrideSnapshot
+	configReportPending       bool
 	localProfile              []byte
 	generatedPath             string
 	foreground                bool
@@ -298,11 +300,15 @@ func (s *runtimeService) syncSubscriptions(snapshot config.Snapshot) error {
 func (s *runtimeService) stateSnapshot() core.Snapshot {
 	state := core.CloneSnapshot(s.snapshot)
 	state.ActiveSource = "none"
+	state.ConfigOverrides = nil
 	if s.controller != nil {
 		if s.localProfile != nil {
 			state.ActiveSource = "local"
 		} else {
 			state.ActiveSource = "subscription"
+		}
+		if !s.configReportPending {
+			state.ConfigOverrides = append([]core.ConfigOverrideSnapshot(nil), s.configOverrides...)
 		}
 	}
 	settings := s.store.Snapshot()

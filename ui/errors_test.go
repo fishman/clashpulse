@@ -169,6 +169,8 @@ func rowLabels(object fyne.CanvasObject) []string {
 	switch object := object.(type) {
 	case *widget.Label:
 		return []string{object.Text}
+	case *container.Scroll:
+		return rowLabels(object.Content)
 	case *widget.Form:
 		var labels []string
 		for _, field := range object.Items {

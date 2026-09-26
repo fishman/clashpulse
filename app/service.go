@@ -62,8 +62,14 @@ func newRuntimeServiceWithResponseCapture(configDir, stateDir string, initial co
 		Transport: s.transport, Render: s.renderProfile, Validate: s.validateGenerated,
 		Apply: s.applyGenerated, Restore: s.restoreActivation,
 		Finalize: func() error {
-			if s.activationBackup != nil && s.activationBackup.resourcePlan != nil {
-				return s.activationBackup.resourcePlan.Finalize()
+			if s.activationBackup != nil {
+				if s.activationBackup.resourcePlan != nil {
+					if err := s.activationBackup.resourcePlan.Finalize(); err != nil {
+						return err
+					}
+				}
+				s.configOverrides = append([]core.ConfigOverrideSnapshot(nil), s.activationBackup.pendingOverrides...)
+				s.configReportPending = false
 			}
 			return nil
 		},

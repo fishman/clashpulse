@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -331,7 +332,7 @@ func (s *runtimeService) applyChange(ctx context.Context, _ config.Change) error
 	priorManual := maps.Clone(s.manualOverride)
 	runtimeBefore := runtimeBackup{
 		generated: append([]byte(nil), s.generated...), cap: s.cap, home: s.resourceHome,
-		proxyActive: s.proxyActive, selected: selectedGroups(s.groups),
+		proxyActive: s.proxyActive, running: s.controller != nil, selected: selectedGroups(s.groups), overrides: append([]core.ConfigOverrideSnapshot(nil), s.configOverrides...),
 	}
 	runtimeAttempted, proxyAttempted := false, false
 	revert := func(cause error) error {
@@ -339,12 +340,15 @@ func (s *runtimeService) applyChange(ctx context.Context, _ config.Change) error
 		rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		rollbackErrors := []error{restoreBefore(cause)}
+		rollbackFailed := false
 		if runtimeAttempted {
 			if err := s.applyCandidate(rollbackCtx, runtimeBefore.generated, runtimeBefore.cap, runtimeBefore.home); err != nil {
 				rollbackErrors = append(rollbackErrors, fmt.Errorf("clashpulse: restore prior runtime: %w", err))
+				rollbackFailed = true
 			}
 			if err := s.restoreSelections(rollbackCtx, runtimeBefore.selected); err != nil {
 				rollbackErrors = append(rollbackErrors, fmt.Errorf("clashpulse: restore prior selections: %w", err))
+				rollbackFailed = true
 			}
 		}
 		if runtimeAttempted || proxyAttempted {
@@ -356,6 +360,7 @@ func (s *runtimeService) applyChange(ctx context.Context, _ config.Change) error
 			}
 			if err != nil {
 				rollbackErrors = append(rollbackErrors, fmt.Errorf("clashpulse: restore prior system proxy: %w", err))
+				rollbackFailed = true
 			} else {
 				s.proxyActive = runtimeBefore.proxyActive
 			}
@@ -363,6 +368,15 @@ func (s *runtimeService) applyChange(ctx context.Context, _ config.Change) error
 		if monitorChanged && !runtimeAttempted && s.controller != nil && s.monitor == nil {
 			if err := s.refreshGroups(rollbackCtx); err != nil {
 				rollbackErrors = append(rollbackErrors, fmt.Errorf("clashpulse: restore prior monitor: %w", err))
+				rollbackFailed = true
+			}
+		}
+		if runtimeAttempted {
+			if !rollbackFailed && s.controller != nil && bytes.Equal(s.generated, runtimeBefore.generated) && s.cap == runtimeBefore.cap && s.resourceHome == runtimeBefore.home {
+				s.commitOverrideReport(runtimeBefore.overrides)
+			} else {
+				s.configReportPending = true
+				s.publish()
 			}
 		}
 		return errors.Join(rollbackErrors...)

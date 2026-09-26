@@ -12,7 +12,7 @@ import (
 
 const (
 	// ProtocolVersion is negotiated in the first frame on every connection.
-	ProtocolVersion uint16 = 4
+	ProtocolVersion uint16 = 5
 	// MaxFrameSize bounds both incoming and outgoing JSON frames.
 	MaxFrameSize = 1 << 20
 )
@@ -307,6 +307,14 @@ func validateSnapshot(snapshot core.Snapshot) error {
 	case "", "none", "local", "subscription":
 	default:
 		return errors.New("ipc: invalid active source")
+	}
+	if len(snapshot.ConfigOverrides) > 14 {
+		return errors.New("ipc: invalid config override report")
+	}
+	for _, item := range snapshot.ConfigOverrides {
+		if !item.Valid() {
+			return errors.New("ipc: invalid config override report")
+		}
 	}
 	itemLimit := (MaxFrameSize - 1024) / 256
 	items := 0

@@ -57,6 +57,50 @@ type BinarySnapshot struct {
 	Capabilities                                       []string
 }
 
+type ConfigOverrideSnapshot struct {
+	Key, Change string
+}
+
+func (o ConfigOverrideSnapshot) Valid() bool {
+	if o.Change != "added" && o.Change != "replaced" && o.Change != "removed" {
+		return false
+	}
+	switch o.Key {
+	case "mixed-port", "port", "socks-port", "external-controller", "secret", "allow-lan", "bind-address", "dns.listen", "external-controller-tls", "external-controller-cors", "external-ui", "dns.nameserver-policy", "rule-providers", "rules":
+		return true
+	default:
+		return false
+	}
+}
+
+func (o ConfigOverrideSnapshot) Description() string {
+	if !o.Valid() {
+		return ""
+	}
+	switch o.Key {
+	case "mixed-port", "port", "socks-port":
+		return "app-owned proxy listener"
+	case "external-controller":
+		return "local controller endpoint"
+	case "secret":
+		return "private controller authentication"
+	case "allow-lan", "bind-address":
+		return "loopback-only proxy binding"
+	case "dns.listen":
+		return "loopback DNS listener"
+	case "dns.nameserver-policy":
+		return "explicit DNS routing policy"
+	case "external-controller-tls", "external-controller-cors", "external-ui":
+		return "controller isolation"
+	case "rule-providers":
+		return "validated managed rule providers"
+	case "rules":
+		return "managed filter rules"
+	default:
+		return ""
+	}
+}
+
 type MonitorSnapshot struct {
 	Enabled               bool
 	TestURL               string
@@ -118,21 +162,22 @@ type DiagnosticSnapshot struct {
 }
 
 type Snapshot struct {
-	Revision      uint64
-	ActiveSource  string
-	Groups        []GroupSnapshot
-	Proxies       []ProxySnapshot
-	Subscriptions []SubscriptionSnapshot
-	Resources     []ResourceSnapshot
-	Filters       []FilterSnapshot
-	Binary        BinarySnapshot
-	Monitor       MonitorSnapshot
-	DNS           DNSSnapshot
-	SystemProxy   SystemProxySnapshot
-	Jobs          []JobSnapshot
-	Switches      []SwitchSnapshot
-	Errors        []ErrorSnapshot
-	Diagnostics   []DiagnosticSnapshot
+	Revision        uint64
+	ActiveSource    string
+	ConfigOverrides []ConfigOverrideSnapshot
+	Groups          []GroupSnapshot
+	Proxies         []ProxySnapshot
+	Subscriptions   []SubscriptionSnapshot
+	Resources       []ResourceSnapshot
+	Filters         []FilterSnapshot
+	Binary          BinarySnapshot
+	Monitor         MonitorSnapshot
+	DNS             DNSSnapshot
+	SystemProxy     SystemProxySnapshot
+	Jobs            []JobSnapshot
+	Switches        []SwitchSnapshot
+	Errors          []ErrorSnapshot
+	Diagnostics     []DiagnosticSnapshot
 }
 
 func NewSnapshot(groups []GroupSnapshot) Snapshot {
@@ -154,6 +199,7 @@ func CloneSnapshot(snapshot Snapshot) Snapshot {
 		}
 	}
 	out.Resources = append([]ResourceSnapshot(nil), snapshot.Resources...)
+	out.ConfigOverrides = append([]ConfigOverrideSnapshot(nil), snapshot.ConfigOverrides...)
 	out.Filters = append([]FilterSnapshot(nil), snapshot.Filters...)
 	out.DNS.ResolverSets = append([]ResolverSetSnapshot(nil), snapshot.DNS.ResolverSets...)
 	for i := range out.DNS.ResolverSets {

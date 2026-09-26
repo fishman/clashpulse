@@ -149,17 +149,19 @@ func (s *runtimeService) validateWithHome(ctx context.Context, candidate []byte,
 }
 
 type runtimeBackup struct {
-	generated      []byte
-	cap            mihomo.Capability
-	home           string
-	running        bool
-	proxyActive    bool
-	selected       map[string]string
-	resourcePlan   *resources.Plan
-	localProfile   []byte
-	generatedPath  string
-	durableConfig  []byte
-	durableExisted bool
+	generated        []byte
+	cap              mihomo.Capability
+	home             string
+	running          bool
+	proxyActive      bool
+	selected         map[string]string
+	resourcePlan     *resources.Plan
+	overrides        []core.ConfigOverrideSnapshot
+	pendingOverrides []core.ConfigOverrideSnapshot
+	localProfile     []byte
+	generatedPath    string
+	durableConfig    []byte
+	durableExisted   bool
 }
 
 func activationResourceError(err error) error {
@@ -171,6 +173,24 @@ func activationResourceError(err error) error {
 		return core.WrapActivationResource(core.ActivationResources, resource.ResourceID, err)
 	}
 	return core.WrapActivation(core.ActivationResources, err)
+}
+
+func overrideSnapshots(profile, candidate []byte) ([]core.ConfigOverrideSnapshot, error) {
+	items, err := mihomo.ExplainOverrides(profile, candidate)
+	if err != nil {
+		return nil, core.WrapActivation(core.ActivationConfigValidation, err)
+	}
+	report := make([]core.ConfigOverrideSnapshot, 0, len(items))
+	for _, item := range items {
+		report = append(report, core.ConfigOverrideSnapshot{Key: item.Key, Change: item.Change})
+	}
+	return report, nil
+}
+
+func (s *runtimeService) commitOverrideReport(report []core.ConfigOverrideSnapshot) {
+	s.configOverrides = append([]core.ConfigOverrideSnapshot(nil), report...)
+	s.configReportPending = false
+	s.publish()
 }
 
 func (s *runtimeService) applyGenerated(ctx context.Context, profile []byte) error {
@@ -185,7 +205,7 @@ func (s *runtimeService) applyGenerated(ctx context.Context, profile []byte) err
 		if err != nil {
 			return err
 		}
-		return s.applyActivationCandidate(ctx, candidate, capability, home)
+		return s.applyActivationCandidate(ctx, profile, candidate, capability, home)
 	}
 	plan, err := s.registry.Stage(ctx, intent, download.Direct)
 	if err != nil {
@@ -239,8 +259,12 @@ func (s *runtimeService) activationCandidatePath() string {
 	return s.configPath()
 }
 
-func (s *runtimeService) applyActivationCandidate(ctx context.Context, candidate []byte, capability mihomo.Capability, home string) error {
-	s.activationBackup = &runtimeBackup{generated: bytes.Clone(s.generated), cap: s.cap, home: s.resourceHome, running: s.controller != nil, proxyActive: s.proxyActive, selected: selectedGroups(s.groups)}
+func (s *runtimeService) applyActivationCandidate(ctx context.Context, profile, candidate []byte, capability mihomo.Capability, home string) error {
+	report, err := overrideSnapshots(profile, candidate)
+	if err != nil {
+		return err
+	}
+	s.activationBackup = &runtimeBackup{generated: bytes.Clone(s.generated), cap: s.cap, home: s.resourceHome, running: s.controller != nil, proxyActive: s.proxyActive, selected: selectedGroups(s.groups), overrides: s.configOverrides, pendingOverrides: report}
 	if err := s.captureLocalActivation(s.activationBackup); err != nil {
 		s.activationBackup = nil
 		return err
@@ -253,7 +277,7 @@ func (s *runtimeService) applyActivationCandidate(ctx context.Context, candidate
 }
 
 func (s *runtimeService) applyResourcePlan(ctx context.Context, plan *resources.Plan, profile []byte, capability mihomo.Capability, activation bool) error {
-	backup := &runtimeBackup{generated: bytes.Clone(s.generated), cap: s.cap, home: s.resourceHome, running: s.controller != nil, proxyActive: s.proxyActive, selected: selectedGroups(s.groups), resourcePlan: plan}
+	backup := &runtimeBackup{generated: bytes.Clone(s.generated), cap: s.cap, home: s.resourceHome, running: s.controller != nil, proxyActive: s.proxyActive, selected: selectedGroups(s.groups), resourcePlan: plan, overrides: s.configOverrides}
 	if activation {
 		if err := s.captureLocalActivation(backup); err != nil {
 			_ = plan.Abort()
@@ -283,11 +307,15 @@ func (s *runtimeService) applyResourcePlan(ctx context.Context, plan *resources.
 			return s.restoreResourceRuntime(ctx, backup, err, true)
 		}
 		if activation {
-			if err := s.applyActivationCandidate(ctx, candidate, capability, home); err != nil {
+			if err := s.applyActivationCandidate(ctx, profile, candidate, capability, home); err != nil {
 				return s.restoreResourceRuntime(ctx, backup, err, true)
 			}
 			s.activationBackup.resourcePlan = plan
 			return nil
+		}
+		report, err := overrideSnapshots(profile, candidate)
+		if err != nil {
+			return s.restoreResourceRuntime(ctx, backup, err, true)
 		}
 		if err := s.applyCandidate(ctx, candidate, capability, home); err != nil {
 			return s.restoreResourceRuntime(ctx, backup, err, true)
@@ -295,6 +323,7 @@ func (s *runtimeService) applyResourcePlan(ctx context.Context, plan *resources.
 		if err := plan.Finalize(); err != nil {
 			return s.restoreResourceRuntime(ctx, backup, err, true)
 		}
+		s.commitOverrideReport(report)
 		return nil
 	}
 	if backup.running {
@@ -313,9 +342,13 @@ func (s *runtimeService) applyResourcePlan(ctx context.Context, plan *resources.
 	}
 	intent := s.store.Snapshot()
 	home, paths, err := s.registry.PathsWithHome(intent)
+	var report []core.ConfigOverrideSnapshot
 	if err == nil {
 		var candidate []byte
 		candidate, err = s.renderWithHome(ctx, profile, intent, home, paths, capability)
+		if err == nil {
+			report, err = overrideSnapshots(profile, candidate)
+		}
 		if err == nil {
 			if activation {
 				err = s.applyCandidateAt(ctx, candidate, capability, home, s.activationCandidatePath(), backup)
@@ -331,12 +364,14 @@ func (s *runtimeService) applyResourcePlan(ctx context.Context, plan *resources.
 		return s.restoreResourceRuntime(ctx, backup, err, true)
 	}
 	if activation {
+		backup.pendingOverrides = report
 		s.activationBackup = backup
 		return nil
 	}
 	if err := plan.Finalize(); err != nil {
 		return s.restoreResourceRuntime(ctx, backup, err, true)
 	}
+	s.commitOverrideReport(report)
 	return nil
 }
 
@@ -411,6 +446,7 @@ func (s *runtimeService) restoreResourceRuntime(ctx context.Context, backup *run
 	if cleanupErr != nil {
 		return rollbackFailed(nil)
 	}
+	s.commitOverrideReport(backup.overrides)
 	return cause
 }
 func (s *runtimeService) restoreActivation(ctx context.Context, previousProfile []byte) (result error) {
@@ -448,6 +484,7 @@ func (s *runtimeService) restoreActivation(ctx context.Context, previousProfile 
 			}
 			s.generated, s.cap, s.resourceHome = backup.generated, backup.cap, backup.home
 		}
+		s.commitOverrideReport(backup.overrides)
 		return nil
 	}
 	if err := s.applyCandidate(ctx, backup.generated, backup.cap, backup.home); err != nil {
@@ -467,6 +504,7 @@ func (s *runtimeService) restoreActivation(ctx context.Context, previousProfile 
 		}
 		s.proxyActive = false
 	}
+	s.commitOverrideReport(backup.overrides)
 	return nil
 }
 
@@ -492,12 +530,23 @@ func (s *runtimeService) applyCandidateAt(ctx context.Context, candidate []byte,
 		s.snapshot.Binary.LastCompatibilityFailure = ""
 		return nil
 	}
+	priorReportPending := s.configReportPending
+	s.configReportPending = true
+	s.publish()
 	oldConfig, oldCap, oldHome := bytes.Clone(s.generated), s.cap, s.resourceHome
 	wasRunning := s.controller != nil
 	wasProxy := s.proxyActive
 	oldSelected := selectedGroups(s.groups)
+	restore := func() {
+		if s.restorePrevious(ctx, oldConfig, oldCap, oldHome, oldPath, wasProxy, oldSelected) {
+			s.configReportPending = priorReportPending
+			s.publish()
+		}
+	}
 	if wasRunning {
 		if err := s.proxy.Restore(ctx); err != nil {
+			s.configReportPending = priorReportPending
+			s.publish()
 			return core.WrapActivation(core.ActivationSystemProxy, err)
 		}
 		s.proxyActive = false
@@ -507,13 +556,13 @@ func (s *runtimeService) applyCandidateAt(ctx context.Context, candidate []byte,
 	}
 	if err := config.Write(activePath, candidate); err != nil {
 		if wasRunning {
-			s.restorePrevious(ctx, oldConfig, oldCap, oldHome, oldPath, wasProxy, oldSelected)
+			restore()
 		}
 		return core.WrapActivation(core.ActivationStateCommit, err)
 	}
 	if err := s.startProcess(ctx, capability, home, activePath); err != nil {
 		if wasRunning {
-			s.restorePrevious(ctx, oldConfig, oldCap, oldHome, oldPath, wasProxy, oldSelected)
+			restore()
 		} else if len(oldConfig) > 0 {
 			if activePath == oldPath {
 				_ = config.Write(activePath, oldConfig)
@@ -524,7 +573,7 @@ func (s *runtimeService) applyCandidateAt(ctx context.Context, candidate []byte,
 	if wasRunning {
 		if err := s.restoreSelections(ctx, oldSelected); err != nil {
 			_ = s.stopMonitorAndProcess(ctx)
-			s.restorePrevious(ctx, oldConfig, oldCap, oldHome, oldPath, wasProxy, oldSelected)
+			restore()
 			return core.WrapActivation(core.ActivationControllerReadiness, err)
 		}
 	}
@@ -541,7 +590,7 @@ func (s *runtimeService) applyCandidateAt(ctx context.Context, candidate []byte,
 			}
 			_ = s.stopMonitorAndProcess(ctx)
 			if wasRunning {
-				s.restorePrevious(ctx, oldConfig, oldCap, oldHome, oldPath, wasProxy, oldSelected)
+				restore()
 			} else if len(oldConfig) > 0 {
 				if activePath == oldPath {
 					_ = config.Write(activePath, oldConfig)
@@ -556,29 +605,33 @@ func (s *runtimeService) applyCandidateAt(ctx context.Context, candidate []byte,
 	return nil
 }
 
-func (s *runtimeService) restorePrevious(ctx context.Context, candidate []byte, capability mihomo.Capability, home, path string, enableProxy bool, selected map[string]string) {
+func (s *runtimeService) restorePrevious(ctx context.Context, candidate []byte, capability mihomo.Capability, home, path string, enableProxy bool, selected map[string]string) bool {
 	if len(candidate) == 0 || capability.Path == "" {
-		return
+		return false
 	}
 	if err := config.Write(path, candidate); err != nil {
 		s.reportError("rollback", err)
-		return
+		return false
 	}
 	if err := s.startProcess(ctx, capability, home, path); err != nil {
 		s.reportError("rollback", err)
-		return
+		return false
 	}
 	s.generated, s.cap, s.resourceHome = bytes.Clone(candidate), capability, home
+	restored := true
 	if err := s.restoreSelections(ctx, selected); err != nil {
 		s.reportError("rollback", err)
+		restored = false
 	}
 	if enableProxy {
 		if err := s.proxy.Apply(ctx, fmt.Sprintf("127.0.0.1:%d", s.proxyPort)); err != nil {
 			s.reportError("rollback", err)
+			restored = false
 		} else {
 			s.proxyActive = true
 		}
 	}
+	return restored
 }
 
 func selectedGroups(groups map[string]mihomo.Group) map[string]string {
@@ -731,7 +784,15 @@ func (s *runtimeService) start(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		return s.applyCandidate(ctx, candidate, capability, home)
+		report, err := overrideSnapshots(profile, candidate)
+		if err != nil {
+			return err
+		}
+		if err := s.applyCandidate(ctx, candidate, capability, home); err != nil {
+			return err
+		}
+		s.commitOverrideReport(report)
+		return nil
 	}
 	plan, err := s.registry.Stage(ctx, intent, download.Direct)
 	if err != nil {

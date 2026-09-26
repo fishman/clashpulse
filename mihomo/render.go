@@ -2,10 +2,12 @@ package mihomo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"sort"
 
 	"github.com/fishman/clashpulse/config"
@@ -143,6 +145,61 @@ func Render(profile []byte, intent config.Snapshot, paths ManagedPaths, controll
 		return nil, fmt.Errorf("mihomo: encode generated configuration: %w", err)
 	}
 	return encoded, nil
+}
+
+type ConfigOverride struct {
+	Key, Change string
+}
+
+// ExplainOverrides reports only fixed field identities, never profile or generated values.
+func ExplainOverrides(source, generated []byte) ([]ConfigOverride, error) {
+	var original, effective map[string]any
+	if yaml.Unmarshal(source, &original) != nil || yaml.Unmarshal(generated, &effective) != nil || original == nil || effective == nil {
+		return nil, errors.New("mihomo: cannot explain invalid configuration")
+	}
+	fields := [...]struct{ key, section, name string }{
+		{"mixed-port", "", "mixed-port"},
+		{"port", "", "port"},
+		{"socks-port", "", "socks-port"},
+		{"external-controller", "", "external-controller"},
+		{"secret", "", "secret"},
+		{"allow-lan", "", "allow-lan"},
+		{"bind-address", "", "bind-address"},
+		{"dns.listen", "dns", "listen"},
+		{"external-controller-tls", "", "external-controller-tls"},
+		{"external-controller-cors", "", "external-controller-cors"},
+		{"external-ui", "", "external-ui"},
+		{"dns.nameserver-policy", "dns", "nameserver-policy"},
+		{"rule-providers", "", "rule-providers"},
+		{"rules", "", "rules"},
+	}
+	value := func(document map[string]any, section, name string) (any, bool) {
+		if section != "" {
+			parent, ok := document[section].(map[string]any)
+			if !ok {
+				return nil, false
+			}
+			document = parent
+		}
+		result, ok := document[name]
+		return result, ok
+	}
+	var overrides []ConfigOverride
+	for _, field := range fields {
+		before, existed := value(original, field.section, field.name)
+		after, present := value(effective, field.section, field.name)
+		if existed == present && reflect.DeepEqual(before, after) {
+			continue
+		}
+		change := "replaced"
+		if !existed {
+			change = "added"
+		} else if !present {
+			change = "removed"
+		}
+		overrides = append(overrides, ConfigOverride{Key: field.key, Change: change})
+	}
+	return overrides, nil
 }
 
 func existingProviders(document map[string]any) (map[string]any, error) {
