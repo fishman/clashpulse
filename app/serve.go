@@ -212,7 +212,7 @@ func (s *runtimeService) runServiceWork(ctx context.Context, requests <-chan ser
 	}
 }
 
-func (s *runtimeService) run(ctx context.Context, startup func(context.Context) error) (result error) {
+func (s *runtimeService) run(ctx context.Context, startup func(context.Context) error, ready func() error) (result error) {
 	serviceCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	defer s.server.Close()
@@ -220,10 +220,6 @@ func (s *runtimeService) run(ctx context.Context, startup func(context.Context) 
 	processCtx, cancelProcess := context.WithCancel(context.WithoutCancel(serviceCtx))
 	s.processCtx = processCtx
 	defer cancelProcess()
-	if err := s.subScheduler.Start(serviceCtx); err != nil {
-		return err
-	}
-	defer s.subScheduler.Stop()
 
 	unsubscribe := s.store.Subscribe("subscriptions", func(change config.Change) {
 		s.subs.CancelChangedSources(change.Before.Subscriptions, change.After.Subscriptions)
@@ -259,7 +255,7 @@ func (s *runtimeService) run(ctx context.Context, startup func(context.Context) 
 	var workID uint64
 	defer func() {
 		if err := s.shutdown(); err != nil {
-			result = errors.Join(result, core.WrapActivation(core.ActivationRollback, err))
+			result = errors.Join(core.WrapActivation(core.ActivationRollback, err), result)
 		}
 	}()
 	defer func() {
@@ -381,8 +377,36 @@ func (s *runtimeService) run(ctx context.Context, startup func(context.Context) 
 		}
 	}
 	if startup != nil {
+		select {
+		case <-s.server.Ready():
+		case err := <-s.backgroundErrors:
+			if err == nil {
+				err = errors.New("local IPC service stopped before startup")
+			}
+			return core.WrapActivation(core.ActivationStateCommit, err)
+		case <-serviceCtx.Done():
+			return core.WrapActivation(core.ActivationStateCommit, serviceCtx.Err())
+		}
+	}
+	if startup != nil {
 		if err := startup(serviceCtx); err != nil {
 			return err
+		}
+	}
+	if err := s.subScheduler.Start(serviceCtx); err != nil {
+		return err
+	}
+	defer s.subScheduler.Stop()
+	if startup != nil {
+		select {
+		case <-s.exited:
+			return core.WrapActivation(core.ActivationControllerReadiness, errors.New("Mihomo exited before readiness announcement"))
+		default:
+		}
+		if ready != nil {
+			if err := ready(); err != nil {
+				return core.WrapActivation(core.ActivationStateCommit, err)
+			}
 		}
 	}
 	for {
@@ -432,7 +456,7 @@ func (s *runtimeService) run(ctx context.Context, startup func(context.Context) 
 			}
 			_ = s.stopMonitorAndProcess(cleanup)
 			stop()
-			if s.localProfile != nil {
+			if s.foreground {
 				return core.WrapActivation(core.ActivationProcessStart, fmt.Errorf("Mihomo child exited unexpectedly"))
 			}
 			s.reportError("mihomo", fmt.Errorf("mihomo child exited unexpectedly"))

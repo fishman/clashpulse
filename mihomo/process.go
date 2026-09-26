@@ -21,7 +21,7 @@ type Process struct {
 	done chan struct{}
 }
 
-// Exited reports the current child's completion; nil means no child is running.
+// Exited reports the latest child's completion; nil means no child has started.
 func (p *Process) Exited() <-chan struct{} {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -85,7 +85,6 @@ func (p *Process) wait(cmd *exec.Cmd, done chan struct{}) {
 	p.mu.Lock()
 	if p.cmd == cmd {
 		p.cmd = nil
-		p.done = nil
 		close(done)
 	}
 	p.mu.Unlock()

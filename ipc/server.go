@@ -46,6 +46,7 @@ type Server struct {
 	clients  map[*serverClient]struct{}
 	listener net.Listener
 	cancel   context.CancelFunc
+	ready    chan struct{}
 	served   bool
 	closed   bool
 	closeOne sync.Once
@@ -65,12 +66,16 @@ func NewServer(options ServerOptions) (*Server, error) {
 	return &Server{
 		endpoint: endpoint,
 		handler:  options.Handler,
+		ready:    make(chan struct{}),
 		snapshot: core.CloneSnapshot(options.InitialSnapshot),
 		clients:  make(map[*serverClient]struct{}),
 	}, nil
 }
 
 func (s *Server) Endpoint() string { return s.endpoint }
+
+// Ready closes after the local endpoint is bound and accepting peers.
+func (s *Server) Ready() <-chan struct{} { return s.ready }
 
 // Publish replaces the current state and non-blockingly coalesces each
 // subscriber's pending event to the newest snapshot.
@@ -131,6 +136,7 @@ func (s *Server) Serve(ctx context.Context) error {
 	}
 	s.listener = listener
 	s.mu.Unlock()
+	close(s.ready)
 
 	sem := make(chan struct{}, maxClients)
 	for {

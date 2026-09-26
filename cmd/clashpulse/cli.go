@@ -92,7 +92,7 @@ func newCLICommand(stdout, stderr io.Writer, actions cliActions) *cli.Command {
 				}
 				return actions.tui(ctx)
 			}},
-			{Name: "activate", Usage: "run a local profile until interrupted", ArgsUsage: "<profile.yaml>", Arguments: []cli.Argument{&cli.StringArgs{Name: "path", Min: 1, Max: 1}}, Action: func(ctx context.Context, command *cli.Command) error {
+			{Name: "activate", Usage: "run a local profile until interrupted", ArgsUsage: "<profile.yaml>", SkipFlagParsing: true, Arguments: []cli.Argument{&cli.StringArgs{Name: "path", Min: 1, Max: 1}}, Action: func(ctx context.Context, command *cli.Command) error {
 				paths := command.StringArgs("path")
 				if command.Args().Len() != 0 || len(paths) != 1 {
 					return errors.New("activate requires one file")

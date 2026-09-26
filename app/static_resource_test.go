@@ -341,7 +341,7 @@ func TestLocalProfileResourceFailureReportsStableID(t *testing.T) {
 	if err := os.Remove(h.resourceFiles["list-a"]); err != nil {
 		t.Fatal(err)
 	}
-	err := RunFileAt(h.ctx, h.configDir, h.stateDir, filepath.Join(h.root, "local.sock"), profile, nil)
+	err := RunFileAt(h.ctx, h.configDir, h.stateDir, filepath.Join(h.root, "socket", "local.sock"), profile, nil)
 	public, ok := core.PublicActivation(err)
 	if !ok || public.Stage != core.ActivationResources || public.ResourceID != "list-a" || strings.Contains(err.Error(), "private") {
 		t.Fatalf("managed resource failure lost safe identity: %v", err)
@@ -391,6 +391,26 @@ func TestLocalProfileSystemProxyRestoredOnCancel(t *testing.T) {
 	}
 	if !equalJSONMap(before, readJSONFile(t, h.proxyState)) {
 		t.Fatal("local shutdown did not restore System Proxy")
+	}
+}
+
+func TestLocalReadinessAndProxyRollbackFailureReportsRollback(t *testing.T) {
+	h := newStaticRuntime(t)
+	profile := filepath.Join(h.root, "local.yaml")
+	if err := os.WriteFile(profile, []byte("proxies:\n  - name: node-a\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(h.root, "fail-restore-once")
+	t.Setenv("CLASHPULSE_FAKE_GSETTINGS_FAIL_ONCE", marker)
+	err := RunFileAt(h.ctx, h.configDir, h.stateDir, filepath.Join(h.root, "socket", "local.sock"), profile, func() error {
+		if err := os.WriteFile(marker, nil, 0o600); err != nil {
+			return err
+		}
+		return errors.New("password=private")
+	})
+	public, ok := core.PublicActivation(err)
+	if !ok || public.Stage != core.ActivationRollback || strings.Contains(err.Error(), "password=private") {
+		t.Fatalf("failed cleanup was masked: %v (cause: %v)", err, errors.Unwrap(err))
 	}
 }
 

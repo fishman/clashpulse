@@ -29,7 +29,7 @@ func readLocalProfile(ctx context.Context, path string) ([]byte, error) {
 	if !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > subscriptions.DefaultMaxProfileBytes {
 		return fail(errors.New("unsafe source file"))
 	}
-	file, err := os.Open(absolute)
+	file, err := openLocalProfile(absolute)
 	if err != nil {
 		return fail(err)
 	}

@@ -97,6 +97,29 @@ func localOwnerFixture(t *testing.T) (string, string, string, string) {
 	return configDir, stateDir, filepath.Join(root, "socket", "service.sock"), path
 }
 
+func TestLocalProfileNoFollowOpenRejectsSameInodeSymlink(t *testing.T) {
+	dir := t.TempDir()
+	original := filepath.Join(dir, "original.yaml")
+	linkTarget := filepath.Join(dir, "hardlink.yaml")
+	operand := filepath.Join(dir, "operand.yaml")
+	if err := os.WriteFile(original, []byte("proxies: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(original, linkTarget); err != nil {
+		t.Skipf("hardlinks unavailable: %v", err)
+	}
+	if err := os.Symlink(linkTarget, operand); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	file, err := openLocalProfile(operand)
+	if file != nil {
+		file.Close()
+	}
+	if err == nil {
+		t.Fatal("open followed symlink to original inode")
+	}
+}
+
 func TestLocalProfileForegroundOwner(t *testing.T) {
 	configDir, stateDir, endpoint, path := localOwnerFixture(t)
 	if err := config.Write(filepath.Join(stateDir, "generated.yaml"), []byte("durable profile")); err != nil {
@@ -152,6 +175,46 @@ func TestLocalProfileForegroundOwner(t *testing.T) {
 	}
 }
 
+func TestLocalProfileCleanupFailureReportsRollback(t *testing.T) {
+	configDir, stateDir, endpoint, path := localOwnerFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ready, done := make(chan struct{}, 1), make(chan error, 1)
+	go func() {
+		done <- RunFileAt(ctx, configDir, stateDir, endpoint, path, func() error { ready <- struct{}{}; return nil })
+	}()
+	select {
+	case <-ready:
+	case err := <-done:
+		t.Fatalf("startup: %v", err)
+	case <-time.After(6 * time.Second):
+		t.Fatal("not ready")
+	}
+	files, err := filepath.Glob(filepath.Join(stateDir, "generated-local-*.yaml"))
+	if err != nil || len(files) != 1 {
+		t.Fatalf("local config = %v, %v", files, err)
+	}
+	if err := os.Remove(files[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(files[0], 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(files[0], "block-removal"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	select {
+	case err := <-done:
+		public, ok := core.PublicActivation(err)
+		if !ok || public.Stage != core.ActivationRollback {
+			t.Fatalf("ignored private cleanup failure: %v", err)
+		}
+	case <-time.After(7 * time.Second):
+		t.Fatal("shutdown blocked")
+	}
+}
+
 func TestLocalProfileReadinessFailure(t *testing.T) {
 	configDir, stateDir, endpoint, path := localOwnerFixture(t)
 	err := RunFileAt(context.Background(), configDir, stateDir, endpoint, path, func() error { return os.ErrClosed })
@@ -160,6 +223,22 @@ func TestLocalProfileReadinessFailure(t *testing.T) {
 	}
 	if files, _ := filepath.Glob(filepath.Join(stateDir, "generated-local-*.yaml")); len(files) != 0 {
 		t.Fatalf("failed readiness left local config: %v", files)
+	}
+}
+
+func TestLocalProfileDoesNotAnnounceBeforeIPCBind(t *testing.T) {
+	configDir, stateDir, _, path := localOwnerFixture(t)
+	publicDir := filepath.Join(t.TempDir(), "public")
+	if err := os.Mkdir(publicDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(publicDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	err := RunFileAt(context.Background(), configDir, stateDir, filepath.Join(publicDir, "service.sock"), path, func() error { called = true; return nil })
+	if called || err == nil {
+		t.Fatalf("announced service with inaccessible IPC endpoint: called=%t err=%v", called, err)
 	}
 }
 
@@ -318,5 +397,34 @@ func TestLocalProfileSurvivesSourceRemoval(t *testing.T) {
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestForegroundChildExitAfterSubscriptionCutover(t *testing.T) {
+	configDir, stateDir, endpoint, _ := localOwnerFixture(t)
+	initial, err := config.Load(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := newRuntimeService(configDir, stateDir, initial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.subScheduler = subscriptions.NewScheduler(s.subs, 1)
+	s.server, err = ipc.NewServer(ipc.ServerOptions{Endpoint: endpoint, Handler: func(context.Context, ipc.Command) error { return nil }, InitialSnapshot: s.snapshot})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.foreground = true
+	s.localProfile = nil // An explicit subscription has replaced the local source.
+	exited := make(chan struct{})
+	close(exited)
+	s.exited = exited
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	err = s.run(ctx, nil, nil)
+	public, ok := core.PublicActivation(err)
+	if !ok || public.Stage != core.ActivationProcessStart {
+		t.Fatalf("foreground owner ignored child exit after cutover: %v", err)
 	}
 }

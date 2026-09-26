@@ -218,3 +218,16 @@ func TestCLIActivateLocalFile(t *testing.T) {
 		t.Fatalf("unsafe failure: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 }
+
+func TestCLIActivateOptionLikeFilenameIsPrivate(t *testing.T) {
+	called := false
+	stderr := new(bytes.Buffer)
+	actions := cliActions{activateFile: func(_ context.Context, path string, _ func() error) error {
+		called = path == "-private-token.yaml"
+		return core.WrapActivation(core.ActivationFileInput, errors.New("password=private"))
+	}}
+	code := runCLI(context.Background(), []string{"clashpulse", "activate", "-private-token.yaml"}, new(bytes.Buffer), stderr, actions)
+	if !called || code != 1 || stderr.String() != core.ActivationFileInput.Message()+"\n" {
+		t.Fatalf("unsafe filename handling: called=%t code=%d stderr=%q", called, code, stderr.String())
+	}
+}

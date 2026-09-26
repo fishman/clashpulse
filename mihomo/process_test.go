@@ -141,3 +141,29 @@ func TestProcessExitedClosesAfterChildStops(t *testing.T) {
 		t.Fatal("child exit was not published")
 	}
 }
+
+func TestProcessExitedRemainsObservableAfterRapidExit(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("fake executable needs POSIX shell")
+	}
+	binary := filepath.Join(t.TempDir(), "mihomo")
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	process := new(Process)
+	if err := process.Start(context.Background(), StartPlan{Capability: Capability{Path: binary}, ConfigPath: "/tmp/local.yaml"}); err != nil {
+		t.Fatal(err)
+	}
+	exited := process.Exited()
+	if exited == nil {
+		t.Fatal("rapidly terminated child lost its exit signal")
+	}
+	select {
+	case <-exited:
+	case <-time.After(time.Second):
+		t.Fatal("child did not exit")
+	}
+	if process.Exited() != exited {
+		t.Fatal("completed child exit signal was discarded")
+	}
+}

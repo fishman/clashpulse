@@ -71,6 +71,7 @@ type runtimeService struct {
 	resourceHome              string
 	localProfile              []byte
 	generatedPath             string
+	foreground                bool
 	forceRestart              bool
 	activationBackup          *runtimeBackup
 	groups                    map[string]mihomo.Group
@@ -102,7 +103,7 @@ func RunFileAt(ctx context.Context, configDir, stateDir, endpoint, path string, 
 	return runAt(ctx, configDir, stateDir, endpoint, profile, ready)
 }
 
-func runAt(ctx context.Context, configDir, stateDir, endpoint string, profile []byte, ready func() error) error {
+func runAt(ctx context.Context, configDir, stateDir, endpoint string, profile []byte, ready func() error) (result error) {
 	if ctx == nil {
 		return fmt.Errorf("clashpulse: context is required")
 	}
@@ -139,7 +140,12 @@ func runAt(ctx context.Context, configDir, stateDir, endpoint string, profile []
 			return core.WrapActivation(core.ActivationStateCommit, err)
 		}
 		s.localProfile = profile
-		defer os.Remove(s.generatedPath)
+		s.foreground = true
+		defer func(path string) {
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				result = errors.Join(core.WrapActivation(core.ActivationRollback, err), result)
+			}
+		}(s.generatedPath)
 	}
 	s.subScheduler = subscriptions.NewScheduler(s.subs, 2)
 	s.subScheduler.ConfigureResources(s.nextResourceDue, s.enqueueResourceRefresh)
@@ -150,19 +156,9 @@ func runAt(ctx context.Context, configDir, stateDir, endpoint string, profile []
 		return err
 	}
 	if profile != nil {
-		return s.run(ctx, func(runCtx context.Context) error {
-			if err := s.start(runCtx); err != nil {
-				return err
-			}
-			if ready != nil {
-				if err := ready(); err != nil {
-					return core.WrapActivation(core.ActivationStateCommit, err)
-				}
-			}
-			return nil
-		})
+		return s.run(ctx, s.start, ready)
 	}
-	return s.run(ctx, nil)
+	return s.run(ctx, nil, nil)
 }
 
 func sweepLocalGenerated(stateDir string) error {

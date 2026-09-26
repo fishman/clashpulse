@@ -270,7 +270,7 @@ func TestRunWaitsForRefreshWorkerOnShutdown(t *testing.T) {
 			}
 		}
 	}()
-	go func() { done <- s.run(ctx, nil) }()
+	go func() { done <- s.run(ctx, nil, nil) }()
 	s.intents <- ipc.Command{Kind: ipc.CommandRefreshSubscription, SubscriptionID: "slow"}
 	select {
 	case <-entered:
