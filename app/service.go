@@ -20,6 +20,10 @@ import (
 )
 
 func newRuntimeService(configDir, stateDir string, initial config.Snapshot) (*runtimeService, error) {
+	return newRuntimeServiceWithResponseCapture(configDir, stateDir, initial, false)
+}
+
+func newRuntimeServiceWithResponseCapture(configDir, stateDir string, initial config.Snapshot, captureErrorBody bool) (*runtimeService, error) {
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
 		return nil, fmt.Errorf("clashpulse: controller secret: %w", err)
@@ -46,6 +50,7 @@ func newRuntimeService(configDir, stateDir string, initial config.Snapshot) (*ru
 		return nil, err
 	}
 	downloader := download.NewClient(func(route download.Route) (http.RoundTripper, error) { return s.transport(route, false) })
+	downloader.SetCaptureErrorBody(captureErrorBody)
 	s.registry, err = resources.NewRegistry(filepath.Join(stateDir, "resources"), downloader)
 	if err != nil {
 		return nil, err
@@ -53,6 +58,7 @@ func newRuntimeService(configDir, stateDir string, initial config.Snapshot) (*ru
 	s.subs, err = subscriptions.NewService(subStore, subscriptions.Options{
 		Transport: s.transport, Render: s.renderProfile, Validate: s.validateGenerated,
 		Apply: s.applyGenerated, Restore: s.restoreActivation,
+		CaptureErrorBody: captureErrorBody,
 		OnChange: func() {
 			select {
 			case s.stateChanged <- struct{}{}:

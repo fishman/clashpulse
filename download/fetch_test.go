@@ -381,3 +381,25 @@ func (b *finalCancelBody) Read(p []byte) (int, error) {
 }
 
 func (b *finalCancelBody) Close() error { return nil }
+
+func TestFetchCapturesBoundedPrintableErrorBodyOnlyWhenRequested(t *testing.T) {
+	body := strings.Repeat("gateway detail \x1b[31m", 200) + strings.Repeat("\xff", 1000)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, body)
+	}))
+	defer server.Close()
+	client := NewClient(func(Route) (http.RoundTripper, error) { return http.DefaultTransport, nil })
+	request := Request{URL: server.URL, Route: Direct, MaxBytes: 64, AllowHTTP: true}
+	_, err := client.Fetch(context.Background(), request)
+	status, ok := StatusErrorFrom(err)
+	if !ok || status.ResponseBody != "" {
+		t.Fatalf("default status leaked response body: %+v, %v", status, err)
+	}
+	request.CaptureErrorBody = true
+	_, err = client.Fetch(context.Background(), request)
+	status, ok = StatusErrorFrom(err)
+	if !ok || !strings.Contains(status.ResponseBody, "gateway detail") || !strings.Contains(status.ResponseBody, "[response truncated]") || strings.ContainsAny(status.ResponseBody, "\x1b\x07") || len(status.ResponseBody) > maxErrorResponseBytes {
+		t.Fatalf("opt-in response body was not bounded printable text: %+v, %v", status, err)
+	}
+}

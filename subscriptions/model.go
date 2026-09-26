@@ -96,13 +96,14 @@ type CurrentFunc func(id string) (config.Subscription, bool)
 // Options binds the service to application-owned transports, rendering,
 // validation, activation, rollback, and latest config snapshots.
 type Options struct {
-	Transport TransportFactory
-	Render    RenderFunc
-	Validate  ValidateFunc
-	Apply     ApplyFunc
-	Restore   RestoreFunc
-	Current   CurrentFunc
-	MaxBytes  int64
+	Transport        TransportFactory
+	Render           RenderFunc
+	Validate         ValidateFunc
+	Apply            ApplyFunc
+	Restore          RestoreFunc
+	Current          CurrentFunc
+	MaxBytes         int64
+	CaptureErrorBody bool
 	// OnChange is called after a changed promotion or persisted refresh failure.
 	// It must be nonblocking; callers should enqueue notification work.
 	OnChange func()

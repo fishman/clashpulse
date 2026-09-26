@@ -14,13 +14,20 @@ import (
 	"github.com/fishman/notmutt/lib/xdg"
 )
 
+// RefreshOptions controls local-only refresh diagnostics.
+type RefreshOptions struct{ ShowResponse bool }
+
 // Refresh runs one source update, a source kind, or all enabled sources offline.
 func Refresh(ctx context.Context, kind, id string) error {
+	return RefreshWithOptions(ctx, kind, id, RefreshOptions{})
+}
+
+func RefreshWithOptions(ctx context.Context, kind, id string, options RefreshOptions) error {
 	configHome, stateHome := xdg.ConfigHome(), xdg.StateHome()
 	if configHome == "" || stateHome == "" {
 		return fmt.Errorf("clashpulse: cannot resolve private configuration and state directories")
 	}
-	return RefreshAt(ctx, filepath.Join(configHome, "clashpulse"), filepath.Join(stateHome, "clashpulse"), kind, id)
+	return RefreshAtWithOptions(ctx, filepath.Join(configHome, "clashpulse"), filepath.Join(stateHome, "clashpulse"), kind, id, options)
 }
 
 func RefreshAll(ctx context.Context) error { return Refresh(ctx, "", "") }
@@ -32,6 +39,11 @@ func RefreshAllAt(ctx context.Context, configDir, stateDir string) error {
 // RefreshAt is the private-state variant used by the CLI and isolated tests.
 // Empty kind refreshes all enabled sources; empty id refreshes the selected kind.
 func RefreshAt(ctx context.Context, configDir, stateDir, kind, id string) error {
+	return RefreshAtWithOptions(ctx, configDir, stateDir, kind, id, RefreshOptions{})
+}
+
+// RefreshAtWithOptions optionally captures a bounded HTTP error response body.
+func RefreshAtWithOptions(ctx context.Context, configDir, stateDir, kind, id string, options RefreshOptions) error {
 	if ctx == nil {
 		return fmt.Errorf("clashpulse: context is required")
 	}
@@ -68,7 +80,7 @@ func RefreshAt(ctx context.Context, configDir, stateDir, kind, id string) error 
 			}
 		}
 	}
-	s, err := newRuntimeService(configDir, stateDir, initial)
+	s, err := newRuntimeServiceWithResponseCapture(configDir, stateDir, initial, options.ShowResponse)
 	if err != nil {
 		return fmt.Errorf("clashpulse: refresh state unavailable")
 	}
@@ -159,6 +171,12 @@ func (s *runtimeService) resourceRefreshFailure(snapshot config.Snapshot, ids []
 			message := "resource update failed"
 			if httpStatus, ok := download.ParseStatus(status.LastFailure); ok {
 				message = httpStatusMessage(httpStatus)
+				if len(ids) == 1 {
+					if captured, found := download.StatusErrorFrom(cause); found && captured.Code == httpStatus.Code {
+						failures = append(failures, refreshFailure{message: fmt.Sprintf("clashpulse: refresh resource %s: %s", id, message), status: captured})
+						continue
+					}
+				}
 			} else if status.LastFailure == resources.ErrPinMismatch.Error() {
 				message = "SHA-256 pin mismatch"
 			}
@@ -187,9 +205,17 @@ func hasSubscription(snapshot config.Snapshot, id string) bool {
 	return false
 }
 
+type refreshFailure struct {
+	message string
+	status  download.StatusError
+}
+
+func (e refreshFailure) Error() string { return e.message }
+func (e refreshFailure) Unwrap() error { return e.status }
 func directRefreshFailure(kind, id string, err error) error {
+	status, hasStatus := download.StatusErrorFrom(err)
 	message := safeDiagnostic("refresh_"+kind, id, err).Message
-	if status, ok := download.StatusErrorFrom(err); ok {
+	if hasStatus {
 		message = httpStatusMessage(status)
 	} else {
 		switch {
@@ -209,5 +235,9 @@ func directRefreshFailure(kind, id string, err error) error {
 	} else {
 		scope += "s"
 	}
-	return fmt.Errorf("clashpulse: refresh %s: %s", scope, message)
+	fullMessage := fmt.Sprintf("clashpulse: refresh %s: %s", scope, message)
+	if hasStatus {
+		return refreshFailure{message: fullMessage, status: status}
+	}
+	return errors.New(fullMessage)
 }

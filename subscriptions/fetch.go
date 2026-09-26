@@ -91,13 +91,14 @@ func (s *Service) refresh(ctx context.Context, id string, supplied *config.Subsc
 		return s.options.Transport(route, record.Subscription.AllowInvalidTLS)
 	})
 	response, err := client.Fetch(operationCtx, download.Request{
-		URL:          record.Subscription.URL,
-		Route:        download.Route(record.Subscription.Route),
-		ETag:         record.ETag,
-		LastModified: record.LastModified,
-		MaxBytes:     s.options.MaxBytes,
-		AllowHTTP:    record.Subscription.AllowHTTP,
-		UserAgent:    record.Subscription.UserAgent,
+		URL:              record.Subscription.URL,
+		Route:            download.Route(record.Subscription.Route),
+		ETag:             record.ETag,
+		LastModified:     record.LastModified,
+		MaxBytes:         s.options.MaxBytes,
+		AllowHTTP:        record.Subscription.AllowHTTP,
+		UserAgent:        record.Subscription.UserAgent,
+		CaptureErrorBody: s.options.CaptureErrorBody,
 	})
 	if err != nil {
 		checkedAt := time.Now()

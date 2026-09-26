@@ -28,7 +28,10 @@ func TestRefreshAtRefusesConcurrentDesktopOwner(t *testing.T) {
 }
 
 func TestRefreshAtReportsSafeSubscriptionStatusWithoutSourceURL(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotAcceptable) }))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotAcceptable)
+		_, _ = w.Write([]byte("gateway denied"))
+	}))
 	defer server.Close()
 	configDir, stateDir := t.TempDir(), t.TempDir()
 	if err := privateDirectory(configDir); err != nil {
@@ -52,6 +55,15 @@ func TestRefreshAtReportsSafeSubscriptionStatusWithoutSourceURL(t *testing.T) {
 	err = RefreshAt(t.Context(), configDir, stateDir, "subscription", "feed")
 	if err == nil || !strings.Contains(err.Error(), "subscription feed") || !strings.Contains(err.Error(), "HTTP 406 Not Acceptable") || strings.Contains(err.Error(), "private-token") || strings.Contains(err.Error(), server.URL) {
 		t.Fatalf("refresh error was not source-scoped and sanitized: %v", err)
+	}
+	status, ok := download.StatusErrorFrom(err)
+	if !ok || status.ResponseBody != "" {
+		t.Fatalf("default refresh captured HTTP body: %+v, %v", status, err)
+	}
+	err = RefreshAtWithOptions(t.Context(), configDir, stateDir, "subscription", "feed", RefreshOptions{ShowResponse: true})
+	status, ok = download.StatusErrorFrom(err)
+	if !ok || status.ResponseBody != "gateway denied" {
+		t.Fatalf("explicit response option did not retain HTTP body: %+v, %v", status, err)
 	}
 	initial, err = config.Load(configDir)
 	if err != nil {

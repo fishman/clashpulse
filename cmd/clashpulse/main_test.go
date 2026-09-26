@@ -4,7 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
+
+	"github.com/fishman/clashpulse/download"
 )
 
 func TestRunVersion(t *testing.T) {
@@ -173,5 +177,25 @@ func TestRefreshAndDownloadWithoutIDRunAllEnabledSources(t *testing.T) {
 		if code != 0 || gotKind != "" || gotID != "" || stdout.String() != "refreshed all enabled sources\n" || stderr.Len() != 0 {
 			t.Fatalf("%s without ID = code %d, kind %q, id %q, stdout %q, stderr %q", command, code, gotKind, gotID, stdout.String(), stderr.String())
 		}
+	}
+}
+
+func TestShowResponseFlagPrintsOptInHTTPBody(t *testing.T) {
+	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+	status := download.StatusError{Code: 403, ResponseBody: "gateway denied"}
+	code := runMainContextWithRefreshOptions(context.Background(), []string{"refresh", "subscription", "feed", "--show-response"}, stdout, stderr,
+		func(context.Context) error { t.Fatal("response inspection started the service"); return nil },
+		func(context.Context, func(context.Context) error) error {
+			t.Fatal("response inspection opened the desktop")
+			return nil
+		},
+		func(_ context.Context, kind, id string, show bool) error {
+			if !show || kind != "subscription" || id != "feed" {
+				t.Fatalf("refresh options = %q, %q, show=%t", kind, id, show)
+			}
+			return fmt.Errorf("clashpulse: refresh subscription feed: %w", status)
+		})
+	if code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "HTTP 403") || !strings.Contains(stderr.String(), "gateway denied") {
+		t.Fatalf("show-response output = code %d, stdout %q, stderr %q", code, stdout.String(), stderr.String())
 	}
 }

@@ -10,9 +10,13 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 const maxRedirects = 5
+
+const maxErrorResponseBytes = 4096
 
 type Route string
 
@@ -23,13 +27,14 @@ const (
 )
 
 type Request struct {
-	URL          string
-	Route        Route
-	ETag         string
-	LastModified string
-	MaxBytes     int64
-	AllowHTTP    bool
-	UserAgent    string
+	URL              string
+	Route            Route
+	ETag             string
+	LastModified     string
+	MaxBytes         int64
+	AllowHTTP        bool
+	UserAgent        string
+	CaptureErrorBody bool
 }
 
 type Response struct {
@@ -40,11 +45,15 @@ type Response struct {
 	SubscriptionUserInfo string
 }
 
-// StatusError contains only a numeric response status, never the request URL or body.
-type StatusError struct{ Code int }
+// StatusError contains a numeric status and, only when opted in, a bounded response body.
+type StatusError struct {
+	Code         int
+	ResponseBody string
+}
 
 func (e StatusError) Error() string { return fmt.Sprintf("HTTP %d", e.Code) }
-func (e StatusError) Valid() bool   { return e.Code >= 400 && e.Code <= 599 }
+
+func (e StatusError) Valid() bool { return e.Code >= 400 && e.Code <= 599 }
 
 // StatusErrorFrom extracts a valid status from wrapped value or pointer errors.
 func StatusErrorFrom(err error) (StatusError, bool) {
@@ -74,11 +83,19 @@ func ParseStatus(message string) (StatusError, bool) {
 type Factory func(Route) (http.RoundTripper, error)
 
 type Client struct {
-	factory Factory
+	factory          Factory
+	captureErrorBody bool
 }
 
 func NewClient(factory Factory) *Client {
 	return &Client{factory: factory}
+}
+
+// SetCaptureErrorBody enables bounded error body capture. Set it before Fetch calls.
+func (c *Client) SetCaptureErrorBody(enabled bool) {
+	if c != nil {
+		c.captureErrorBody = enabled
+	}
 }
 
 func (c *Client) Fetch(ctx context.Context, req Request) (Response, error) {
@@ -141,8 +158,12 @@ func (c *Client) Fetch(ctx context.Context, req Request) (Response, error) {
 			return Response{StatusCode: http.StatusNotModified, ETag: etag, LastModified: lastModified, SubscriptionUserInfo: boundedUsageHeader(response.Header.Get("Subscription-Userinfo"))}, nil
 		}
 		if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+			status := StatusError{Code: response.StatusCode}
+			if req.CaptureErrorBody || c.captureErrorBody {
+				status.ResponseBody = captureErrorResponse(response.Body)
+			}
 			response.Body.Close()
-			return Response{}, StatusError{Code: response.StatusCode}
+			return Response{}, status
 		}
 
 		body, err := readBody(ctx, response.Body, req.MaxBytes)
@@ -328,6 +349,41 @@ func readBody(ctx context.Context, body io.Reader, maxBytes int64) ([]byte, erro
 			return nil, fmt.Errorf("download: read body: %w", err)
 		}
 	}
+}
+
+func captureErrorResponse(body io.Reader) string {
+	data, _ := io.ReadAll(io.LimitReader(body, maxErrorResponseBytes+1))
+	truncated := len(data) > maxErrorResponseBytes
+	if truncated {
+		data = data[:maxErrorResponseBytes]
+	}
+	text := strings.ToValidUTF8(string(data), "\uFFFD")
+	var output strings.Builder
+	for _, char := range text {
+		if char == '\n' || char == '\t' || !unicode.IsControl(char) {
+			output.WriteRune(char)
+		}
+	}
+	result := output.String()
+	const suffix = "\n[response truncated]"
+	if len(result) > maxErrorResponseBytes {
+		truncated = true
+	}
+	if truncated {
+		result = truncateUTF8(result, maxErrorResponseBytes-len(suffix)) + suffix
+	}
+	return result
+}
+
+func truncateUTF8(text string, limit int) string {
+	if len(text) <= limit {
+		return text
+	}
+	text = text[:limit]
+	for !utf8.ValidString(text) {
+		text = text[:len(text)-1]
+	}
+	return text
 }
 
 func boundedUsageHeader(value string) string {

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 	"github.com/fishman/clashpulse/core"
@@ -183,5 +184,26 @@ func rowLabels(object fyne.CanvasObject) []string {
 		return labels
 	default:
 		return nil
+	}
+}
+
+func TestActivityListAllocatesHeightForWrappedMessage(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	view := newActivityView()
+	message := strings.Repeat("visible diagnostic detail ", 12) + "tail-marker"
+	view.update([]core.DiagnosticSnapshot{{At: 100, Severity: "error", SourceID: "feed", Message: message}})
+	view.content.Resize(fyne.NewSize(260, 200))
+	renderer := view.list.CreateRenderer()
+	renderer.Layout(fyne.NewSize(260, 200))
+	rowHeight := renderer.Objects()[0].(*container.Scroll).Content.(*fyne.Container).Objects[0].Size().Height
+	if rowHeight < 80 {
+		t.Fatalf("activity row height %v does not fit wrapped text", rowHeight)
+	}
+	view.content.Resize(fyne.NewSize(180, 200))
+	renderer.Layout(fyne.NewSize(180, 200))
+	narrowHeight := renderer.Objects()[0].(*container.Scroll).Content.(*fyne.Container).Objects[0].Size().Height
+	if narrowHeight <= rowHeight {
+		t.Fatalf("resized activity row height %v did not grow beyond %v", narrowHeight, rowHeight)
 	}
 }
