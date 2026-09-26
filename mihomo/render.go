@@ -17,6 +17,15 @@ import (
 // ManagedPaths maps stable resource IDs to validated private local files.
 type ManagedPaths map[string]string
 
+type CapabilityError struct {
+	ResourceID string
+	Kind       config.ResourceKind
+}
+
+func (e *CapabilityError) Error() string {
+	return fmt.Sprintf("mihomo: resource %q requires %s capability", e.ResourceID, e.Kind)
+}
+
 type ControllerSettings struct {
 	Address   string
 	Secret    string
@@ -104,7 +113,7 @@ func Render(profile []byte, intent config.Snapshot, paths ManagedPaths, controll
 				supported = capability.SupportsMMDB
 			}
 			if !supported {
-				return nil, fmt.Errorf("mihomo: resource %q requires %s capability", resource.ID, resource.Kind)
+				return nil, &CapabilityError{ResourceID: resource.ID, Kind: resource.Kind}
 			}
 			if controller.HomeDir == "" || !filepath.IsAbs(controller.HomeDir) || filepath.Clean(filepath.Dir(path)) != filepath.Clean(controller.HomeDir) || filepath.Base(path) != string(resource.Kind) {
 				return nil, fmt.Errorf("mihomo: resource %q must use Mihomo home filename %s", resource.ID, resource.Kind)

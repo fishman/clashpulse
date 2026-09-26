@@ -2,8 +2,11 @@ package resources
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 
@@ -84,5 +87,28 @@ func TestStageDueRefreshesOnlyDueResourcesAndCopiesOthers(t *testing.T) {
 	defer mu.Unlock()
 	if counts["/one"] != 2 || counts["/two"] != 1 {
 		t.Fatalf("HTTP request counts = %#v", counts)
+	}
+}
+
+func TestStageDueMissingCommittedResourceNamesID(t *testing.T) {
+	home := t.TempDir()
+	first, second := filepath.Join(home, "first.dat"), filepath.Join(home, "second.dat")
+	for _, path := range []string{first, second} {
+		if err := os.WriteFile(path, []byte("valid geodata"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	registry, err := NewRegistry(filepath.Join(home, "managed"), localResourceClient())
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := config.Snapshot{Resources: []config.Resource{
+		{ID: "one", Kind: config.ResourceGeoIP, Format: config.FormatDAT, URL: first, Enabled: true},
+		{ID: "two", Kind: config.ResourceGeoSite, Format: config.FormatDAT, URL: second, Enabled: true},
+	}}
+	_, err = registry.StageDue(context.Background(), snapshot, download.Direct, []string{"one"})
+	var failure *ResourceFailure
+	if !errors.As(err, &failure) || failure.ResourceID != "two" {
+		t.Fatalf("missing non-due resource lost identity: %v", err)
 	}
 }

@@ -183,7 +183,7 @@ func prepareResources(ctx context.Context, registry *Registry, snapshot config.S
 		if _, refresh := due[resource.ID]; !refresh {
 			item, err := prepareCommittedResource(resource, base.Resources[resource.ID], previousDirectory, maxBytes)
 			if err != nil {
-				return nil, fmt.Errorf("resource %q is not due and has no verified active version: %w", resource.ID, err)
+				return nil, &ResourceFailure{ResourceID: resource.ID, Err: fmt.Errorf("is not due and has no verified active version: %w", err)}
 			}
 			prepared[resource.ID] = item
 			continue

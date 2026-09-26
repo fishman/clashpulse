@@ -27,6 +27,17 @@ const (
 
 var ErrPinMismatch = errors.New("resource SHA-256 pin mismatch")
 
+type ResourceFailure struct {
+	ResourceID string
+	Err        error
+}
+
+func (e *ResourceFailure) Error() string {
+	return fmt.Sprintf("resource %q: %v", e.ResourceID, e.Err)
+}
+
+func (e *ResourceFailure) Unwrap() error { return e.Err }
+
 // ErrPlanUnvalidated is returned when a staged resource generation is
 // committed before the caller validates its complete candidate Mihomo config.
 var ErrPlanUnvalidated = errors.New("resource plan has not passed candidate configuration validation")
@@ -170,7 +181,7 @@ func (r *Registry) recordFailure(id string, err error) error {
 	r.mu.Lock()
 	r.failures[id] = message
 	r.mu.Unlock()
-	return fmt.Errorf("resource %q: %w", id, err)
+	return &ResourceFailure{ResourceID: id, Err: err}
 }
 
 // Paths returns the validated stable files for the currently committed resource set.

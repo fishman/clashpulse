@@ -75,6 +75,10 @@ func TestPinnedResourceMismatchRetainsPreviousGeneration(t *testing.T) {
 	if !errors.Is(err, ErrPinMismatch) {
 		t.Fatalf("mismatch error = %v", err)
 	}
+	var failure *ResourceFailure
+	if !errors.As(err, &failure) || failure.ResourceID != "domain-list" {
+		t.Fatalf("pin failure lost resource identity: %v", err)
+	}
 	activePaths, err := registry.Paths(config.Snapshot{Resources: []config.Resource{{
 		ID: "domain-list", Kind: config.ResourceRuleSet, Format: config.FormatYAML,
 		RuleType: config.RuleDomain, URL: server.URL, Enabled: true,

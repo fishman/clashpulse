@@ -3,6 +3,7 @@ package mihomo
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -78,6 +79,18 @@ func TestRenderRejectsMissingGeoCapability(t *testing.T) {
 	_, err := Render([]byte("proxies:\n  - name: alpha\n    type: direct\n"), intent, ManagedPaths{"geo": "/private/geoip.dat"}, ControllerSettings{Address: "127.0.0.1:9090", Secret: "secret"}, Capability{})
 	if err == nil || !strings.Contains(err.Error(), "geoip.dat") {
 		t.Fatalf("unsupported geodata accepted: %v", err)
+	}
+}
+
+func TestMissingGeoSiteCapabilityNamesResource(t *testing.T) {
+	home := t.TempDir()
+	intent := config.Snapshot{Resources: []config.Resource{{ID: "geosite", Kind: config.ResourceGeoSite, Format: config.FormatDAT, Enabled: true}}}
+	_, err := Render([]byte("proxies:\n  - name: alpha\n    type: direct\n"), intent,
+		ManagedPaths{"geosite": filepath.Join(home, "geosite.dat")},
+		ControllerSettings{Address: "127.0.0.1:9090", Secret: "secret", HomeDir: home}, Capability{})
+	var missing *CapabilityError
+	if !errors.As(err, &missing) || missing.ResourceID != "geosite" || missing.Kind != config.ResourceGeoSite {
+		t.Fatalf("missing capability lost affected resource: %v", err)
 	}
 }
 
