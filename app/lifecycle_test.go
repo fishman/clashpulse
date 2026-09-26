@@ -282,6 +282,75 @@ func TestRunAtRefreshActivateSelectAndStop(t *testing.T) {
 	}
 }
 
+func TestDownloadedProfileActivatesAfterDesktopStarts(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("fake Mihomo executable requires POSIX shell")
+	}
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 unavailable for fake controller")
+	}
+	root := t.TempDir()
+	binary := fakeAppMihomo(t, root, python)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("proxies:\n  - name: node-a\n    type: direct\n  - name: node-b\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a, node-b]\n"))
+	}))
+	defer server.Close()
+	configDir, stateDir := filepath.Join(root, "config"), filepath.Join(root, "state")
+	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\n", binary))); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Write(filepath.Join(configDir, "subscriptions.toml"), []byte(fmt.Sprintf("[[subscription]]\nid = \"daily\"\nurl = %q\nenabled = true\nallow_http = true\n", server.URL+"/profile?token=private"))); err != nil {
+		t.Fatal(err)
+	}
+	if err := DownloadAtWithOptions(t.Context(), configDir, stateDir, "daily", RefreshOptions{}); err != nil {
+		t.Fatalf("offline download: %v", err)
+	}
+
+	endpoint := filepath.Join(root, "socket", "ipc.sock")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- RunAt(ctx, configDir, stateDir, endpoint) }()
+	defer func() {
+		cancel()
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Errorf("desktop service: %v", err)
+			}
+		case <-time.After(3 * time.Second):
+			t.Error("desktop service did not stop")
+		}
+	}()
+	var client *ipc.Client
+	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
+		attempt, stop := context.WithTimeout(ctx, 100*time.Millisecond)
+		client, _ = ipc.Dial(attempt, endpoint)
+		stop()
+		if client != nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if client == nil {
+		t.Fatal("desktop service did not become ready")
+	}
+	defer client.Close()
+	request, stop := context.WithTimeout(ctx, time.Second)
+	_, err = client.Send(request, ipc.Command{Kind: ipc.CommandActivateSubscription, SubscriptionID: "daily"})
+	stop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := waitAppSnapshot(t, ctx, client, func(state core.Snapshot) bool {
+		return len(state.Subscriptions) == 1 && state.Subscriptions[0].Active && len(state.Groups) == 1 && len(state.Jobs) == 0
+	})
+	if state.Groups[0].Label != "select-main" {
+		t.Fatalf("activated group missing: %+v", state.Groups)
+	}
+}
+
 func waitAppSnapshot(t *testing.T, ctx context.Context, client *ipc.Client, ready func(core.Snapshot) bool) core.Snapshot {
 	t.Helper()
 	var state core.Snapshot
