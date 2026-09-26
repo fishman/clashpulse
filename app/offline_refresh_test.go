@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -208,6 +209,66 @@ func TestResourceResponseForKeepsBodiesWithTheirSource(t *testing.T) {
 	response, ok := resourceResponseFor(err, "remote")
 	if !ok || response.Code != http.StatusForbidden || response.ResponseBody != "remote body" {
 		t.Fatalf("source response was lost: %+v, %v", response, ok)
+	}
+}
+
+func TestRefreshResourceWithoutActiveProfileCachesEnabledResources(t *testing.T) {
+	root := t.TempDir()
+	configDir, stateDir := filepath.Join(root, "config"), filepath.Join(root, "state")
+	if err := privateDirectory(configDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Seed(configDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte("[mihomo]\nbinary = \"bundled\"\n")); err != nil {
+		t.Fatal(err)
+	}
+	initial, err := config.Load(configDir)
+	if err != nil || len(initial.Subscriptions) != 0 || len(initial.Resources) != 4 {
+		t.Fatalf("seeded resources or empty profile missing: resources=%d subscriptions=%d err=%v", len(initial.Resources), len(initial.Subscriptions), err)
+	}
+	for _, resource := range initial.Resources {
+		var body []byte
+		switch resource.Kind {
+		case config.ResourceMMDB:
+			body = []byte("\xab\xcd\xefMaxMind.com")
+		case config.ResourceRuleSet:
+			body = []byte{0x28, 0xb5, 0x2f, 0xfd}
+		default:
+			body = []byte("geo data")
+		}
+		path := filepath.Join(root, resource.ID+".data")
+		if err := os.WriteFile(path, body, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := config.PatchResource(filepath.Join(configDir, "resources.toml"), initial, resource.ID, config.ResourceEdit{URL: &path}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	snapshot, err := config.Load(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := RefreshAtWithOptions(t.Context(), configDir, stateDir, "resource", "geoip", RefreshOptions{}); err != nil {
+		t.Fatalf("resource refresh without a profile: %v", err)
+	}
+	client := download.NewClient(func(download.Route) (http.RoundTripper, error) { return http.DefaultTransport, nil })
+	registry, err := resources.NewRegistry(filepath.Join(stateDir, "resources"), client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statuses, err := registry.Status(snapshot)
+	if err != nil || len(statuses) != 4 {
+		t.Fatalf("resource cache status: count=%d err=%v", len(statuses), err)
+	}
+	for _, status := range statuses {
+		if !status.Validated {
+			t.Errorf("default resource %q was not cached and validated", status.ID)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "generated.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("resource-only refresh created runtime config: %v", err)
 	}
 }
 

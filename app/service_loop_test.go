@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/pem"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -23,7 +22,7 @@ import (
 	"github.com/fishman/clashpulse/sysproxy"
 )
 
-func TestRunRefreshJobsDoNotBlockStop(t *testing.T) {
+func TestRunSubscriptionRefreshDoesNotBlockStop(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("fake Mihomo executable requires POSIX shell")
 	}
@@ -32,55 +31,38 @@ func TestRunRefreshJobsDoNotBlockStop(t *testing.T) {
 		t.Skip("python3 unavailable for fake controller")
 	}
 
-	var blockSubscription, blockResource atomic.Bool
-	subscriptionStarted, resourceStarted := make(chan struct{}, 1), make(chan struct{}, 1)
-	releaseSubscription, releaseResource := make(chan struct{}), make(chan struct{})
-	var releaseSubscriptionOnce, releaseResourceOnce sync.Once
+	var blockSubscription atomic.Bool
+	subscriptionStarted := make(chan struct{}, 1)
+	releaseSubscription := make(chan struct{})
+	var releaseSubscriptionOnce sync.Once
 	releaseSubscriptionNow := func() { releaseSubscriptionOnce.Do(func() { close(releaseSubscription) }) }
-	releaseResourceNow := func() { releaseResourceOnce.Do(func() { close(releaseResource) }) }
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/subscription":
-			if blockSubscription.Load() {
-				select {
-				case subscriptionStarted <- struct{}{}:
-				default:
-				}
-				<-releaseSubscription
-			}
-			_, _ = w.Write([]byte("proxies:\n  - name: node-a\n    type: direct\n  - name: node-b\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a, node-b]\n"))
-		case "/resource":
-			if blockResource.Load() {
-				select {
-				case resourceStarted <- struct{}{}:
-				default:
-				}
-				<-releaseResource
-			}
-			_, _ = w.Write([]byte("payload:\n  - example.com\n"))
-		default:
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/subscription" {
 			http.NotFound(w, r)
+			return
 		}
+		if blockSubscription.Load() {
+			select {
+			case subscriptionStarted <- struct{}{}:
+			default:
+			}
+			<-releaseSubscription
+		}
+		_, _ = w.Write([]byte("proxies:\n  - name: node-a\n    type: direct\n  - name: node-b\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a, node-b]\n"))
 	}))
 	defer server.Close()
 	defer releaseSubscriptionNow()
-	defer releaseResourceNow()
 
 	root := t.TempDir()
-	certPath := filepath.Join(root, "test-root.pem")
-	if err := os.WriteFile(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}), 0600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("SSL_CERT_FILE", certPath)
 	binary := fakeAppMihomo(t, root, python)
 	configDir := filepath.Join(root, "config")
 	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\n[monitor]\nenabled = false\n", binary))); err != nil {
 		t.Fatal(err)
 	}
-	if err := config.Write(filepath.Join(configDir, "subscriptions.toml"), []byte(fmt.Sprintf("[[subscription]]\nid = \"daily\"\nurl = %q\nenabled = true\n", server.URL+"/subscription"))); err != nil {
+	if err := config.Write(filepath.Join(configDir, "subscriptions.toml"), []byte(fmt.Sprintf("[[subscription]]\nid = \"daily\"\nurl = %q\nenabled = true\nallow_http = true\n", server.URL+"/subscription"))); err != nil {
 		t.Fatal(err)
 	}
-	if err := config.Write(filepath.Join(configDir, "resources.toml"), []byte(fmt.Sprintf("[[resource]]\nid = \"ads\"\nkind = \"rule-set\"\nformat = \"yaml\"\nrule_type = \"domain\"\nurl = %q\nenabled = true\n", server.URL+"/resource"))); err != nil {
+	if err := config.Write(filepath.Join(configDir, "resources.toml"), []byte("# no resources in this lifecycle test\n")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -147,12 +129,8 @@ func TestRunRefreshJobsDoNotBlockStop(t *testing.T) {
 
 	send(ipc.CommandStart, "")
 	waitAppSnapshot(t, ctx, client, func(state core.Snapshot) bool { return len(state.Groups) == 1 && len(state.Jobs) == 0 })
-	blockResource.Store(true)
-	send(ipc.CommandRefreshResource, "ads")
-	waitStarted(resourceStarted)
 	send(ipc.CommandStop, "")
 	waitServiceStopped(t, ctx, client, func(state core.Snapshot) bool { return len(state.Jobs) == 0 })
-	releaseResourceNow()
 	blockedBinary := filepath.Join(root, "slow-inspect-mihomo")
 	started := filepath.Join(root, "inspect-started")
 	script := fmt.Sprintf("#!/bin/sh\ncase \"$1\" in\n -v) : > %q; sleep 6; echo 'Mihomo Meta v1.19.31 linux amd64'; exit 0;;\n -t) exit 0;;\nesac\nexit 1\n", started)

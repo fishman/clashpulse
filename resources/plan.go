@@ -368,9 +368,8 @@ func (p *Plan) Paths() map[string]string {
 	return clonePaths(p.paths)
 }
 
-// Validate invokes the selected-binary integration callback with this complete
-// staged home. It is required for every plan; Mihomo's own parser validates the
-// embedded rules of MRS resources before their generation can be committed.
+// Validate runs the callback for the complete generated Mihomo config before commit.
+// For a resource-only cache without a profile, use ValidateResources instead.
 func (p *Plan) Validate(validator CandidateValidator) error {
 	if p == nil {
 		return fmt.Errorf("resources: nil plan")
@@ -399,9 +398,14 @@ func (p *Plan) Validate(validator CandidateValidator) error {
 	return nil
 }
 
-// Commit atomically selects this generation only after successful candidate
-// validation. The current and prior generations remain available to the runtime
-// and rollback; superseded generations are pruned before promotion.
+// ValidateResources allows caching valid resource bytes without a profile.
+// A later profile must pass Validate before Mihomo can use this generation.
+func (p *Plan) ValidateResources() error {
+	return p.Validate(func(string, map[string]string) error { return nil })
+}
+
+// Commit atomically selects this generation after resource or candidate validation.
+// The current and prior generations remain available to the runtime and rollback.
 func (p *Plan) Commit() (map[string]string, error) {
 	if p == nil {
 		return nil, fmt.Errorf("resources: nil plan")

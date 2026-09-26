@@ -34,7 +34,7 @@ Close the desktop before direct commands; they take the same private-state lock 
 ./clashpulse refresh resource [id]
 ```
 
-`download subscription` fetches and parses a profile (`proxies` or `proxy-providers` required), then stores it as an inactive private snapshot. It does not inspect or run Mihomo. Activation renders the profile, validates the complete generated config with the selected Mihomo, and applies it transactionally. `refresh` retains the validated-refresh path for subscriptions/resources. Without an ID, each command handles all enabled sources in its scope.
+`download subscription` fetches and parses a profile (`proxies` or `proxy-providers` required), then stores it as an inactive private snapshot. It does not inspect or run Mihomo. Activation renders the profile, validates the complete generated config with the selected Mihomo, and applies it transactionally. `refresh resource [id]` also works without an active profile: it caches a complete enabled-resource generation after kind/format and pin checks, without starting Mihomo. A later profile refresh or activation still validates the generated config before applying it. Without an ID, each command handles all enabled sources in its scope.
 
 Add `--show-response` to print up to 4 KiB of printable HTTP response text to local stderr on failure. URLs and response bodies remain hidden by default.
 

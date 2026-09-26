@@ -2,10 +2,7 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"time"
-
-	"github.com/fishman/clashpulse/download"
 )
 
 func (s *runtimeService) resourceDeadlines(now time.Time) (time.Time, []string) {
@@ -100,40 +97,9 @@ func (s *runtimeService) enqueueResourceRefresh(ctx context.Context) error {
 }
 
 func (s *runtimeService) refreshResourceIDs(ctx context.Context, ids []string) error {
-	defer s.resourceDirty.Store(true)
-	_, profile, err := s.subs.ActiveProfile()
+	prepared, err := s.prepareResourceRefresh(ctx, ids)
 	if err != nil {
 		return err
 	}
-	intent := s.store.Snapshot()
-	plan, err := s.registry.StageDue(ctx, intent, download.Direct, ids)
-	if err != nil {
-		return err
-	}
-	defer plan.Abort()
-	capability, err := s.selectedCapability(ctx)
-	if err != nil {
-		return err
-	}
-	var candidate []byte
-	if err := plan.Validate(func(home string, paths map[string]string) error {
-		candidate, err = s.validatedCandidate(ctx, profile, intent, home, paths, capability)
-		return err
-	}); err != nil {
-		return err
-	}
-	changed := plan.Changed()
-	if _, err := plan.Commit(); err != nil {
-		return err
-	}
-	if !changed {
-		return nil
-	}
-	if err := s.applyCandidate(ctx, candidate, capability, plan.Home()); err != nil {
-		if rollbackErr := plan.Rollback(); rollbackErr != nil {
-			return fmt.Errorf("resource reload failed and rollback could not restore prior generation")
-		}
-		return err
-	}
-	return nil
+	return s.applyPreparedResourceRefresh(ctx, prepared)
 }

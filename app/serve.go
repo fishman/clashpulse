@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/mihomo"
 	"github.com/fishman/clashpulse/resources"
+	"github.com/fishman/clashpulse/subscriptions"
 )
 
 const serviceWorkQueueSize = intentQueueSize + 1
@@ -99,11 +101,14 @@ func (s *runtimeService) discardServiceIntent(jobID string) {
 // Preparation can block on download and validation; commit and process mutation stay on the loop.
 func (s *runtimeService) prepareResourceRefresh(ctx context.Context, ids []string) (*preparedResourceRefresh, error) {
 	defer s.resourceDirty.Store(true)
+	intent := s.store.Snapshot()
 	_, profile, err := s.subs.ActiveProfile()
+	if errors.Is(err, subscriptions.ErrNoSnapshot) {
+		return s.prepareResourceCache(ctx, intent, ids)
+	}
 	if err != nil {
 		return nil, err
 	}
-	intent := s.store.Snapshot()
 	plan, err := s.registry.StageDue(ctx, intent, download.Direct, ids)
 	if err != nil {
 		return nil, err
@@ -125,6 +130,37 @@ func (s *runtimeService) prepareResourceRefresh(ctx context.Context, ids []strin
 	return prepared, nil
 }
 
+func (s *runtimeService) prepareResourceCache(ctx context.Context, intent config.Snapshot, ids []string) (*preparedResourceRefresh, error) {
+	home, err := s.registry.ActiveHome()
+	if err != nil {
+		return nil, err
+	}
+	var plan *resources.Plan
+	if home == "" || len(ids) == 0 {
+		plan, err = s.registry.Stage(ctx, intent, download.Direct)
+	} else {
+		statuses, statusErr := s.registry.Status(intent)
+		if statusErr != nil {
+			return nil, statusErr
+		}
+		due := append([]string(nil), ids...)
+		for _, status := range statuses {
+			if status.Enabled && !status.Validated {
+				due = append(due, status.ID)
+			}
+		}
+		plan, err = s.registry.StageDue(ctx, intent, download.Direct, due)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := plan.ValidateResources(); err != nil {
+		_ = plan.Abort()
+		return nil, err
+	}
+	return &preparedResourceRefresh{plan: plan}, nil
+}
+
 func (s *runtimeService) applyPreparedResourceRefresh(ctx context.Context, prepared *preparedResourceRefresh) error {
 	defer s.resourceDirty.Store(true)
 	defer prepared.plan.Abort()
@@ -135,7 +171,7 @@ func (s *runtimeService) applyPreparedResourceRefresh(ctx context.Context, prepa
 	if _, err := prepared.plan.Commit(); err != nil {
 		return err
 	}
-	if !changed {
+	if !changed || prepared.candidate == nil {
 		return nil
 	}
 	if err := s.applyCandidate(ctx, prepared.candidate, prepared.capability, prepared.plan.Home()); err != nil {
