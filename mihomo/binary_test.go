@@ -83,6 +83,20 @@ func TestInspectUsesVersionArgv(t *testing.T) {
 	}
 }
 
+func TestInspectUsesNonReservedProbeProxyName(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("fake executable requires POSIX shell")
+	}
+	path := filepath.Join(t.TempDir(), "mihomo")
+	script := "#!/bin/sh\nif [ \"$1\" = -v ]; then echo 'Mihomo v1.19.31'; exit 0; fi\n[ \"$1\" = -t ] && [ \"$2\" = -f ] || exit 1\n! grep -q 'name: DIRECT' \"$3\" && grep -q 'name: clashpulse-inspect' \"$3\"\n"
+	if err := os.WriteFile(path, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Inspect(context.Background(), Selection{Kind: "path", Path: path}); err != nil {
+		t.Fatalf("Inspect rejected valid binary on reserved probe proxy name: %v", err)
+	}
+}
+
 func TestInspectRejectsInvalidBinary(t *testing.T) {
 	path := fakeBinary(t, "", 1)
 	if _, err := Inspect(context.Background(), Selection{Kind: "path", Path: path}); err == nil {

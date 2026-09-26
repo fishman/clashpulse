@@ -62,7 +62,7 @@ func Inspect(ctx context.Context, selection Selection) (Capability, error) {
 	}
 	defer os.RemoveAll(dir)
 	check := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(check, []byte("proxies:\n  - name: DIRECT\n    type: direct\n"), 0600); err != nil {
+	if err := os.WriteFile(check, []byte("proxies:\n  - name: clashpulse-inspect\n    type: direct\n"), 0600); err != nil {
 		return Capability{}, fmt.Errorf("inspect mihomo: create check configuration: %w", err)
 	}
 	if err := exec.CommandContext(ctx, path, "-t", "-f", check).Run(); err != nil {
