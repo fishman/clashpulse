@@ -8,14 +8,14 @@ import (
 	"github.com/fishman/clashpulse/ipc"
 )
 
-func TestManagedRowsShowDeclaredFormatAndRuleType(t *testing.T) {
+func TestManagedRowsShowDeclaredFormat(t *testing.T) {
 	event := ipc.Event{Snapshot: core.Snapshot{
 		Resources: []core.ResourceSnapshot{{ID: "cn", Kind: "rule-set", Format: "yaml", RuleType: "domain", Enabled: true}},
 		Filters:   []core.FilterSnapshot{{ID: "ads", ResourceID: "cn", Format: "yaml", Target: "Proxy", Enabled: true}},
 	}}
 	resource := NewModel().Apply(event).selectTab(TabResources).Rows()[0]
-	if !strings.Contains(resource.Detail, "yaml") || !strings.Contains(resource.Detail, "domain") {
-		t.Fatalf("resource format and rule type hidden: %+v", resource)
+	if len(resource.Cells) < 3 || resource.Cells[1] != "rule-set" || resource.Cells[2] != "yaml" {
+		t.Fatalf("resource kind or format hidden: %+v", resource)
 	}
 	filter := NewModel().Apply(event).selectTab(TabFilters).Rows()[0]
 	if !strings.Contains(filter.Detail, "yaml") {

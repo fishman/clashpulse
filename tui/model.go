@@ -1671,35 +1671,10 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 		rows := make([]Row, 0, len(snapshot.Resources))
 		for _, resource := range snapshot.Resources {
 			validated, next := yesNo(resource.Validated), ""
-			detail := appendDetail(resource.Kind, "format "+resource.Format)
-			detail = appendDetail(detail, "rule type "+resource.RuleType)
-			detail = appendDetail(detail, resource.SourceHost)
-			detail = appendDetail(detail, enabledLabel(resource.Enabled))
-			if resource.Validated {
-				detail = appendDetail(detail, "validated")
-			} else {
-				detail = appendDetail(detail, "not validated")
-			}
-			if resource.HashPrefix != "" {
-				detail = appendDetail(detail, "hash "+resource.HashPrefix)
-			}
-			if resource.Destination != "" {
-				detail = appendDetail(detail, "destination "+resource.Destination)
-			}
-			if resource.LastCheck > 0 {
-				detail = appendDetail(detail, "checked "+timeLabel(resource.LastCheck))
-			}
-			if resource.LastSuccess > 0 {
-				detail = appendDetail(detail, "success "+timeLabel(resource.LastSuccess))
-			}
 			if resource.NextDue > 0 {
 				next = timeLabel(resource.NextDue)
-				detail = appendDetail(detail, "next "+next)
 			}
-			if resource.LastResult != "" {
-				detail = appendDetail(detail, "needs attention")
-			}
-			rows = append(rows, Row{ID: "resource:" + resource.ID, Title: resource.ID, Detail: detail,
+			rows = append(rows, Row{ID: "resource:" + resource.ID, Title: resource.ID,
 				Cells: []string{resource.ID, resource.Kind, resource.Format, resource.SourceHost, enabledLabel(resource.Enabled), validated, next},
 				kind:  rowResource, resourceID: resource.ID})
 		}

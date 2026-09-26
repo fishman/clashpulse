@@ -145,6 +145,20 @@ func TestRenderTabsOccupyFirstRow(t *testing.T) {
 	}
 }
 
+func TestRenderResourceDoesNotRepeatTableDetails(t *testing.T) {
+	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Resources: []core.ResourceSnapshot{{
+		ID: "cn", Kind: "rule-set", Format: "mrs", RuleType: "domain", SourceHost: "raw.githubusercontent.com",
+		Enabled: true, Validated: false, LastResult: "needs attention",
+	}}}}).selectTab(TabResources)
+	rows := mockRender(t, model, 140, 12)
+	if !strings.Contains(rows[2], "rule-set") || !strings.Contains(rows[2], "mrs") || !strings.Contains(rows[2], "raw.github") {
+		t.Fatalf("resource row missing table values: %q", rows[2])
+	}
+	if strings.Contains(rows[8], "rule-set") || strings.Contains(rows[8], "raw.githubusercontent.com") {
+		t.Fatalf("resource details repeated below the table: %q", rows[8])
+	}
+}
+
 func TestRenderStatusIdentifiesConnectionAndActiveProfile(t *testing.T) {
 	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{
 		Subscriptions: []core.SubscriptionSnapshot{{ID: "primary", Name: "Primary", Active: true}},
@@ -269,8 +283,8 @@ func TestRenderNarrowTable(t *testing.T) {
 		{ID: "geo-active", Kind: "geosite.dat", SourceHost: "mirror.example", Enabled: true},
 	}}})
 	rows := mockRender(t, model, 20, 12)
-	if !strings.Contains(rows[1], "Name") || strings.Contains(rows[1], "Source") || !strings.Contains(rows[2], "geo-active") || !strings.Contains(rows[8], "geosite.dat") {
-		t.Fatalf("narrow table lost identity or selected detail: header %q, row %q, detail %q", rows[1], rows[2], rows[8])
+	if !strings.Contains(rows[1], "Name") || strings.Contains(rows[1], "Source") || !strings.Contains(rows[2], "geo-active") || strings.TrimSpace(rows[8]) != "" {
+		t.Fatalf("narrow table repeated resource details: header %q, row %q, footer %q", rows[1], rows[2], rows[8])
 	}
 }
 
