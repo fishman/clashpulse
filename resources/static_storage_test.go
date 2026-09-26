@@ -240,8 +240,8 @@ func TestRecoverPartialStaticPromotion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !registry.RecoveredRollback() {
-		t.Fatal("interrupted promotion was not reported to application recovery")
+	if registry.CommitID() != prior.CommitID {
+		t.Fatal("interrupted promotion did not restore the previous manifest identity")
 	}
 	for i, resource := range resources {
 		data, err := os.ReadFile(filepath.Join(home, filename(resource)))
@@ -294,8 +294,8 @@ func TestAcceptedTransactionSurvivesRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reopened.RecoveredRollback() {
-		t.Fatal("accepted transaction was reported as a rollback")
+	if reopened.CommitID() != journal.Candidate.CommitID {
+		t.Fatal("accepted transaction lost its candidate manifest identity")
 	}
 	paths, err := reopened.Paths(snapshot)
 	if err != nil {
@@ -306,6 +306,12 @@ func TestAcceptedTransactionSurvivesRestart(t *testing.T) {
 	}
 	if _, err := os.Stat(journalPath); !os.IsNotExist(err) {
 		t.Fatalf("accepted journal was not cleaned: %v", err)
+	}
+	if err := writeJSONAtomic(journalPath, registry.home, journal); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewRegistry(registry.home, localResourceClient()); err != nil {
+		t.Fatalf("accepted journal without rollback directory blocked startup: %v", err)
 	}
 }
 
@@ -361,6 +367,60 @@ func TestPendingResourceTransactionRejectsSecondCommit(t *testing.T) {
 	}
 	if err := first.Rollback(); err != nil {
 		t.Fatalf("first plan can no longer roll back: %v", err)
+	}
+}
+
+func TestMetadataOnlyCommitRecoversPriorSourceAfterCrash(t *testing.T) {
+	root := t.TempDir()
+	firstSource, secondSource := filepath.Join(root, "first.dat"), filepath.Join(root, "second.dat")
+	for _, path := range []string{firstSource, secondSource} {
+		if err := os.WriteFile(path, []byte("identical"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	registry, err := NewRegistry(filepath.Join(root, "resources"), localResourceClient())
+	if err != nil {
+		t.Fatal(err)
+	}
+	resource := config.Resource{ID: "geoip", Kind: config.ResourceGeoIP, Format: config.FormatDAT, URL: firstSource, Enabled: true}
+	before := config.Snapshot{Resources: []config.Resource{resource}}
+	first, err := registry.Stage(context.Background(), before, download.Direct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.ValidateResources(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	resource.URL = secondSource
+	after := config.Snapshot{Resources: []config.Resource{resource}}
+	second, err := registry.Stage(context.Background(), after, download.Direct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Changed() {
+		t.Fatal("identical bytes unexpectedly require a runtime reload")
+	}
+	if err := second.ValidateResources(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := second.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := NewRegistry(registry.home, localResourceClient())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reopened.Paths(before); err != nil {
+		t.Fatalf("crash lost old source identity: %v", err)
+	}
+	if _, err := reopened.Paths(after); err == nil {
+		t.Fatal("unaccepted source identity survived crash")
 	}
 }
 

@@ -295,6 +295,9 @@ func (s *Service) Activate(ctx context.Context, id string) error {
 	defer s.activationMu.Unlock()
 	unlock := s.store.lockID(id)
 	defer unlock()
+	if err := s.store.retryAcceptedActivationCleanup(); err != nil {
+		return errors.Join(ErrActivationCleanupPending, err)
+	}
 	record, profile, candidate, err := s.store.recordSnapshot(id)
 	if err != nil {
 		return err
@@ -318,10 +321,14 @@ func (s *Service) Activate(ctx context.Context, id string) error {
 		return ErrActivation
 	}
 	alreadyApplied := s.store.isActive(id) && record.AppliedProfileHash == record.Hash && record.AppliedCandidateHash == record.CandidateHash
-	pendingResource := !alreadyApplied && s.options.PendingResource != nil && s.options.PendingResource()
+	resourceCommitID := ""
+	if !alreadyApplied && s.options.PendingResourceCommit != nil {
+		resourceCommitID = s.options.PendingResourceCommit()
+	}
+	pendingResource := resourceCommitID != ""
 	if !alreadyApplied {
 		if pendingResource {
-			if err := s.store.markActivationPending(previousID, previousHash, previousCandidate); err != nil {
+			if err := s.store.markActivationPending(previousID, previousHash, previousCandidate, resourceCommitID); err != nil {
 				if restoreErr := s.options.Restore(context.WithoutCancel(ctx), bytes.Clone(previousProfile)); restoreErr != nil {
 					return errors.Join(ErrStore, ErrRestore, restoreErr)
 				}
@@ -333,7 +340,9 @@ func (s *Service) Activate(ctx context.Context, id string) error {
 				return errors.Join(ErrStore, ErrRestore)
 			}
 			if pendingResource {
-				_ = s.store.clearActivationPending()
+				if cleanupErr := s.store.clearActivationPending(); cleanupErr != nil {
+					return errors.Join(ErrStore, cleanupErr)
+				}
 			}
 			return ErrStore
 		}
@@ -348,14 +357,21 @@ func (s *Service) Activate(ctx context.Context, id string) error {
 					return errors.Join(ErrActivation, ErrStore, err, restoreErr)
 				}
 				if pendingResource {
-					_ = s.store.clearActivationPending()
+					if cleanupErr := s.store.clearActivationPending(); cleanupErr != nil {
+						return errors.Join(ErrActivation, err, cleanupErr)
+					}
 				}
 			}
 			return errors.Join(ErrActivation, err)
 		}
 	}
 	if pendingResource {
-		_ = s.store.clearActivationPending()
+		if err := s.store.markActivationAccepted(); err != nil {
+			return errors.Join(ErrActivationCleanupPending, err)
+		}
+		if err := s.store.clearActivationPending(); err != nil {
+			return errors.Join(ErrActivationCleanupPending, err)
+		}
 	}
 	if !alreadyApplied {
 		s.store.cleanupApplied()

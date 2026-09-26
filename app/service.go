@@ -55,7 +55,7 @@ func newRuntimeServiceWithResponseCapture(configDir, stateDir string, initial co
 	if err != nil {
 		return nil, err
 	}
-	if err := subStore.RecoverPendingActivation(s.registry.RecoveredRollback()); err != nil {
+	if err := subStore.RecoverPendingActivation(s.registry.CommitID()); err != nil {
 		return nil, err
 	}
 	s.subs, err = subscriptions.NewService(subStore, subscriptions.Options{
@@ -67,8 +67,11 @@ func newRuntimeServiceWithResponseCapture(configDir, stateDir string, initial co
 			}
 			return nil
 		},
-		PendingResource: func() bool {
-			return s.activationBackup != nil && s.activationBackup.resourcePlan != nil
+		PendingResourceCommit: func() string {
+			if s.activationBackup != nil && s.activationBackup.resourcePlan != nil {
+				return s.registry.CommitID()
+			}
+			return ""
 		},
 		CaptureErrorBody: captureErrorBody,
 		OnChange: func() {

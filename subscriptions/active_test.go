@@ -194,7 +194,7 @@ func TestPendingActivationRestoresSelectionAfterResourceRollback(t *testing.T) {
 		t.Fatal(err)
 	}
 	oldID, oldProfile, oldCandidate := store.appliedIdentity()
-	if err := store.markActivationPending(oldID, oldProfile, oldCandidate); err != nil {
+	if err := store.markActivationPending(oldID, oldProfile, oldCandidate, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"); err != nil {
 		t.Fatal(err)
 	}
 	newRecord, exists := store.get("new")
@@ -208,11 +208,30 @@ func TestPendingActivationRestoresSelectionAfterResourceRollback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := reopened.RecoverPendingActivation(true); err != nil {
+	if err := reopened.RecoverPendingActivation("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"); err != nil {
 		t.Fatal(err)
 	}
 	id, profile, err := reopened.ActiveProfile()
 	if err != nil || id != "old" || string(profile) != "proxies:\n  - name: old\n    type: direct\n" {
 		t.Fatalf("recovered active profile = %q, %q, %v", id, profile, err)
+	}
+	if err := reopened.markActivationPending(oldID, oldProfile, oldCandidate, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"); err != nil {
+		t.Fatal(err)
+	}
+	if err := reopened.setApplied("new", newRecord.Hash, newRecord.CandidateHash); err != nil {
+		t.Fatal(err)
+	}
+	if err := reopened.markActivationAccepted(); err != nil {
+		t.Fatal(err)
+	}
+	accepted, err := NewStore(store.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := accepted.RecoverPendingActivation("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"); err != nil {
+		t.Fatal(err)
+	}
+	if id, err := accepted.ActiveID(); err != nil || id != "new" {
+		t.Fatalf("accepted activation was reverted after a later resource update: %q, %v", id, err)
 	}
 }

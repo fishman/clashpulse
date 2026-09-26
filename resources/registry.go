@@ -51,13 +51,12 @@ type stateDocument struct {
 }
 
 type Registry struct {
-	home              string
-	client            *download.Client
-	maxBytes          int64
-	mu                sync.Mutex
-	active            stateDocument
-	failures          map[string]string
-	recoveredRollback bool
+	home     string
+	client   *download.Client
+	maxBytes int64
+	mu       sync.Mutex
+	active   stateDocument
+	failures map[string]string
 }
 
 func resourceStateMatches(resource config.Resource, state resourceState) bool {
@@ -133,9 +132,14 @@ func (r *Registry) Home() string {
 	return r.home
 }
 
-// RecoveredRollback reports that startup restored an unaccepted resource set.
-func (r *Registry) RecoveredRollback() bool {
-	return r != nil && r.recoveredRollback
+// CommitID identifies the currently committed resource manifest.
+func (r *Registry) CommitID() string {
+	if r == nil {
+		return ""
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.active.CommitID
 }
 
 // SetMaxBytes sets the positive per-resource source size limit. Configure it

@@ -195,6 +195,9 @@ func TestFailedPostRestartRefreshRestoresRuntimeState(t *testing.T) {
 	if err := config.Write(filepath.Join(configDir, "subscriptions.toml"), []byte(fmt.Sprintf("[[subscription]]\nid = \"daily\"\nurl = %q\nenabled = true\nallow_http = true\n", source.URL))); err != nil {
 		t.Fatal(err)
 	}
+	if err := config.Write(filepath.Join(configDir, "resources.toml"), []byte("# no resources in runtime transaction test\n")); err != nil {
+		t.Fatal(err)
+	}
 	endpoint := filepath.Join(root, "socket", "ipc.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

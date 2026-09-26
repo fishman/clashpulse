@@ -30,6 +30,10 @@ const (
 // ErrCleanupPending means deletion committed but quarantine cleanup needs retry.
 var ErrCleanupPending = errors.New("subscriptions: deletion cleanup pending")
 
+// ErrActivationCleanupPending means activation committed but its private
+// recovery marker could not be removed yet.
+var ErrActivationCleanupPending = errors.New("subscriptions: activation committed; cleanup pending")
+
 // privateRecord is the only persistent representation. It may contain a URL
 // with credentials and is therefore written only below 0700 directories in
 // 0600 files. Snapshot generations are immutable and the record is the commit
@@ -594,21 +598,34 @@ func (s *Store) cleanupApplied() {
 const activationPendingFile = ".activation-pending.json"
 
 type pendingActivation struct {
-	ID            string `json:"id"`
-	ProfileHash   string `json:"profile_hash"`
-	CandidateHash string `json:"candidate_hash"`
+	ID               string `json:"id"`
+	ProfileHash      string `json:"profile_hash"`
+	CandidateHash    string `json:"candidate_hash"`
+	ResourceCommitID string `json:"resource_commit_id"`
+	Accepted         bool   `json:"accepted,omitempty"`
 }
 
-func (s *Store) markActivationPending(id, profileHash, candidateHash string) error {
+func (s *Store) markActivationPending(id, profileHash, candidateHash, resourceCommitID string) error {
+	if !validResourceCommitID(resourceCommitID) {
+		return ErrStore
+	}
 	path := filepath.Join(s.dir, activationPendingFile)
 	if _, err := os.Lstat(path); err == nil || !os.IsNotExist(err) {
 		return ErrStore
 	}
-	data, err := json.Marshal(pendingActivation{ID: id, ProfileHash: profileHash, CandidateHash: candidateHash})
+	data, err := json.Marshal(pendingActivation{ID: id, ProfileHash: profileHash, CandidateHash: candidateHash, ResourceCommitID: resourceCommitID})
 	if err != nil || config.Write(path, data) != nil {
 		return ErrStore
 	}
 	return nil
+}
+
+func validResourceCommitID(id string) bool {
+	if len(id) != 32 {
+		return false
+	}
+	_, err := hex.DecodeString(id)
+	return err == nil
 }
 
 func (s *Store) clearActivationPending() error {
@@ -618,35 +635,72 @@ func (s *Store) clearActivationPending() error {
 	return nil
 }
 
-// RecoverPendingActivation reconciles the durable subscription pointer with
-// the resource journal before either becomes visible to application clients.
-func (s *Store) RecoverPendingActivation(resourcesRolledBack bool) error {
+func (s *Store) loadPendingActivation() (*pendingActivation, error) {
 	path := filepath.Join(s.dir, activationPendingFile)
 	if _, err := os.Lstat(path); os.IsNotExist(err) {
-		s.cleanupApplied()
-		return nil
+		return nil, nil
 	} else if err != nil {
-		return ErrStore
+		return nil, ErrStore
 	}
 	data, err := readPrivateFile(path, 1<<20)
 	if err != nil {
-		return ErrStore
+		return nil, ErrStore
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var pending pendingActivation
 	if decoder.Decode(&pending) != nil || requireJSONEOF(decoder) != nil ||
 		pending.ID != "" && !validID(pending.ID) || !validOptionalHash(pending.ProfileHash) || !validOptionalHash(pending.CandidateHash) ||
+		!validResourceCommitID(pending.ResourceCommitID) ||
 		(pending.ID == "" && (pending.ProfileHash != "" || pending.CandidateHash != "")) {
+		return nil, ErrStore
+	}
+	return &pending, nil
+}
+
+func (s *Store) markActivationAccepted() error {
+	pending, err := s.loadPendingActivation()
+	if err != nil || pending == nil {
 		return ErrStore
 	}
-	if resourcesRolledBack {
-		if err := s.restoreApplied(pending.ID, pending.ProfileHash, pending.CandidateHash); err != nil {
+	pending.Accepted = true
+	data, err := json.Marshal(pending)
+	if err != nil || config.Write(filepath.Join(s.dir, activationPendingFile), data) != nil {
+		return ErrStore
+	}
+	return nil
+}
+
+func (s *Store) retryAcceptedActivationCleanup() error {
+	pending, err := s.loadPendingActivation()
+	if err != nil {
+		return err
+	}
+	if pending == nil {
+		return nil
+	}
+	if !pending.Accepted {
+		return ErrStore
+	}
+	return s.clearActivationPending()
+}
+
+// RecoverPendingActivation compares durable resource and subscription pointers
+// before either becomes visible to application clients.
+func (s *Store) RecoverPendingActivation(resourceCommitID string) error {
+	pending, err := s.loadPendingActivation()
+	if err != nil {
+		return err
+	}
+	if pending != nil {
+		if !pending.Accepted && pending.ResourceCommitID != resourceCommitID {
+			if err := s.restoreApplied(pending.ID, pending.ProfileHash, pending.CandidateHash); err != nil {
+				return err
+			}
+		}
+		if err := s.clearActivationPending(); err != nil {
 			return err
 		}
-	}
-	if err := s.clearActivationPending(); err != nil {
-		return err
 	}
 	s.cleanupApplied()
 	return nil

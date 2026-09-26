@@ -45,6 +45,9 @@ func TestRunAtCancelsStaleURLWhileIntentIsRunning(t *testing.T) {
 	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\n", binary))); err != nil {
 		t.Fatal(err)
 	}
+	if err := config.Write(filepath.Join(configDir, "resources.toml"), []byte("# no resources in URL rotation test\n")); err != nil {
+		t.Fatal(err)
+	}
 	writeURL := func(path string) {
 		value := fmt.Sprintf("[[subscription]]\nid = \"rotating\"\nurl = %q\nallow_http = true\n", server.URL+path+"?token=short-lived")
 		if err := config.Write(filepath.Join(configDir, "subscriptions.toml"), []byte(value)); err != nil {

@@ -74,7 +74,7 @@ func (s *runtimeService) renderProfile(ctx context.Context, profile []byte) ([]b
 		return rollback(err)
 	}
 	if err := plan.Finalize(); err != nil {
-		return nil, err
+		return rollback(err)
 	}
 	s.resourceDirty.Store(true)
 	return candidate, nil
@@ -159,7 +159,7 @@ func (s *runtimeService) applyGenerated(ctx context.Context, profile []byte) err
 		if err != nil {
 			return err
 		}
-		return s.applyActivationCandidate(ctx, candidate, capability, home, nil)
+		return s.applyActivationCandidate(ctx, candidate, capability, home)
 	}
 	plan, err := s.registry.Stage(ctx, intent, download.Direct)
 	if err != nil {
@@ -175,8 +175,8 @@ func (s *runtimeService) applyGenerated(ctx context.Context, profile []byte) err
 	return s.applyResourcePlan(ctx, plan, profile, capability, true)
 }
 
-func (s *runtimeService) applyActivationCandidate(ctx context.Context, candidate []byte, capability mihomo.Capability, home string, plan *resources.Plan) error {
-	s.activationBackup = &runtimeBackup{generated: bytes.Clone(s.generated), cap: s.cap, home: s.resourceHome, running: s.controller != nil, proxyActive: s.proxyActive, selected: selectedGroups(s.groups), resourcePlan: plan}
+func (s *runtimeService) applyActivationCandidate(ctx context.Context, candidate []byte, capability mihomo.Capability, home string) error {
+	s.activationBackup = &runtimeBackup{generated: bytes.Clone(s.generated), cap: s.cap, home: s.resourceHome, running: s.controller != nil, proxyActive: s.proxyActive, selected: selectedGroups(s.groups)}
 	if err := s.applyCandidate(ctx, candidate, capability, home); err != nil {
 		s.activationBackup = nil
 		return err
@@ -196,24 +196,32 @@ func (s *runtimeService) applyResourcePlan(ctx context.Context, plan *resources.
 			_ = plan.Abort()
 			return err
 		}
-		if err := plan.Finalize(); err != nil {
-			return err
-		}
 		if !activation && backup.running {
-			return nil
+			return plan.Finalize()
 		}
-		home, paths, err := s.registry.PathsWithHome(s.store.Snapshot())
+		intent := s.store.Snapshot()
+		home, paths, err := s.registry.PathsWithHome(intent)
 		if err != nil {
-			return err
+			return s.restoreResourceRuntime(ctx, backup, err, true)
 		}
-		candidate, err := s.renderWithHome(ctx, profile, s.store.Snapshot(), home, paths, capability)
+		candidate, err := s.renderWithHome(ctx, profile, intent, home, paths, capability)
 		if err != nil {
-			return err
+			return s.restoreResourceRuntime(ctx, backup, err, true)
 		}
 		if activation {
-			return s.applyActivationCandidate(ctx, candidate, capability, home, nil)
+			if err := s.applyActivationCandidate(ctx, candidate, capability, home); err != nil {
+				return s.restoreResourceRuntime(ctx, backup, err, true)
+			}
+			s.activationBackup.resourcePlan = plan
+			return nil
 		}
-		return s.applyCandidate(ctx, candidate, capability, home)
+		if err := s.applyCandidate(ctx, candidate, capability, home); err != nil {
+			return s.restoreResourceRuntime(ctx, backup, err, true)
+		}
+		if err := plan.Finalize(); err != nil {
+			return s.restoreResourceRuntime(ctx, backup, err, true)
+		}
+		return nil
 	}
 	if backup.running {
 		if err := s.proxy.Restore(ctx); err != nil {
@@ -233,7 +241,7 @@ func (s *runtimeService) applyResourcePlan(ctx context.Context, plan *resources.
 	home, paths, err := s.registry.PathsWithHome(intent)
 	if err == nil {
 		var candidate []byte
-		candidate, err = s.validatedCandidate(ctx, profile, intent, home, paths, capability)
+		candidate, err = s.renderWithHome(ctx, profile, intent, home, paths, capability)
 		if err == nil {
 			err = s.applyCandidate(ctx, candidate, capability, home)
 		}

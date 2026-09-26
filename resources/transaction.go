@@ -17,13 +17,14 @@ import (
 const transactionDirPrefix = ".resources-txn-"
 
 type transactionJournal struct {
-	Version   int               `json:"version"`
-	Phase     string            `json:"phase"`
-	BackupDir string            `json:"backup_dir"`
-	MaxBytes  int64             `json:"max_bytes"`
-	Previous  stateDocument     `json:"previous"`
-	Candidate stateDocument     `json:"candidate"`
-	Files     []transactionFile `json:"files"`
+	Version      int               `json:"version"`
+	Phase        string            `json:"phase"`
+	BackupDir    string            `json:"backup_dir"`
+	MaxBytes     int64             `json:"max_bytes"`
+	Previous     stateDocument     `json:"previous"`
+	Candidate    stateDocument     `json:"candidate"`
+	MetadataOnly bool              `json:"metadata_only,omitempty"`
+	Files        []transactionFile `json:"files"`
 }
 
 type transactionFile struct {
@@ -56,7 +57,6 @@ func (r *Registry) recoverTransaction() error {
 	if err := restoreTransaction(r.home, path, dir, journal); err != nil {
 		return fmt.Errorf("resources: recover interrupted promotion: %w", err)
 	}
-	r.recoveredRollback = true
 	return nil
 }
 
@@ -296,6 +296,35 @@ func (r *Registry) failPromotion(journalPath, transactionDir string, cause error
 	return cause
 }
 
+func (r *Registry) promoteMetadata(previous, candidate stateDocument) (string, error) {
+	if err := verifyManifestFiles(r.home, previous, r.maxBytes); err != nil {
+		return "", err
+	}
+	transactionDir, err := makePrivateDir(r.home, transactionDirPrefix)
+	if err != nil {
+		return "", err
+	}
+	journalPath := filepath.Join(r.home, transactionFileName)
+	journal := transactionJournal{
+		Version: 1, Phase: "promoting", BackupDir: filepath.Base(transactionDir), MaxBytes: r.maxBytes,
+		Previous: cloneState(previous), Candidate: cloneState(candidate), MetadataOnly: true,
+	}
+	if err := validateJournal(journal); err != nil {
+		_ = os.RemoveAll(transactionDir)
+		return "", err
+	}
+	if err := writeJSONAtomic(journalPath, r.home, journal); err != nil {
+		if _, statErr := os.Lstat(journalPath); os.IsNotExist(statErr) {
+			_ = os.RemoveAll(transactionDir)
+		}
+		return "", err
+	}
+	if err := writeStateAtomic(filepath.Join(r.home, stateFileName), r.home, candidate); err != nil {
+		return "", r.failPromotion(journalPath, transactionDir, err)
+	}
+	return transactionDir, nil
+}
+
 func readTransaction(home, journalPath string) (transactionJournal, string, error) {
 	info, err := os.Lstat(journalPath)
 	if err != nil {
@@ -325,7 +354,7 @@ func readTransaction(home, journalPath string) (transactionJournal, string, erro
 		return transactionJournal{}, "", err
 	}
 	dir := filepath.Join(home, journal.BackupDir)
-	if err := verifyRealDirectory(dir, home); err != nil {
+	if err := verifyRealDirectory(dir, home); err != nil && !(journal.Phase == "accepted" && os.IsNotExist(err)) {
 		return transactionJournal{}, "", fmt.Errorf("resources: transaction backup directory is unsafe: %w", err)
 	}
 	return journal, dir, nil
@@ -343,6 +372,19 @@ func validateJournal(journal transactionJournal) error {
 	}
 	previous, _ := manifestNames(journal.Previous)
 	candidate, _ := manifestNames(journal.Candidate)
+	if journal.MetadataOnly {
+		if journal.Previous.Version != 2 || len(journal.Files) != 0 || len(previous) != len(candidate) {
+			return fmt.Errorf("resources: invalid metadata-only transaction")
+		}
+		for name, priorID := range previous {
+			candidateID, ok := candidate[name]
+			if !ok || priorID != candidateID || journal.Previous.Resources[priorID].SHA256 != journal.Candidate.Resources[candidateID].SHA256 ||
+				!sameResourceState(journal.Previous.Resources[priorID], journal.Candidate.Resources[candidateID]) {
+				return fmt.Errorf("resources: metadata-only transaction changes resource bytes or declaration")
+			}
+		}
+		return nil
+	}
 	allowed := make(map[string]struct{}, len(previous)+len(candidate))
 	for name := range previous {
 		allowed[name] = struct{}{}
@@ -453,10 +495,7 @@ func finalizeTransaction(home, transactionDir string) error {
 	if journal.Phase != "accepted" {
 		journal.Phase = "accepted"
 		if err := writeJSONAtomic(journalPath, home, journal); err != nil {
-			current, _, readErr := readTransaction(home, journalPath)
-			if readErr != nil || current.Phase != "accepted" {
-				return err
-			}
+			return err
 		}
 	}
 	return removeTransaction(home, transactionDir)

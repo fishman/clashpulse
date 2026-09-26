@@ -426,7 +426,7 @@ func (p *Plan) Commit() (map[string]string, error) {
 	if p.changed {
 		p.transactionDir, err = r.promote(current, document, p.paths)
 	} else {
-		err = writeStateAtomic(filepath.Join(r.home, stateFileName), r.home, document)
+		p.transactionDir, err = r.promoteMetadata(current, document)
 	}
 	if err != nil {
 		return nil, err
@@ -476,7 +476,7 @@ func (p *Plan) Finalize() error {
 			return fmt.Errorf("resources: remove staged resources: %w", err)
 		}
 	}
-	if p.changed {
+	if p.transactionDir != "" {
 		journal, transactionDir, err := readTransaction(r.home, filepath.Join(r.home, transactionFileName))
 		if err != nil {
 			return err
@@ -513,7 +513,7 @@ func (p *Plan) Rollback() error {
 	if current.Version != 2 || current.CommitID != p.commitID {
 		return fmt.Errorf("resources: cannot roll back after another manifest was committed")
 	}
-	if p.changed {
+	if p.transactionDir != "" {
 		journal, transactionDir, err := readTransaction(r.home, filepath.Join(r.home, transactionFileName))
 		if err != nil {
 			return err
@@ -524,8 +524,6 @@ func (p *Plan) Rollback() error {
 		if err := restoreTransaction(r.home, filepath.Join(r.home, transactionFileName), transactionDir, journal); err != nil {
 			return err
 		}
-	} else if err := writeStateAtomic(filepath.Join(r.home, stateFileName), r.home, cloneState(p.base)); err != nil {
-		return err
 	}
 	r.active = cloneState(p.base)
 	p.rolledBack = true

@@ -423,7 +423,26 @@ func TestStaticActivationJournalRestoresPriorSelection(t *testing.T) {
 	if _, err := plan.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	if err := config.Write(filepath.Join(subscriptionDir, ".activation-pending.json"), previous); err != nil {
+	manifest, err := os.ReadFile(filepath.Join(h.service.registry.Home(), ".resources.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var resourceVersion struct {
+		CommitID string `json:"commit_id"`
+	}
+	if err := json.Unmarshal(manifest, &resourceVersion); err != nil {
+		t.Fatal(err)
+	}
+	var pending map[string]string
+	if err := json.Unmarshal(previous, &pending); err != nil {
+		t.Fatal(err)
+	}
+	pending["resource_commit_id"] = resourceVersion.CommitID
+	pendingBytes, err := json.Marshal(pending)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Write(filepath.Join(subscriptionDir, ".activation-pending.json"), pendingBytes); err != nil {
 		t.Fatal(err)
 	}
 	nextRecord, err := os.ReadFile(filepath.Join(subscriptionDir, next.ID, "record.json"))

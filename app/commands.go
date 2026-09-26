@@ -16,6 +16,7 @@ import (
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/monitor"
+	"github.com/fishman/clashpulse/subscriptions"
 )
 
 func opaqueID(name string) string {
@@ -77,6 +78,9 @@ func (s *runtimeService) execute(ctx context.Context, cmd ipc.Command) error {
 	case ipc.CommandActivateSubscription:
 		err := s.subs.Activate(ctx, cmd.SubscriptionID)
 		s.activationBackup = nil
+		if errors.Is(err, subscriptions.ErrActivationCleanupPending) {
+			s.subScheduler.WakeResources()
+		}
 		if err != nil {
 			return err
 		}
