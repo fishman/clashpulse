@@ -61,7 +61,7 @@ func TestRunAtSeedsPrivateConfigWithoutReplacingUserEdits(t *testing.T) {
 	}
 	snapshot, err := config.Load(configDir)
 	if err != nil || len(snapshot.Subscriptions) != 0 || len(snapshot.Filters) != 0 || len(snapshot.Resources) != 4 {
-		t.Fatalf("seed catalog is incomplete or enabled unrelated sources: %+v, %v", snapshot, err)
+		t.Fatalf("seed catalog is incomplete: %+v, %v", snapshot, err)
 	}
 	if snapshot.Monitor.TestURL != "http://cp.cloudflare.com/generate_204" {
 		t.Fatalf("seeded latency URL = %q", snapshot.Monitor.TestURL)
@@ -73,8 +73,8 @@ func TestRunAtSeedsPrivateConfigWithoutReplacingUserEdits(t *testing.T) {
 		"cn":      "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs",
 	}
 	for _, resource := range snapshot.Resources {
-		if resource.Enabled || resource.URL != want[resource.ID] || resource.Interval != 24*time.Hour {
-			t.Fatalf("unreviewed or automatically enabled geodata source: %+v", resource)
+		if !resource.Enabled || resource.URL != want[resource.ID] || resource.Interval != 24*time.Hour {
+			t.Fatalf("default resource is disabled or unexpected: %+v", resource)
 		}
 		if resource.ID == "cn" && (resource.Kind != config.ResourceRuleSet || resource.Format != config.FormatMRS || resource.RuleType != config.RuleDomain) {
 			t.Fatalf("CN source cannot generate a domain MRS rule-set: %+v", resource)

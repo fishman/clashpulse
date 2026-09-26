@@ -52,6 +52,9 @@ func TestFailedMixedReloadPreservesInactiveSubscriptionSnapshot(t *testing.T) {
 	}
 	writeConfig(binary)
 	writeSubscriptions(true)
+	if err := config.Write(filepath.Join(configDir, "resources.toml"), []byte("# no resources in this lifecycle test\n")); err != nil {
+		t.Fatal(err)
+	}
 	endpoint := filepath.Join(root, "socket", "ipc.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

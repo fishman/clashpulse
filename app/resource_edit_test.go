@@ -74,15 +74,23 @@ func TestIPCResourceAndFilterEditsPersistCrossFileIntent(t *testing.T) {
 		t.Fatalf("filter intent not persisted: %+v, %v", stored.Filters, err)
 	}
 	found := false
+	want := map[string]string{
+		"geoip":   "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat",
+		"geosite": "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat",
+		"country": "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb",
+	}
 	for _, resource := range stored.Resources {
 		if resource.ID == "cn" {
 			found = resource.Enabled && resource.URL == source && resource.Kind == config.ResourceRuleSet && resource.Format == config.FormatYAML
-		} else if resource.Enabled {
-			t.Fatalf("unrelated catalog source was enabled: %+v", resource)
+			continue
 		}
+		if url, ok := want[resource.ID]; !ok || !resource.Enabled || resource.URL != url {
+			t.Fatalf("unrelated default resource changed: %+v", resource)
+		}
+		delete(want, resource.ID)
 	}
-	if !found {
-		t.Fatalf("managed resource edit not persisted: %+v", stored.Resources)
+	if !found || len(want) != 0 {
+		t.Fatalf("resource catalog did not preserve defaults and edit: found=%v missing=%v resources=%+v", found, want, stored.Resources)
 	}
 	send(ipc.Command{Kind: ipc.CommandPutFilter, FilterID: "ads", Filter: &ipc.FilterEdit{ResourceID: new("unknown")}})
 	state = waitAppSnapshot(t, ctx, client, func(s core.Snapshot) bool {

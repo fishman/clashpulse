@@ -1,4 +1,4 @@
-# Reviewed data sources are enabled for new configs; disable any source below.
+# Declare data sources explicitly. No third-party URL is enabled by default.
 # Resource IDs determine private generated filenames; source bytes are not edited.
 # Formats: dat for geoip.dat/geosite.dat; mmdb for Country.mmdb;
 # yaml, text, or mrs for rule-set/rule-provider.
@@ -10,7 +10,7 @@ id = "geoip"
 kind = "geoip.dat"
 format = "dat"
 url = "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat"
-enabled = true
+enabled = false
 interval = "24h"
 
 [[resource]]
@@ -18,7 +18,7 @@ id = "geosite"
 kind = "geosite.dat"
 format = "dat"
 url = "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
-enabled = true
+enabled = false
 interval = "24h"
 
 [[resource]]
@@ -26,17 +26,18 @@ id = "country"
 kind = "Country.mmdb"
 format = "mmdb"
 url = "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb"
-enabled = true
+enabled = false
 interval = "24h"
 
-# CN data is downloaded by default; configure a filter or DNS route to use it.
+# Opt-in China-domain rule-set from MetaCubeX's mutable meta branch.
+# Choose a filter target or DNS routing before enabling it.
 [[resource]]
 id = "cn"
 kind = "rule-set"
 format = "mrs"
 rule_type = "domain"
 url = "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"
-enabled = true
+enabled = false
 interval = "24h"
 #
 # [[resolver_set]]

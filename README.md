@@ -44,6 +44,6 @@ Settings has Mihomo binary, System Proxy, Monitor, and DNS sections. Its sidebar
 
 The tray's Proxies menu selects a member of an active managed `select` group; its System Proxy item changes the requested OS setting. Controls return when the local IPC service reconnects.
 
-First start seeds `config.toml`, `subscriptions.toml`, `resources.toml`, and `filters.toml` in the platform config directory (`~/.config/clashpulse` on Linux unless `$XDG_CONFIG_HOME` is set). Existing files are never replaced. The seeds come from [`examples/`](examples/); data URLs are disabled until you enable them, and subscription/filter examples remain commented out.
+First start seeds `config.toml`, `subscriptions.toml`, `resources.toml`, and `filters.toml` in the platform config directory (`~/.config/clashpulse` on Linux unless `$XDG_CONFIG_HOME` is set). The four reviewed data sources are enabled by default; the exact previous disabled resource seed is migrated once, while customized resource files are left alone. Resources download during validated profile refresh/activation or `refresh resource`; `download subscription` remains profile-only. The `cn` list is downloaded but not routed until configured. Subscription and filter examples remain commented out.
 
 Proxy-delay tests default to Clash Verge's `http://cp.cloudflare.com/generate_204`, through Mihomo. Plain HTTP can be intercepted; change the URL in Settings if that matters.
