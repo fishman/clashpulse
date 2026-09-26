@@ -223,8 +223,67 @@ func TestLatencyAlertRecoversWithOneFastProxyDespiteOtherTimeout(t *testing.T) {
 	}
 }
 
+func TestDecideLowestLatencySwitchesWhileSelectedIsHealthy(t *testing.T) {
+	policy := testPolicy()
+	policy.SwitchPolicy = SwitchLowestLatency
+	var samples []Sample
+	for i := int64(1); i <= 3; i++ {
+		samples = append(samples,
+			testSample(policy, "auto", "alpha", 400*time.Millisecond, i),
+			testSample(policy, "auto", "beta", 200*time.Millisecond, i),
+		)
+	}
+	decision := Decide(policy, testGroup(), samples, time.Unix(4, 0))
+	if !decision.Switch || decision.New != "beta" {
+		t.Fatalf("fastest node was not selected while the current one stayed healthy: %+v", decision)
+	}
+
+	// The default policy is the opposite: a healthy selected node never moves.
+	failover := testPolicy()
+	if decision := Decide(failover, testGroup(), samples, time.Unix(4, 0)); decision.Switch || decision.Reason != ReasonSelectedHealthy {
+		t.Fatalf("failover policy traded on a healthy selected node: %+v", decision)
+	}
+}
+
+func TestDecideLowestLatencyStillRequiresEvidenceAndCooling(t *testing.T) {
+	policy := testPolicy()
+	policy.SwitchPolicy = SwitchLowestLatency
+	samples := []Sample{testSample(policy, "auto", "alpha", 400*time.Millisecond, 1)}
+	if decision := Decide(policy, testGroup(), samples, time.Unix(2, 0)); decision.Switch {
+		t.Fatalf("switched without a comparable sample for the selected node: %+v", decision)
+	}
+	var rounds []Sample
+	for i := int64(1); i <= 3; i++ {
+		rounds = append(rounds, testSample(policy, "auto", "beta", 200*time.Millisecond, i))
+	}
+	if decision := Decide(policy, testGroup(), rounds, time.Unix(4, 0)); decision.Switch || decision.Reason != ReasonInsufficientSamples {
+		t.Fatalf("switched without any sample for the selected node: %+v", decision)
+	}
+	measured := append(rounds[:2:2],
+		testSample(policy, "auto", "alpha", 400*time.Millisecond, 1),
+		testSample(policy, "auto", "alpha", 400*time.Millisecond, 2),
+		testSample(policy, "auto", "alpha", 400*time.Millisecond, 3),
+	)
+	if decision := Decide(policy, testGroup(), measured, time.Unix(4, 0)); decision.Switch {
+		t.Fatalf("switched on a single candidate sample: %+v", decision)
+	}
+	state := testGroup()
+	state.LastSwitchAt = time.Unix(3, 0)
+	if decision := Decide(policy, state, samples, time.Unix(4, 0)); decision.Switch || decision.Reason != ReasonCooldown {
+		t.Fatalf("lowest latency policy ignored the switch cooldown: %+v", decision)
+	}
+}
+
 func TestDefaultPolicyUsesApprovedHTTPProbeURL(t *testing.T) {
 	policy := DefaultPolicy()
+	if policy.SwitchPolicy != SwitchFailover {
+		t.Fatalf("default switch policy = %q", policy.SwitchPolicy)
+	}
+	policy.SwitchPolicy = "fastest"
+	if err := policy.Validate(); err == nil {
+		t.Fatal("unknown switch policy accepted")
+	}
+	policy.SwitchPolicy = SwitchFailover
 	if policy.TestURL != "http://cp.cloudflare.com/generate_204" {
 		t.Fatalf("default probe URL = %q", policy.TestURL)
 	}

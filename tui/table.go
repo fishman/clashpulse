@@ -41,7 +41,7 @@ var proxyColumns = [...]tableColumn{
 	{"Group", table.Col{Floor: 12, Cap: 20}, 7},
 	{"Proxy", table.Col{Floor: 12, Cap: 24}, 10},
 	{"Selected", table.Col{Floor: 8, Cap: 10}, 6},
-	{"Latency", table.Col{Floor: 8, Cap: 12}, 5},
+	{"Latency", table.Col{Floor: 8, Cap: 20}, 5},
 	{"Outcome", table.Col{Floor: 8, Cap: 12}, 3},
 	{"Automation", table.Col{Floor: 11, Cap: 12}, 4},
 }

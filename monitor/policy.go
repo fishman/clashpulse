@@ -8,8 +8,17 @@ import (
 	"time"
 )
 
+// SwitchFailover moves traffic only after the selected node has failed enough
+// consecutive samples; SwitchLowestLatency keeps the fastest measured node and
+// trades on every probe round instead.
+const (
+	SwitchFailover      = "failover"
+	SwitchLowestLatency = "lowest_latency"
+)
+
 type Policy struct {
 	TestURL               string
+	SwitchPolicy          string
 	Interval              time.Duration
 	Timeout               time.Duration
 	Concurrency           int
@@ -26,7 +35,8 @@ type Policy struct {
 func DefaultPolicy() Policy {
 	return Policy{
 		TestURL:               "http://cp.cloudflare.com/generate_204",
-		Interval:              5 * time.Minute,
+		SwitchPolicy:          SwitchFailover,
+		Interval:              1 * time.Minute,
 		Timeout:               5 * time.Second,
 		Concurrency:           3,
 		Threshold:             800 * time.Millisecond,
@@ -35,8 +45,8 @@ func DefaultPolicy() Policy {
 		MinCandidateSamples:   3,
 		ConsecutiveBadSamples: 3,
 		MinImprovement:        100 * time.Millisecond,
-		Cooldown:              10 * time.Minute,
-		Jitter:                15 * time.Second,
+		Cooldown:              5 * time.Minute,
+		Jitter:                10 * time.Second,
 	}
 }
 
@@ -44,6 +54,9 @@ func (p Policy) Validate() error {
 	parsed, err := url.Parse(p.TestURL)
 	if err != nil || strings.ContainsAny(p.TestURL, "\x00\r\n#") || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" || parsed.Opaque != "" {
 		return fmt.Errorf("monitor policy: test URL must use HTTP or HTTPS without credentials or fragment")
+	}
+	if p.SwitchPolicy != SwitchFailover && p.SwitchPolicy != SwitchLowestLatency {
+		return fmt.Errorf("monitor policy: switch policy must be %q or %q", SwitchFailover, SwitchLowestLatency)
 	}
 	if p.Interval <= 0 {
 		return fmt.Errorf("monitor policy: interval must be positive")
@@ -122,23 +135,33 @@ func Decide(policy Policy, state GroupState, samples []Sample, now time.Time) De
 	}
 
 	window := recent(byProxy[state.Selected], policy.WindowSize)
-	if len(window) < policy.ConsecutiveBadSamples {
-		return decision
-	}
-	bad := 0
-	for i := len(window) - 1; i >= 0 && bad < policy.ConsecutiveBadSamples; i-- {
-		if unhealthy(window[i], policy.Threshold) {
-			bad++
-			continue
+	comparable := window
+	if policy.SwitchPolicy == SwitchLowestLatency {
+		// The fastest node wins while it still answers, so the selected node's own
+		// health is irrelevant; it is only compared against the candidates.
+		if len(window) < policy.MinCandidateSamples {
+			return decision
 		}
-		break
-	}
-	if bad < policy.ConsecutiveBadSamples {
-		decision.Reason = ReasonSelectedHealthy
-		return decision
+	} else {
+		if len(window) < policy.ConsecutiveBadSamples {
+			return decision
+		}
+		bad := 0
+		for i := len(window) - 1; i >= 0 && bad < policy.ConsecutiveBadSamples; i-- {
+			if unhealthy(window[i], policy.Threshold) {
+				bad++
+				continue
+			}
+			break
+		}
+		if bad < policy.ConsecutiveBadSamples {
+			decision.Reason = ReasonSelectedHealthy
+			return decision
+		}
+		comparable = window[len(window)-bad:]
 	}
 
-	selectedMedian, selectedCount := successfulMedian(window[len(window)-bad:])
+	selectedMedian, selectedCount := successfulMedian(comparable)
 	selectedOffline := selectedCount == 0
 	baseline := selectedMedian
 

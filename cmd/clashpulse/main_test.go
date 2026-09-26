@@ -97,8 +97,8 @@ func TestCLIRefreshDispatchesAllAndScopedOperations(t *testing.T) {
 		out  string
 	}{
 		{[]string{"clashpulse", "refresh"}, "::false", "refreshed all enabled sources\n"},
-		{[]string{"clashpulse", "refresh", "subscription", "xcvpn", "--show-response"}, "subscription:xcvpn:true", "refreshed subscription xcvpn\n"},
-		{[]string{"clashpulse", "refresh", "--show-response", "subscription", "xcvpn"}, "subscription:xcvpn:true", "refreshed subscription xcvpn\n"},
+		{[]string{"clashpulse", "refresh", "subscription", "subscription-a", "--show-response"}, "subscription:subscription-a:true", "refreshed subscription subscription-a\n"},
+		{[]string{"clashpulse", "refresh", "--show-response", "subscription", "subscription-a"}, "subscription:subscription-a:true", "refreshed subscription subscription-a\n"},
 		{[]string{"clashpulse", "refresh", "resource", "geo"}, "resource:geo:false", "refreshed resource geo\n"},
 	} {
 		stdout.Reset()
@@ -122,8 +122,8 @@ func TestCLIDownloadOnlyDispatchesSubscriptions(t *testing.T) {
 		out  string
 	}{
 		{[]string{"clashpulse", "download"}, ":false", "downloaded all enabled subscriptions\n"},
-		{[]string{"clashpulse", "download", "subscription", "xcvpn", "--show-response"}, "xcvpn:true", "downloaded subscription xcvpn\n"},
-		{[]string{"clashpulse", "download", "--show-response", "subscription", "xcvpn"}, "xcvpn:true", "downloaded subscription xcvpn\n"},
+		{[]string{"clashpulse", "download", "subscription", "subscription-a", "--show-response"}, "subscription-a:true", "downloaded subscription subscription-a\n"},
+		{[]string{"clashpulse", "download", "--show-response", "subscription", "subscription-a"}, "subscription-a:true", "downloaded subscription subscription-a\n"},
 	} {
 		stdout.Reset()
 		stderr.Reset()
@@ -140,9 +140,9 @@ func TestCLIDownloadOnlyDispatchesSubscriptions(t *testing.T) {
 func TestCLIShowResponsePrintsBoundedBodyOnError(t *testing.T) {
 	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
 	actions := cliActions{download: func(context.Context, string, bool) error {
-		return fmt.Errorf("clashpulse: download subscription xcvpn: invalid profile: %w", download.StatusError{Code: http.StatusOK, ResponseBody: "bad profile"})
+		return fmt.Errorf("clashpulse: download subscription subscription-a: invalid profile: %w", download.StatusError{Code: http.StatusOK, ResponseBody: "bad profile"})
 	}}
-	code := runCLI(context.Background(), []string{"clashpulse", "download", "subscription", "xcvpn", "--show-response"}, stdout, stderr, actions)
+	code := runCLI(context.Background(), []string{"clashpulse", "download", "subscription", "subscription-a", "--show-response"}, stdout, stderr, actions)
 	if code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "HTTP 200 OK") || !strings.Contains(stderr.String(), "bad profile") {
 		t.Fatalf("show-response: exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}

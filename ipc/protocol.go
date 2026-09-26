@@ -71,6 +71,7 @@ type ConfigPatch struct {
 	DNSListen                    *string `json:"dns_listen,omitempty"`
 	MonitorEnabled               *bool   `json:"monitor_enabled,omitempty"`
 	MonitorTestURL               *string `json:"monitor_test_url,omitempty"`
+	MonitorSwitchPolicy          *string `json:"monitor_switch_policy,omitempty"`
 	MonitorIntervalSeconds       *uint32 `json:"monitor_interval_seconds,omitempty"`
 	MonitorTimeoutMillis         *uint32 `json:"monitor_timeout_millis,omitempty"`
 	MonitorConcurrency           *uint32 `json:"monitor_concurrency,omitempty"`
@@ -81,6 +82,8 @@ type ConfigPatch struct {
 	MonitorCooldownSeconds       *uint32 `json:"monitor_cooldown_seconds,omitempty"`
 	MonitorJitterMillis          *uint32 `json:"monitor_jitter_millis,omitempty"`
 	Binary                       *string `json:"binary,omitempty"`
+	URLTestIntervalSeconds       *uint32 `json:"url_test_interval_seconds,omitempty"`
+	URLTestToleranceMillis       *uint32 `json:"url_test_tolerance_millis,omitempty"`
 }
 
 // SubscriptionEdit changes only supplied fields. URL is required for a new

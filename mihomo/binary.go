@@ -72,20 +72,30 @@ func Inspect(ctx context.Context, selection Selection) (Capability, error) {
 	return Capability{Path: path, Version: version, SupportsGeoIPDat: geo, SupportsGeoSiteDat: geo, SupportsMMDB: geo}, nil
 }
 
-var mihomoVersion = regexp.MustCompile(`\bv(\d+)\.(\d+)\.(\d+)\b`)
+// Mihomo prints "Mihomo Meta 1.19.30 ... with go1.26.6"; the leading v is
+// optional and the anchor keeps the Go toolchain version from matching.
+var mihomoVersion = regexp.MustCompile(`(?:^|\s)v?(\d+)\.(\d+)\.(\d+)\b`)
+
+// ponytail: geoip.dat, geosite.dat, and Country.mmdb ship in every Mihomo
+// release, so this is a floor, not a pin. An exact-build check rejected working
+// binaries (1.19.30 failed a 1.19.31 pin) and would reject every later release.
+var minimumGeodataVersion = [3]int{1, 19, 0}
 
 func documentedGeodataVersion(identity string) bool {
 	parts := mihomoVersion.FindStringSubmatch(identity)
 	if len(parts) != 4 {
 		return false
 	}
-	major, errMajor := strconv.Atoi(parts[1])
-	minor, errMinor := strconv.Atoi(parts[2])
-	patch, errPatch := strconv.Atoi(parts[3])
-	if errMajor != nil || errMinor != nil || errPatch != nil {
-		return false
+	for i, floor := range minimumGeodataVersion {
+		value, err := strconv.Atoi(parts[i+1])
+		if err != nil {
+			return false
+		}
+		if value != floor {
+			return value > floor
+		}
 	}
-	return major == 1 && minor == 19 && patch == 31
+	return true
 }
 
 func executable(path string) (string, error) {

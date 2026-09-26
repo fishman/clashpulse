@@ -67,6 +67,21 @@ func TestProxyRowShowsOnlySelectionAndLatency(t *testing.T) {
 	}
 }
 
+func TestProxyRowFallsBackToMihomoReportedLatency(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	page := newProxyPage(nil)
+	page.update(core.Snapshot{
+		Groups:  []core.GroupSnapshot{{ID: "g1", Type: "url-test", Selected: "p1", Proxies: []string{"p1"}}},
+		Proxies: []core.ProxySnapshot{{GroupID: "g1", ID: "p1", Label: "node-a", MihomoMillis: 123}},
+	})
+	row := page.list.CreateItem()
+	page.list.UpdateItem(0, row)
+	if got, want := strings.Join(rowLabels(row), ","), "node-a,Active,123 ms (mihomo)"; got != want {
+		t.Fatalf("url-test row = %q, want %q", got, want)
+	}
+}
+
 func TestMonitorThresholdAndCompatibilityLabelsAreSafe(t *testing.T) {
 	if got := monitorThresholdLabel(core.MonitorSnapshot{AlertThresholdMillis: 250}); got != "250 ms" {
 		t.Fatalf("threshold label = %q", got)
@@ -112,33 +127,37 @@ func TestLocalActiveSourceGUIStatus(t *testing.T) {
 	}
 }
 
-func TestConfigOverrideOverviewShowsFixedReasonsOnly(t *testing.T) {
+func TestConfigOverrideLogPanelShowsFixedReasonsOnly(t *testing.T) {
 	app := test.NewApp()
 	defer app.Quit()
 	view := newDesktopUI(t.Context(), "", app.NewWindow("ClashPulse"))
-	if labels := rowLabels(view.views["Overview"]); !slices.Contains(labels, "No managed overrides") {
+	if labels := rowLabels(view.overridesSection); !slices.Contains(labels, "No managed overrides") {
 		t.Fatalf("empty override state = %v", labels)
+	}
+	if labels := rowLabels(view.views["Overview"]); slices.Contains(labels, "No managed overrides") {
+		t.Fatalf("generated config changes still occupy the overview: %v", labels)
 	}
 	view.postSnapshot(core.Snapshot{ConfigOverrides: []core.ConfigOverrideSnapshot{{Key: "dns.listen", Change: "replaced"}, {Key: "password=private", Change: "added"}}})
 	fyne.DoAndWait(func() {})
-	got := strings.Join(rowLabels(view.views["Overview"]), "\n")
+	got := strings.Join(rowLabels(view.overridesSection), "\n")
 	if !strings.Contains(got, "dns.listen") || !strings.Contains(got, "loopback DNS") || strings.Contains(got, "password=private") {
 		t.Fatalf("unsafe or missing GUI explanation: %q", got)
 	}
 	view.postSnapshot(core.Snapshot{Groups: []core.GroupSnapshot{{ID: "other"}}, ConfigOverrides: []core.ConfigOverrideSnapshot{{Key: "dns.listen", Change: "replaced"}}})
 	fyne.DoAndWait(func() {})
-	if labels := rowLabels(view.views["Overview"]); !slices.Contains(labels, "dns.listen (replaced): loopback DNS listener") {
+	if labels := rowLabels(view.overridesSection); !slices.Contains(labels, "dns.listen (replaced): loopback DNS listener") {
 		t.Fatalf("unrelated update changed override explanation: %v", labels)
 	}
 }
 
-func TestConfigOverrideOverviewRowsDoNotOverlap(t *testing.T) {
+func TestConfigOverrideLogPanelRowsDoNotOverlap(t *testing.T) {
 	app := test.NewApp()
 	defer app.Quit()
 	w := app.NewWindow("ClashPulse")
 	w.Resize(fyne.NewSize(980, 700))
 	view := newDesktopUI(t.Context(), "", w)
 	view.postSnapshot(core.Snapshot{ConfigOverrides: []core.ConfigOverrideSnapshot{{Key: "mixed-port", Change: "replaced"}, {Key: "external-controller", Change: "replaced"}, {Key: "secret", Change: "added"}, {Key: "allow-lan", Change: "replaced"}, {Key: "dns.listen", Change: "replaced"}}})
+	view.openActivity()
 	fyne.DoAndWait(func() {})
 	_ = w.Canvas().Capture()
 	if view.overridesRows.Size().Height < view.overridesRows.MinSize().Height {
@@ -160,13 +179,14 @@ func TestConfigOverrideOverviewRowsDoNotOverlap(t *testing.T) {
 	}
 }
 
-func TestConfigOverrideOverviewFitsNarrowWindow(t *testing.T) {
+func TestConfigOverrideLogPanelFitsNarrowWindow(t *testing.T) {
 	app := test.NewApp()
 	defer app.Quit()
 	w := app.NewWindow("ClashPulse")
 	w.Resize(fyne.NewSize(360, 540))
 	view := newDesktopUI(t.Context(), "", w)
 	view.postSnapshot(core.Snapshot{ConfigOverrides: []core.ConfigOverrideSnapshot{{Key: "external-controller", Change: "replaced"}}})
+	view.openActivity()
 	fyne.DoAndWait(func() {})
 	_ = w.Canvas().Capture()
 	if view.overridesRows.Size().Width > w.Canvas().Size().Width {

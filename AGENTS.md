@@ -21,8 +21,11 @@ do not.
   logs, and reject an endpoint that is not loopback unless the user explicitly
   opts in.
 - One lifecycle owner owns the process, controller readiness, configuration
-  generation, restart, and shutdown. A failed start leaves no stale PID, port,
-  or active system proxy state.
+  generation, restart, and shutdown. A failed start leaves no stale PID or port.
+- The system proxy is owned, not borrowed: enabling writes the desktop proxy
+  settings, disabling resets them to their defaults, and a failed apply resets
+  only what this application wrote. Do not capture and replay a user's prior
+  proxy configuration.
 - Configuration changes are transactional: write a private temporary file,
   validate it with the selected Mihomo binary, atomically replace the active
   generated config, then restart. Preserve the prior known-good config and
@@ -33,6 +36,9 @@ do not.
 - No shell interpolation. Start Mihomo with an explicit executable and argv.
   Validate all paths and URLs at the boundary. Never log subscription URLs,
   controller secrets, credentials, or proxy credentials.
+- A provider's node name is subscription data, not display copy: it may carry
+  the provider's domain, and a published domain is a blocked domain. Mask any
+  host in a name before it reaches a UI label, tray entry, log, or report.
 
 ## Mihomo binary selection and compatibility
 
@@ -449,6 +455,10 @@ oversized input cannot become active.
 test without explicit user approval.
 - Every non-trivial change leaves one runnable check. Run the narrowest relevant
   `go test` command, then `go vet ./...` before merging broad changes.
+- Test cases, fixtures, example configs, and sample data use reserved names only
+  (`example.com`, `example.net`, `.invalid`, `192.0.2.0/24`). Never copy a real
+  subscription URL, provider domain, node server address, node name, or proxy
+  credential out of a live profile into a test, fixture, or doc comment.
 
 ## Working rules
 

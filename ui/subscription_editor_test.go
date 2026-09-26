@@ -20,8 +20,8 @@ func TestSubscriptionAddSendsTypedIntentAndClearsSourceAfterSubmit(t *testing.T)
 
 	page.add.OnTapped()
 	editor := page.editor
-	if !editor.source.Password {
-		t.Fatal("subscription URL is exposed in the edit field")
+	if editor.source.Password {
+		t.Fatal("subscription URL is masked, so what is typed cannot be read back")
 	}
 	editor.id.SetText("nightly")
 	editor.name.SetText("Nightly")

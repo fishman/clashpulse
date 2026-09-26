@@ -62,19 +62,49 @@ func profileTrayTitle(snapshot core.Snapshot) string {
 	return "No active profile"
 }
 
-func trayProxyLatency(snapshot core.Snapshot, groupID, proxyID string) string {
+const (
+	trayRankMeasured = iota
+	trayRankUnmeasured
+	trayRankUnavailable
+)
+
+// trayProxyMeasurement is the tray's label and sort key for one group member.
+// rank orders measured proxies first, then unmeasured, then known failures, so a
+// mixed list still reads fastest-first instead of listing unknowns up front.
+type trayProxyMeasurement struct {
+	text    string
+	latency int64
+	rank    int
+}
+
+func trayProxyMeasurementOf(snapshot core.Snapshot, groupID, proxyID string) trayProxyMeasurement {
 	for _, proxy := range snapshot.Proxies {
-		if proxy.GroupID == groupID && proxy.ID == proxyID {
-			if proxy.Outcome == "success" && proxy.LatencyMillis > 0 {
-				return fmt.Sprintf("%d ms", proxy.LatencyMillis)
-			}
-			if proxy.Outcome == "timeout" || proxy.Outcome == "error" {
-				return "unavailable"
-			}
-			break
+		if proxy.GroupID != groupID || proxy.ID != proxyID {
+			continue
 		}
+		if proxy.Outcome == "success" && proxy.LatencyMillis > 0 {
+			return trayProxyMeasurement{text: strconv.FormatInt(proxy.LatencyMillis, 10) + " ms", latency: proxy.LatencyMillis, rank: trayRankMeasured}
+		}
+		if proxy.Outcome == "timeout" || proxy.Outcome == "error" {
+			return trayProxyMeasurement{text: "unavailable", rank: trayRankUnavailable}
+		}
+		if proxy.MihomoMillis > 0 {
+			// Reported by mihomo, not measured here, so it never reorders the menu.
+			return trayProxyMeasurement{text: strconv.FormatInt(proxy.MihomoMillis, 10) + " ms (mihomo)", rank: trayRankUnmeasured}
+		}
+		break
 	}
-	return "not measured"
+	return trayProxyMeasurement{text: "not measured", rank: trayRankUnmeasured}
+}
+
+func trayProxyLatency(snapshot core.Snapshot, groupID, proxyID string) string {
+	return trayProxyMeasurementOf(snapshot, groupID, proxyID).text
+}
+
+type trayProxyChoice struct {
+	item    *fyne.MenuItem
+	latency int64
+	rank    int
 }
 
 func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
@@ -112,8 +142,11 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 		}
 		groupID := group.ID
 		choices := make([]*fyne.MenuItem, 0, len(group.Proxies))
+		ordered := make([]trayProxyChoice, 0, len(group.Proxies))
 		for i, proxyID := range group.Proxies {
 			id := proxyID
+			// The numbered fallback keeps the profile's own position, so a label
+			// stays stable as the latency order changes around it.
 			name := fmt.Sprintf("Proxy %d [%s]", i+1, shortID(id))
 			for _, proxy := range snapshot.Proxies {
 				if proxy.GroupID == groupID && proxy.ID == id && proxy.Label != "" {
@@ -121,10 +154,20 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 					break
 				}
 			}
-			label := name + " - " + trayProxyLatency(snapshot, groupID, id)
-			item := fyne.NewMenuItem(label, func() { d.enqueue(ipc.Command{Kind: ipc.CommandSelectGroup, GroupID: groupID, ChoiceID: id}) })
+			measurement := trayProxyMeasurementOf(snapshot, groupID, id)
+			item := fyne.NewMenuItem(name+" - "+measurement.text, func() { d.enqueue(ipc.Command{Kind: ipc.CommandSelectGroup, GroupID: groupID, ChoiceID: id}) })
 			item.Checked = id == group.Selected
-			choices = append(choices, item)
+			ordered = append(ordered, trayProxyChoice{item: item, rank: measurement.rank, latency: measurement.latency})
+		}
+		// SliceStable keeps the profile's own order between equal measurements.
+		sort.SliceStable(ordered, func(i, j int) bool {
+			if ordered[i].rank != ordered[j].rank {
+				return ordered[i].rank < ordered[j].rank
+			}
+			return ordered[i].latency < ordered[j].latency
+		})
+		for _, choice := range ordered {
+			choices = append(choices, choice.item)
 		}
 		if len(choices) == 0 {
 			continue
@@ -144,6 +187,14 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 	}
 	proxyMenu := fyne.NewMenuItem("Proxies", nil)
 	proxyMenu.ChildMenu = fyne.NewMenu("Proxies", groups...)
+	service := fyne.NewMenuItem("Service", func() {
+		kind := ipc.CommandStart
+		if snapshot.ServiceRunning {
+			kind = ipc.CommandStop
+		}
+		d.enqueue(ipc.Command{Kind: kind})
+	})
+	service.Checked = snapshot.ServiceRunning
 	systemProxy := fyne.NewMenuItem("System Proxy", func() {
 		enabled := !snapshot.SystemProxy.Enabled
 		if snapshot.SystemProxy.Active && !snapshot.SystemProxy.Enabled {
@@ -157,7 +208,7 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 	} else if !snapshot.SystemProxy.Enabled && snapshot.SystemProxy.Active {
 		systemProxy.Label = "System Proxy (restore needed)"
 	}
-	return fyne.NewMenu("ClashPulse", status, profileMenu, proxyMenu, systemProxy, fyne.NewMenuItemSeparator(), fyne.NewMenuItem("Show ClashPulse", d.window.Show), fyne.NewMenuItem("Quit", d.quit))
+	return fyne.NewMenu("ClashPulse", status, profileMenu, proxyMenu, service, systemProxy, fyne.NewMenuItemSeparator(), fyne.NewMenuItem("Show ClashPulse", d.window.Show), fyne.NewMenuItem("Quit", d.quit))
 }
 
 func trayStateSignature(snapshot core.Snapshot, connected bool) string {
@@ -166,6 +217,7 @@ func trayStateSignature(snapshot core.Snapshot, connected bool) string {
 	}
 	var key strings.Builder
 	key.WriteString(profileTrayTitle(snapshot))
+	fmt.Fprintf(&key, "|service:%t", snapshot.ServiceRunning)
 	fmt.Fprintf(&key, "|system-proxy:%t:%t", snapshot.SystemProxy.Enabled, snapshot.SystemProxy.Active)
 	for _, sub := range snapshot.Subscriptions {
 		fmt.Fprintf(&key, "|%s:%s:%t:%t:%t:%s", sub.ID, sub.SourceHost, sub.Enabled, sub.Active, sub.PendingActivation, sub.HashPrefix)

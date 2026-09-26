@@ -7,33 +7,61 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 )
 
-const gnomeProxySchema = "org.gnome.system.proxy"
+const (
+	gnomeProxySchema = "org.gnome.system.proxy"
+	gnomeProxyHTTP   = "org.gnome.system.proxy.http"
+	gnomeProxyHTTPS  = "org.gnome.system.proxy.https"
+)
 
-var proxyKeys = []string{"mode", "http-host", "http-port", "https-host", "https-port", "use-same-proxy"}
+// The host and port keys belong to child schemas and are addressable only by
+// their own schema id; `gsettings get org.gnome.system.proxy http-host` is
+// rejected even though the parent declares the child.
+type proxyKey struct{ schema, key string }
 
-var applySettings = []setting{
-	{key: "mode", value: "'none'"},
-	{key: "http-host"},
-	{key: "http-port"},
-	{key: "https-host"},
-	{key: "https-port"},
-	{key: "use-same-proxy", value: "false"},
-	{key: "mode", value: "'manual'"},
+// requiredSchemas are probed before writing: they, not the desktop name, decide
+// whether this environment can hold a GNOME proxy configuration. A session that
+// merely is not GNOME still reads these keys through GLib/GIO.
+var requiredSchemas = []string{gnomeProxySchema, gnomeProxyHTTP, gnomeProxyHTTPS}
+
+// resetKeys are the keys Apply owns. Reset returns each to its schema default
+// (no proxy), which is what turning the System Proxy off means.
+var resetKeys = []proxyKey{
+	{gnomeProxySchema, "mode"},
+	{gnomeProxySchema, "use-same-proxy"},
+	{gnomeProxyHTTP, "host"},
+	{gnomeProxyHTTP, "port"},
+	{gnomeProxyHTTPS, "host"},
+	{gnomeProxyHTTPS, "port"},
 }
 
 type setting struct {
-	key   string
-	value string
+	schema, key, value string
 }
 
-// Apply points GNOME's HTTP and HTTPS proxy settings at a loopback listener.
-// The listener must already be accepting connections before this is called.
+// applySettings disables the proxy while the endpoints are written, so a partial
+// write is never live, then enables manual mode.
+func applySettings(host string, port int) []setting {
+	hostValue, portValue := variantString(host), strconv.Itoa(port)
+	return []setting{
+		{gnomeProxySchema, "mode", "'none'"},
+		{gnomeProxyHTTP, "host", hostValue},
+		{gnomeProxyHTTP, "port", portValue},
+		{gnomeProxyHTTPS, "host", hostValue},
+		{gnomeProxyHTTPS, "port", portValue},
+		{gnomeProxySchema, "use-same-proxy", "false"},
+		{gnomeProxySchema, "mode", "'manual'"},
+	}
+}
+
+// Apply points the GNOME proxy settings at a loopback listener. The listener
+// must already be accepting connections before this is called. Prior values are
+// deliberately not preserved: Restore resets these keys to their schema
+// defaults, so a configuration this application never wrote is left alone.
 func (m *Manager) Apply(ctx context.Context, listenerAddress string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -51,38 +79,19 @@ func (m *Manager) Apply(ctx context.Context, listenerAddress string) error {
 	if err := verifyListenerReady(ctx, host, port); err != nil {
 		return m.failApply(ctx, fmt.Errorf("sysproxy: listener is not ready: %w", err))
 	}
-	if !gnomeSession() {
-		return m.failApply(ctx, errors.New("sysproxy: unsupported session (GNOME desktop session required)"))
-	}
 	if m.runner == nil {
 		return m.failApply(ctx, errors.New("sysproxy: no command runner configured"))
 	}
-	if err := verifyGNOMESchema(ctx, m.runner); err != nil {
+	if err := verifyGNOMESchemas(ctx, m.runner); err != nil {
 		return m.failApply(ctx, err)
 	}
 
-	if m.previous == nil {
-		previous, err := captureSettings(ctx, m.runner)
-		if err != nil {
-			return err
-		}
-		m.previous = previous
-	}
-
-	hostValue := variantString(host)
-	portValue := strconv.Itoa(port)
-	for _, item := range applySettings {
+	m.applied = true
+	for _, item := range applySettings(host, port) {
 		if err := ctx.Err(); err != nil {
 			return m.failApply(ctx, err)
 		}
-		value := item.value
-		switch item.key {
-		case "http-host", "https-host":
-			value = hostValue
-		case "http-port", "https-port":
-			value = portValue
-		}
-		if _, err := m.runner.Run(ctx, "gsettings", "set", gnomeProxySchema, item.key, value); err != nil {
+		if _, err := m.runner.Run(ctx, "gsettings", "set", item.schema, item.key, item.value); err != nil {
 			return m.failApply(ctx, fmt.Errorf("sysproxy: set %s: %w", item.key, err))
 		}
 	}
@@ -92,21 +101,18 @@ func (m *Manager) Apply(ctx context.Context, listenerAddress string) error {
 	return nil
 }
 
-// Restore returns GNOME's proxy keys to the values captured before the first
-// successful snapshot. It is safe to call more than once.
+// Restore resets the proxy keys to their schema defaults. It is safe to call
+// more than once and does nothing when this manager applied nothing.
 func (m *Manager) Restore(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.previous == nil {
+	if !m.applied {
 		return nil
 	}
-	if m.runner == nil {
-		return errors.New("sysproxy: no command runner configured")
-	}
-	if err := restoreSettings(ctx, m.runner, m.previous); err != nil {
+	if err := m.reset(ctx); err != nil {
 		return err
 	}
-	m.previous = nil
+	m.applied = false
 	return nil
 }
 
@@ -117,13 +123,10 @@ func (m *Manager) Proxies(ctx context.Context) (ProxySettings, error) {
 	if err := ctx.Err(); err != nil {
 		return ProxySettings{}, fmt.Errorf("sysproxy: query proxies: %w", err)
 	}
-	if !gnomeSession() {
-		return ProxySettings{}, errors.New("sysproxy: unsupported session (GNOME desktop session required)")
-	}
 	if m.runner == nil {
 		return ProxySettings{}, errors.New("sysproxy: no command runner configured")
 	}
-	mode, err := readGNOMESetting(ctx, m.runner, "mode")
+	mode, err := readGNOMESetting(ctx, m.runner, gnomeProxySchema, "mode")
 	if err != nil {
 		return ProxySettings{}, err
 	}
@@ -138,14 +141,14 @@ func (m *Manager) Proxies(ctx context.Context) (ProxySettings, error) {
 	if err != nil {
 		return ProxySettings{}, errors.New("sysproxy: invalid use-same-proxy setting")
 	}
-	httpProxy, err := gnomeProxy(ctx, m.runner, "http")
+	httpProxy, err := gnomeProxy(ctx, m.runner, gnomeProxyHTTP, "http")
 	if err != nil {
 		return ProxySettings{}, err
 	}
 	settings := ProxySettings{HTTP: httpProxy}
 	if useSame {
 		settings.HTTPS = httpProxy
-	} else if settings.HTTPS, err = gnomeProxy(ctx, m.runner, "https"); err != nil {
+	} else if settings.HTTPS, err = gnomeProxy(ctx, m.runner, gnomeProxyHTTPS, "https"); err != nil {
 		return ProxySettings{}, err
 	}
 	if settings.HTTP == nil && settings.HTTPS == nil {
@@ -154,12 +157,12 @@ func (m *Manager) Proxies(ctx context.Context) (ProxySettings, error) {
 	return settings, nil
 }
 
-func gnomeProxy(ctx context.Context, runner commandRunner, scheme string) (*url.URL, error) {
-	host, err := readGNOMESetting(ctx, runner, scheme+"-host")
+func gnomeProxy(ctx context.Context, runner commandRunner, schema, scheme string) (*url.URL, error) {
+	host, err := readGNOMESetting(ctx, runner, schema, "host")
 	if err != nil {
 		return nil, err
 	}
-	portOutput, err := runner.Run(ctx, "gsettings", "get", gnomeProxySchema, scheme+"-port")
+	portOutput, err := runner.Run(ctx, "gsettings", "get", schema, "port")
 	if err != nil {
 		return nil, fmt.Errorf("sysproxy: read %s proxy port: %w", scheme, err)
 	}
@@ -178,8 +181,8 @@ func gnomeProxy(ctx context.Context, runner commandRunner, scheme string) (*url.
 	return proxy, nil
 }
 
-func readGNOMESetting(ctx context.Context, runner commandRunner, key string) (string, error) {
-	output, err := runner.Run(ctx, "gsettings", "get", gnomeProxySchema, key)
+func readGNOMESetting(ctx context.Context, runner commandRunner, schema, key string) (string, error) {
+	output, err := runner.Run(ctx, "gsettings", "get", schema, key)
 	if err != nil {
 		return "", fmt.Errorf("sysproxy: read %s setting: %w", key, err)
 	}
@@ -190,111 +193,52 @@ func readGNOMESetting(ctx context.Context, runner commandRunner, key string) (st
 	return value[1 : len(value)-1], nil
 }
 
+// failApply drops settings this manager already owns before reporting the cause,
+// so a partial write is never left live. A failure before the first write leaves
+// a configuration this application did not write untouched.
 func (m *Manager) failApply(ctx context.Context, cause error) error {
-	if m.previous == nil {
+	if !m.applied {
 		return cause
 	}
-	if m.runner == nil {
-		return errors.Join(cause, errors.New("sysproxy: cannot roll back without a command runner"))
-	}
-	return m.rollbackApply(ctx, cause)
-}
-func (m *Manager) rollbackApply(ctx context.Context, cause error) error {
-	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
-	if err := restoreSettings(cleanupCtx, m.runner, m.previous); err != nil {
-		return errors.Join(cause, fmt.Errorf("sysproxy: rollback: %w", err))
+	if err := m.reset(cleanup); err != nil {
+		return errors.Join(cause, fmt.Errorf("sysproxy: reset after failed apply: %w", err))
 	}
-	m.previous = nil
+	m.applied = false
 	return cause
 }
 
-func verifyGNOMESchema(ctx context.Context, runner commandRunner) error {
+func (m *Manager) reset(ctx context.Context) error {
+	if m.runner == nil {
+		return errors.New("sysproxy: no command runner configured")
+	}
+	var failures []error
+	for _, item := range resetKeys {
+		if _, err := m.runner.Run(ctx, "gsettings", "reset", item.schema, item.key); err != nil {
+			failures = append(failures, fmt.Errorf("sysproxy: reset %s: %w", item.key, err))
+		}
+	}
+	return errors.Join(failures...)
+}
+
+func verifyGNOMESchemas(ctx context.Context, runner commandRunner) error {
 	schemas, err := runner.Run(ctx, "gsettings", "list-schemas")
 	if err != nil {
 		return fmt.Errorf("sysproxy: unsupported environment (cannot query GNOME proxy schema): %w", err)
 	}
-	found := false
+	available := make(map[string]bool)
 	for _, schema := range strings.Fields(string(schemas)) {
-		if schema == gnomeProxySchema {
-			found = true
-			break
-		}
+		available[schema] = true
 	}
-	if !found {
-		return errors.New("sysproxy: unsupported environment (GNOME proxy schema is unavailable)")
-	}
-
-	keysOutput, err := runner.Run(ctx, "gsettings", "list-keys", gnomeProxySchema)
-	if err != nil {
-		return fmt.Errorf("sysproxy: unsupported environment (cannot inspect GNOME proxy schema): %w", err)
-	}
-	keys := make(map[string]bool)
-	for _, key := range strings.Fields(string(keysOutput)) {
-		keys[key] = true
-	}
-	for _, key := range proxyKeys {
-		if !keys[key] {
-			return fmt.Errorf("sysproxy: unsupported environment (GNOME proxy schema lacks %q)", key)
+	for _, schema := range requiredSchemas {
+		if !available[schema] {
+			return fmt.Errorf("sysproxy: unsupported environment (GNOME proxy schema %s is unavailable)", schema)
 		}
 	}
 	return nil
 }
 
-func captureSettings(ctx context.Context, runner commandRunner) (map[string]string, error) {
-	previous := make(map[string]string, len(proxyKeys))
-	for _, key := range proxyKeys {
-		output, err := runner.Run(ctx, "gsettings", "get", gnomeProxySchema, key)
-		if err != nil {
-			return nil, fmt.Errorf("sysproxy: capture %s: %w", key, err)
-		}
-		value := strings.TrimSpace(string(output))
-		if value == "" {
-			return nil, fmt.Errorf("sysproxy: capture %s: gsettings returned an empty value", key)
-		}
-		previous[key] = value
-	}
-	return previous, nil
-}
-
-func restoreSettings(ctx context.Context, runner commandRunner, previous map[string]string) error {
-	var restoreErrors []error
-	set := func(key string) {
-		value, ok := previous[key]
-		if !ok {
-			restoreErrors = append(restoreErrors, fmt.Errorf("sysproxy: missing captured value for %s", key))
-			return
-		}
-		if _, err := runner.Run(ctx, "gsettings", "set", gnomeProxySchema, key, value); err != nil {
-			restoreErrors = append(restoreErrors, fmt.Errorf("sysproxy: restore %s: %w", key, err))
-		}
-	}
-
-	if _, ok := previous["mode"]; ok {
-		if _, err := runner.Run(ctx, "gsettings", "set", gnomeProxySchema, "mode", "'none'"); err != nil {
-			restoreErrors = append(restoreErrors, fmt.Errorf("sysproxy: disable proxy during restore: %w", err))
-		}
-	}
-	for _, key := range proxyKeys {
-		if key != "mode" {
-			set(key)
-		}
-	}
-	set("mode")
-	return errors.Join(restoreErrors...)
-}
-
 func variantString(value string) string {
 	return "'" + value + "'"
-}
-
-func gnomeSession() bool {
-	for _, key := range []string{"XDG_CURRENT_DESKTOP", "XDG_SESSION_DESKTOP", "DESKTOP_SESSION"} {
-		for _, desktop := range strings.FieldsFunc(os.Getenv(key), func(r rune) bool { return r == ':' || r == ';' }) {
-			if strings.EqualFold(desktop, "gnome") || strings.EqualFold(desktop, "gnome-classic") {
-				return true
-			}
-		}
-	}
-	return os.Getenv("GNOME_DESKTOP_SESSION_ID") != ""
 }

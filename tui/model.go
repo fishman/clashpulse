@@ -1563,6 +1563,8 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 			}
 			if proxy.LatencyMillis > 0 && proxy.Outcome == "success" {
 				info.latency = fmt.Sprintf("%d ms", proxy.LatencyMillis)
+			} else if proxy.MihomoMillis > 0 {
+				info.latency = fmt.Sprintf("%d ms (mihomo)", proxy.MihomoMillis)
 			}
 			proxyInfo[key] = info
 		}
@@ -1608,23 +1610,20 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 				state = "active"
 			}
 			checked, next, usage := "", "", ""
-			detail := appendDetail(subscription.SourceHost, enabledLabel(subscription.Enabled))
-			if subscription.Active {
-				detail = appendDetail(detail, "active")
-				if subscription.PendingActivation {
-					detail = appendDetail(detail, "update ready")
-				}
+			// The status line holds only what no column shows; source, state,
+			// check time, next run and usage are already cells.
+			detail := ""
+			if subscription.Active && subscription.PendingActivation {
+				detail = appendDetail(detail, "update ready")
 			}
 			if subscription.LastCheck > 0 {
 				checked = timeLabel(subscription.LastCheck)
-				detail = appendDetail(detail, "checked "+checked)
 			}
-			if subscription.LastSuccess > 0 {
-				detail = appendDetail(detail, "success "+timeLabel(subscription.LastSuccess))
+			if subscription.LastSuccess > 0 && subscription.LastSuccess != subscription.LastCheck {
+				detail = appendDetail(detail, "last success "+timeLabel(subscription.LastSuccess))
 			}
 			if subscription.NextDue > 0 {
 				next = timeLabel(subscription.NextDue)
-				detail = appendDetail(detail, "next "+next)
 			}
 			if subscription.HashPrefix != "" {
 				detail = appendDetail(detail, "hash "+subscription.HashPrefix)
@@ -1637,7 +1636,9 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 			}
 			if subscription.Usage != nil {
 				usage = fmt.Sprintf("%d up %d down", subscription.Usage.UploadedBytes, subscription.Usage.DownloadedBytes)
-				detail = appendDetail(detail, fmt.Sprintf("usage up %d down %d total %d bytes", subscription.Usage.UploadedBytes, subscription.Usage.DownloadedBytes, subscription.Usage.TotalBytes))
+				if subscription.Usage.TotalBytes > 0 {
+					detail = appendDetail(detail, fmt.Sprintf("total %d bytes", subscription.Usage.TotalBytes))
+				}
 				if subscription.Usage.ExpiresAt > 0 {
 					detail = appendDetail(detail, "expires "+timeLabel(subscription.Usage.ExpiresAt))
 				}

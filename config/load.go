@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/fishman/clashpulse/monitor"
 )
 
 const (
@@ -82,8 +84,11 @@ func applyDefaults(s *Snapshot) {
 	if s.Monitor.TestURL == "" {
 		s.Monitor.TestURL = "http://cp.cloudflare.com/generate_204"
 	}
+	if s.Monitor.SwitchPolicy == "" {
+		s.Monitor.SwitchPolicy = monitor.SwitchFailover
+	}
 	if s.Monitor.Interval == 0 {
-		s.Monitor.Interval = 5 * time.Minute
+		s.Monitor.Interval = time.Minute
 	}
 	if s.Monitor.Timeout == 0 {
 		s.Monitor.Timeout = 5 * time.Second
@@ -135,6 +140,9 @@ func validateSnapshot(s Snapshot) error {
 		return err
 	}
 	if err := validateMonitor(s.Monitor); err != nil {
+		return err
+	}
+	if err := validateMihomoURLTest(s.Mihomo); err != nil {
 		return err
 	}
 	if err := validateDNS(s.DNS); err != nil {
@@ -303,9 +311,24 @@ func validateSnapshot(s Snapshot) error {
 	return nil
 }
 
+// Mihomo reads these as whole seconds and milliseconds, so a finer value would be
+// silently rounded down.
+func validateMihomoURLTest(m Mihomo) error {
+	if m.URLTestInterval > 0 && (m.URLTestInterval < time.Second || m.URLTestInterval > maxMonitorInterval) {
+		return fmt.Errorf("config.toml: mihomo.url_test_interval: must be between one second and 24 hours")
+	}
+	if m.URLTestTolerance > 0 && (m.URLTestTolerance < time.Millisecond || m.URLTestTolerance > time.Minute) {
+		return fmt.Errorf("config.toml: mihomo.url_test_tolerance: must be between one millisecond and one minute")
+	}
+	return nil
+}
+
 func validateMonitor(m Monitor) error {
 	if err := validateMonitorTestURL(m.TestURL); err != nil {
 		return fmt.Errorf("config.toml: monitor.test_url: %w", err)
+	}
+	if m.SwitchPolicy != monitor.SwitchFailover && m.SwitchPolicy != monitor.SwitchLowestLatency {
+		return fmt.Errorf("config.toml: monitor.switch_policy: must be %q or %q", monitor.SwitchFailover, monitor.SwitchLowestLatency)
 	}
 	if m.Interval < time.Second || m.Interval > maxMonitorInterval {
 		return fmt.Errorf("config.toml: monitor.interval: must be between one second and 24 hours")

@@ -81,9 +81,11 @@ func (v *activityView) update(entries []core.DiagnosticSnapshot) {
 	v.resizeRows(v.list.Size().Width, true)
 }
 
+// openActivity shows the log panel: what this service changed in the generated
+// configuration, above the diagnostics it recorded.
 func (d *desktopUI) openActivity() {
 	if d.activity.dialog == nil {
-		d.activity.dialog = dialog.NewCustom("Activity", "Close", d.activity.content, d.window)
+		d.activity.dialog = dialog.NewCustom("Activity", "Close", container.NewBorder(d.overridesSection, nil, nil, nil, d.activity.content), d.window)
 	}
 	d.activity.dialog.Show()
 }

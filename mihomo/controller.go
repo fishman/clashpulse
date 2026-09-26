@@ -24,6 +24,9 @@ type Controller struct {
 type Proxy struct {
 	Name string
 	Type string
+	// DelayMillis is the newest delay mihomo's own url-test recorded for this
+	// node, or zero when mihomo has no history for it.
+	DelayMillis int64
 }
 
 type Group struct {
@@ -31,6 +34,10 @@ type Group struct {
 	Type     string
 	Proxies  []string
 	Selected string
+}
+
+type delaySample struct {
+	Delay int64 `json:"delay"`
 }
 
 func NewController(baseURL, secret string, client *http.Client) (*Controller, error) {
@@ -60,10 +67,11 @@ func (c *Controller) Proxies(ctx context.Context) ([]Proxy, []Group, error) {
 	}
 	var response struct {
 		Proxies map[string]struct {
-			Name string   `json:"name"`
-			Type string   `json:"type"`
-			All  []string `json:"all"`
-			Now  string   `json:"now"`
+			Name    string        `json:"name"`
+			Type    string        `json:"type"`
+			All     []string      `json:"all"`
+			Now     string        `json:"now"`
+			History []delaySample `json:"history"`
 		} `json:"proxies"`
 	}
 	if err := json.Unmarshal(body, &response); err != nil {
@@ -79,9 +87,20 @@ func (c *Controller) Proxies(ctx context.Context) ([]Proxy, []Group, error) {
 			groups = append(groups, Group{Name: proxy.Name, Type: proxy.Type, Proxies: proxy.All, Selected: proxy.Now})
 			continue
 		}
-		proxies = append(proxies, Proxy{Name: proxy.Name, Type: proxy.Type})
+		proxies = append(proxies, Proxy{Name: proxy.Name, Type: proxy.Type, DelayMillis: newestDelay(proxy.History)})
 	}
 	return proxies, groups, nil
+}
+
+// Mihomo appends a sample per url-test run, newest last, and records a
+// non-positive delay when a run fails.
+func newestDelay(history []delaySample) int64 {
+	for i := len(history) - 1; i >= 0; i-- {
+		if history[i].Delay > 0 {
+			return history[i].Delay
+		}
+	}
+	return 0
 }
 
 func (c *Controller) Delay(ctx context.Context, proxy, testURL string, timeout time.Duration) (time.Duration, error) {

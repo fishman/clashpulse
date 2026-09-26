@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"time"
 
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/dns"
@@ -140,11 +141,50 @@ func Render(profile []byte, intent config.Snapshot, paths ManagedPaths, controll
 	if err := renderDNS(document, intent); err != nil {
 		return nil, err
 	}
+	if err := renderURLTestDelays(document, intent.Mihomo); err != nil {
+		return nil, err
+	}
 	encoded, err := yaml.Marshal(document)
 	if err != nil {
 		return nil, fmt.Errorf("mihomo: encode generated configuration: %w", err)
 	}
 	return encoded, nil
+}
+
+// renderURLTestDelays rewrites the health-check pacing of the groups Mihomo
+// owns, which is what decides how quickly a profile switches to a faster node.
+// A zero duration leaves the group exactly as the profile wrote it.
+func renderURLTestDelays(document map[string]any, settings config.Mihomo) error {
+	if settings.URLTestInterval <= 0 && settings.URLTestTolerance <= 0 {
+		return nil
+	}
+	raw, ok := document["proxy-groups"]
+	if !ok {
+		return nil
+	}
+	groups, ok := raw.([]any)
+	if !ok {
+		return fmt.Errorf("mihomo: source proxy-groups must be a list")
+	}
+	for _, item := range groups {
+		group, ok := item.(map[string]any)
+		if !ok {
+			return fmt.Errorf("mihomo: source proxy group must be a mapping")
+		}
+		// Only the automatically tested group types read these keys.
+		switch group["type"] {
+		case "url-test", "fallback":
+		default:
+			continue
+		}
+		if settings.URLTestInterval > 0 {
+			group["interval"] = int(settings.URLTestInterval / time.Second)
+		}
+		if settings.URLTestTolerance > 0 {
+			group["tolerance"] = int(settings.URLTestTolerance / time.Millisecond)
+		}
+	}
+	return nil
 }
 
 type ConfigOverride struct {
@@ -171,6 +211,7 @@ func ExplainOverrides(source, generated []byte) ([]ConfigOverride, error) {
 		{"external-ui", "", "external-ui"},
 		{"dns.nameserver-policy", "dns", "nameserver-policy"},
 		{"rule-providers", "", "rule-providers"},
+		{"proxy-groups", "", "proxy-groups"},
 		{"rules", "", "rules"},
 	}
 	value := func(document map[string]any, section, name string) (any, bool) {

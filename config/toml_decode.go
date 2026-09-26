@@ -11,11 +11,14 @@ import (
 
 type configDoc struct {
 	Mihomo struct {
-		Binary string `toml:"binary"`
+		Binary           string  `toml:"binary"`
+		URLTestInterval  *string `toml:"url_test_interval"`
+		URLTestTolerance *string `toml:"url_test_tolerance"`
 	} `toml:"mihomo"`
 	Monitor struct {
 		Enabled               *bool    `toml:"enabled"`
 		TestURL               *string  `toml:"test_url"`
+		SwitchPolicy          *string  `toml:"switch_policy"`
 		Interval              *string  `toml:"interval"`
 		Timeout               *string  `toml:"timeout"`
 		Concurrency           *int     `toml:"concurrency"`
@@ -125,6 +128,14 @@ func loadConfig(path string) (App, Mihomo, Monitor, DNS, error) {
 	if err != nil {
 		return App{}, Mihomo{}, Monitor{}, DNS{}, err
 	}
+	urlTestInterval, err := durationValue(path, "mihomo.url_test_interval", doc.Mihomo.URLTestInterval)
+	if err != nil {
+		return App{}, Mihomo{}, Monitor{}, DNS{}, err
+	}
+	urlTestTolerance, err := nonnegativeDurationValue(path, "mihomo.url_test_tolerance", doc.Mihomo.URLTestTolerance)
+	if err != nil {
+		return App{}, Mihomo{}, Monitor{}, DNS{}, err
+	}
 	timeout, err := durationValue(path, "monitor.timeout", doc.Monitor.Timeout)
 	if err != nil {
 		return App{}, Mihomo{}, Monitor{}, DNS{}, err
@@ -146,7 +157,7 @@ func loadConfig(path string) (App, Mihomo, Monitor, DNS, error) {
 		return App{}, Mihomo{}, Monitor{}, DNS{}, err
 	}
 	if doc.Monitor.Cooldown == nil {
-		cooldown = 10 * time.Minute
+		cooldown = 5 * time.Minute
 	}
 	jitter, err := nonnegativeDurationValue(path, "monitor.jitter", doc.Monitor.Jitter)
 	if err != nil {
@@ -155,9 +166,9 @@ func loadConfig(path string) (App, Mihomo, Monitor, DNS, error) {
 	if doc.Monitor.Jitter == nil {
 		effectiveInterval := interval
 		if effectiveInterval == 0 {
-			effectiveInterval = 5 * time.Minute
+			effectiveInterval = time.Minute
 		}
-		jitter = 15 * time.Second
+		jitter = 10 * time.Second
 		if jitter >= effectiveInterval {
 			jitter = effectiveInterval / 10
 		}
@@ -186,9 +197,18 @@ func loadConfig(path string) (App, Mihomo, Monitor, DNS, error) {
 			return App{}, Mihomo{}, Monitor{}, DNS{}, fmt.Errorf("%s: monitor.test_url: required", path)
 		}
 	}
-	return App{SystemProxy: SystemProxy{Enabled: doc.SystemProxy.Enabled}}, Mihomo{Binary: doc.Mihomo.Binary}, Monitor{
+	switchPolicy := ""
+	if doc.Monitor.SwitchPolicy != nil {
+		switchPolicy = *doc.Monitor.SwitchPolicy
+	}
+	return App{SystemProxy: SystemProxy{Enabled: doc.SystemProxy.Enabled}}, Mihomo{
+		Binary:           doc.Mihomo.Binary,
+		URLTestInterval:  urlTestInterval,
+		URLTestTolerance: urlTestTolerance,
+	}, Monitor{
 		Enabled:               enabled,
 		TestURL:               testURL,
+		SwitchPolicy:          switchPolicy,
 		Interval:              interval,
 		Timeout:               timeout,
 		Concurrency:           concurrency,

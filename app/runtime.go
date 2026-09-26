@@ -300,6 +300,7 @@ func (s *runtimeService) syncSubscriptions(snapshot config.Snapshot) error {
 func (s *runtimeService) stateSnapshot() core.Snapshot {
 	state := core.CloneSnapshot(s.snapshot)
 	state.ActiveSource = "none"
+	state.ServiceRunning = s.controller != nil
 	state.ConfigOverrides = nil
 	if s.controller != nil {
 		if s.localProfile != nil {
@@ -314,7 +315,10 @@ func (s *runtimeService) stateSnapshot() core.Snapshot {
 	settings := s.store.Snapshot()
 	state.Monitor = core.MonitorSnapshot{
 		Enabled: settings.Monitor.Enabled, TestURL: settings.Monitor.TestURL,
-		IntervalSeconds: int64(settings.Monitor.Interval.Seconds()), TimeoutMillis: settings.Monitor.Timeout.Milliseconds(),
+		SwitchPolicy:           settings.Monitor.SwitchPolicy,
+		URLTestIntervalSeconds: int64(settings.Mihomo.URLTestInterval.Seconds()),
+		URLTestToleranceMillis: settings.Mihomo.URLTestTolerance.Milliseconds(),
+		IntervalSeconds:        int64(settings.Monitor.Interval.Seconds()), TimeoutMillis: settings.Monitor.Timeout.Milliseconds(),
 		Concurrency: settings.Monitor.Concurrency, ThresholdMillis: settings.Monitor.Threshold.Milliseconds(),
 		AlertThresholdMillis: settings.Monitor.AlertThreshold.Milliseconds(), ConsecutiveBadSamples: settings.Monitor.ConsecutiveBadSamples,
 		MinImprovementMillis: settings.Monitor.MinImprovement.Milliseconds(), CooldownSeconds: int64(settings.Monitor.Cooldown.Seconds()),
@@ -471,8 +475,8 @@ func (s *runtimeService) reportErrorScoped(kind, sourceID string, err error) {
 	if errors.Is(err, subscriptions.ErrRestore) {
 		message = "activation rollback failed; running proxy state needs attention"
 	}
-	if strings.Contains(err.Error(), "sysproxy: unsupported") {
-		message = "system proxy is unsupported in this desktop environment"
+	if unsupportedSystemProxy(err) {
+		message = core.ActivationSystemProxyUnsupported.Message()
 	}
 	if strings.Contains(err.Error(), "sysproxy: rollback") {
 		message = "system proxy rollback failed; previous settings need attention"

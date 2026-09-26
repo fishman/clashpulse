@@ -6,6 +6,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 
@@ -13,10 +15,16 @@ import (
 	"github.com/fishman/clashpulse/sysproxy"
 )
 
-func TestSystemProxyTransportFailsClosedWithoutGNOMESession(t *testing.T) {
-	for _, key := range []string{"XDG_CURRENT_DESKTOP", "XDG_SESSION_DESKTOP", "DESKTOP_SESSION", "GNOME_DESKTOP_SESSION_ID"} {
-		t.Setenv(key, "")
+// A gsettings that cannot answer stands in for an environment whose OS proxy
+// settings are unavailable, so the request must fail closed rather than fall
+// back to the ambient environment.
+func TestSystemProxyTransportFailsClosedWithoutOSProxy(t *testing.T) {
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "gsettings"), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
 	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
 	var proxyHits, originHits atomic.Int32
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		proxyHits.Add(1)

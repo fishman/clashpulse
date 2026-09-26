@@ -38,10 +38,23 @@ func TestTraySelectsProfileAndProxyWithMeasuredLatency(t *testing.T) {
 	if len(groups) != 1 || len(groups[0].ChildMenu.Items) != 2 {
 		t.Fatalf("native URLTest was offered manual selection: %+v", groups)
 	}
-	if !groups[0].ChildMenu.Items[0].Checked {
-		t.Fatal("selected proxy was not marked")
+	entries := groups[0].ChildMenu.Items
+	if !strings.HasSuffix(entries[0].Label, "180 ms") || !strings.HasSuffix(entries[1].Label, "300 ms") {
+		t.Fatalf("tray proxy list is not ordered fastest-first: %q %q", entries[0].Label, entries[1].Label)
 	}
-	groups[0].ChildMenu.Items[1].Action()
+	checked := 0
+	for _, item := range entries {
+		if item.Checked {
+			checked++
+			if !strings.HasSuffix(item.Label, "300 ms") {
+				t.Fatalf("selected proxy is not the marked one: %q", item.Label)
+			}
+		}
+	}
+	if checked != 1 {
+		t.Fatalf("marked proxies = %d, want 1", checked)
+	}
+	entries[0].Action()
 	if command := <-view.actions; command.Kind != ipc.CommandSelectGroup || command.GroupID != "main" || command.ChoiceID != "beta" {
 		t.Fatalf("proxy action = %+v", command)
 	}
@@ -60,6 +73,80 @@ func TestTraySelectsProfileAndProxyWithMeasuredLatency(t *testing.T) {
 	}
 	if signature := trayStateSignature(state, false); signature != "disconnected" {
 		t.Fatalf("offline tray kept stale actions: %q", signature)
+	}
+}
+
+func TestTrayServiceToggleStartsAndStops(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	d := &desktopUI{connected: true, window: a.NewWindow("ClashPulse"), actions: make(chan ipc.Command, 2)}
+	itemFor := func(state core.Snapshot, label string) *fyne.MenuItem {
+		for _, item := range d.trayMenu(state).Items {
+			if item.Label == label {
+				return item
+			}
+		}
+		return nil
+	}
+	stopped := core.Snapshot{}
+	items := d.trayMenu(stopped).Items
+	service, systemProxy := itemFor(stopped, "Service"), itemFor(stopped, "System Proxy")
+	if service == nil || service.Checked || service.Disabled || systemProxy == nil {
+		t.Fatalf("stopped service toggle = %+v", service)
+	}
+	if indexOf(items, "Service")+1 != indexOf(items, "System Proxy") {
+		t.Fatal("service and system proxy toggles are not adjacent")
+	}
+	service.Action()
+	if command := <-d.actions; command.Kind != ipc.CommandStart {
+		t.Fatalf("stopped service toggle sent %+v", command)
+	}
+	before := trayStateSignature(stopped, true)
+	running := core.Snapshot{ServiceRunning: true}
+	if trayStateSignature(running, true) == before {
+		t.Fatal("service state did not refresh tray menu")
+	}
+	service = itemFor(running, "Service")
+	if service == nil || !service.Checked {
+		t.Fatalf("running service toggle = %+v", service)
+	}
+	service.Action()
+	if command := <-d.actions; command.Kind != ipc.CommandStop {
+		t.Fatalf("running service toggle sent %+v", command)
+	}
+}
+
+func indexOf(items []*fyne.MenuItem, label string) int {
+	for i, item := range items {
+		if item.Label == label {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestTrayProxyOrderRanksMeasuredBeforeUnknownAndUnavailable(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	view := &desktopUI{connected: true, window: app.NewWindow("ClashPulse"), quit: func() {}, actions: make(chan ipc.Command, 2)}
+	state := core.Snapshot{
+		Groups: []core.GroupSnapshot{{ID: "main", Type: "Selector", Selected: "slow", Proxies: []string{"failed", "unknown", "slow", "fast"}}},
+		Proxies: []core.ProxySnapshot{
+			{GroupID: "main", ID: "failed", Outcome: "timeout"},
+			{GroupID: "main", ID: "unknown"},
+			{GroupID: "main", ID: "slow", Outcome: "success", LatencyMillis: 900},
+			{GroupID: "main", ID: "fast", Outcome: "success", LatencyMillis: 100},
+		},
+	}
+	items := view.trayMenu(state).Items[2].ChildMenu.Items[0].ChildMenu.Items
+	want := []string{"100 ms", "900 ms", "not measured", "unavailable"}
+	if len(items) != len(want) {
+		t.Fatalf("tray entries = %d, want %d", len(items), len(want))
+	}
+	for i, suffix := range want {
+		if !strings.HasSuffix(items[i].Label, " - "+suffix) {
+			t.Fatalf("tray entry %d = %q, want suffix %q", i, items[i].Label, suffix)
+		}
 	}
 }
 

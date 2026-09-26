@@ -2,20 +2,26 @@
 # Defaults: system Mihomo, enabled health monitoring, disabled system proxy, loopback DNS.
 [mihomo]
 binary = "system" # "bundled" is explicit fallback; or an executable path.
+# Delay settings for the url-test and fallback groups of the generated profile.
+# Unset keeps whatever each group already declares. This is Mihomo's own health
+# check, which owns those groups; ClashPulse never probes or switches them.
+# url_test_interval = "5m"
+# url_test_tolerance = "50ms" # Switch only when a node is at least this much faster.
 
 [monitor]
-enabled = true # Opted-in select groups are measured; manual probes need no opt-in.
+enabled = true # Every managed select group is measured; manual probes need no opt-in.
 test_url = "http://cp.cloudflare.com/generate_204" # Plain HTTP probes can be intercepted; use HTTPS for probe integrity.
-interval = "5m"
+switch_policy = "failover" # "lowest_latency" switches to any node that is faster by min_improvement, even while the current one is healthy.
+interval = "1m" # Three rounds of probes are needed before a switch, so a shorter interval shortens the reaction time.
 timeout = "5s"
 concurrency = 3 # Hard upper bound: 64 concurrent controller probes.
 threshold = "800ms" # Selected proxy latency threshold for automatic switching.
 alert_threshold = "250ms" # Notify only if all measured candidates exceed this.
 consecutive_bad_samples = 3
 min_improvement = "100ms"
-cooldown = "10m"
-jitter = "15s"
-automated_groups = [] # Opaque group IDs shown by IPC/UI; manual selection removes opt-in.
+cooldown = "5m"
+jitter = "10s" # Spreads each round so every probe does not fire at once.
+automated_groups = [] # Switches these groups automatically. Opaque group IDs shown by IPC/UI; manual selection removes opt-in.
 
 [dns]
 listen = "127.0.0.1:1053" # No privileged port or system DNS redirect is enabled implicitly.

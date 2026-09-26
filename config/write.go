@@ -59,8 +59,11 @@ type SettingsPatch struct {
 	Binary                       *string
 	SystemProxyEnabled           *bool
 	DNSListen                    *string
+	MihomoURLTestInterval        *time.Duration
+	MihomoURLTestTolerance       *time.Duration
 	MonitorEnabled               *bool
 	MonitorTestURL               *string
+	MonitorSwitchPolicy          *string
 	MonitorInterval              *time.Duration
 	MonitorTimeout               *time.Duration
 	MonitorConcurrency           *int
@@ -100,9 +103,23 @@ func PatchSettings(path string, current Snapshot, patch SettingsPatch) error {
 		document.Monitor.Interval = &value
 		next.Monitor.Interval = *patch.MonitorInterval
 	}
+	if patch.MihomoURLTestInterval != nil {
+		value := patch.MihomoURLTestInterval.String()
+		document.Mihomo.URLTestInterval = &value
+		next.Mihomo.URLTestInterval = *patch.MihomoURLTestInterval
+	}
+	if patch.MihomoURLTestTolerance != nil {
+		value := patch.MihomoURLTestTolerance.String()
+		document.Mihomo.URLTestTolerance = &value
+		next.Mihomo.URLTestTolerance = *patch.MihomoURLTestTolerance
+	}
 	if patch.MonitorTestURL != nil {
 		document.Monitor.TestURL = patch.MonitorTestURL
 		next.Monitor.TestURL = *patch.MonitorTestURL
+	}
+	if patch.MonitorSwitchPolicy != nil {
+		document.Monitor.SwitchPolicy = patch.MonitorSwitchPolicy
+		next.Monitor.SwitchPolicy = *patch.MonitorSwitchPolicy
 	}
 	if patch.MonitorTimeout != nil {
 		value := patch.MonitorTimeout.String()

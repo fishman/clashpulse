@@ -19,6 +19,9 @@ type ProxySnapshot struct {
 	LatencyMillis int64
 	FinishedAt    int64
 	Outcome       string
+	// MihomoMillis is what mihomo's own url-test last reported for this node,
+	// shown where this application never probed the group itself.
+	MihomoMillis int64
 }
 
 type UsageSnapshot struct {
@@ -66,7 +69,7 @@ func (o ConfigOverrideSnapshot) Valid() bool {
 		return false
 	}
 	switch o.Key {
-	case "mixed-port", "port", "socks-port", "external-controller", "secret", "allow-lan", "bind-address", "dns.listen", "external-controller-tls", "external-controller-cors", "external-ui", "dns.nameserver-policy", "rule-providers", "rules":
+	case "mixed-port", "port", "socks-port", "external-controller", "secret", "allow-lan", "bind-address", "dns.listen", "external-controller-tls", "external-controller-cors", "external-ui", "dns.nameserver-policy", "rule-providers", "proxy-groups", "rules":
 		return true
 	default:
 		return false
@@ -94,6 +97,8 @@ func (o ConfigOverrideSnapshot) Description() string {
 		return "controller isolation"
 	case "rule-providers":
 		return "validated managed rule providers"
+	case "proxy-groups":
+		return "configured url-test delay settings"
 	case "rules":
 		return "managed filter rules"
 	default:
@@ -102,17 +107,20 @@ func (o ConfigOverrideSnapshot) Description() string {
 }
 
 type MonitorSnapshot struct {
-	Enabled               bool
-	TestURL               string
-	IntervalSeconds       int64
-	TimeoutMillis         int64
-	Concurrency           int
-	ThresholdMillis       int64
-	AlertThresholdMillis  int64
-	ConsecutiveBadSamples int
-	MinImprovementMillis  int64
-	CooldownSeconds       int64
-	JitterMillis          int64
+	Enabled                bool
+	TestURL                string
+	SwitchPolicy           string
+	URLTestIntervalSeconds int64
+	URLTestToleranceMillis int64
+	IntervalSeconds        int64
+	TimeoutMillis          int64
+	Concurrency            int
+	ThresholdMillis        int64
+	AlertThresholdMillis   int64
+	ConsecutiveBadSamples  int
+	MinImprovementMillis   int64
+	CooldownSeconds        int64
+	JitterMillis           int64
 }
 
 type ResolverSetSnapshot struct {
@@ -164,6 +172,7 @@ type DiagnosticSnapshot struct {
 type Snapshot struct {
 	Revision        uint64
 	ActiveSource    string
+	ServiceRunning  bool
 	ConfigOverrides []ConfigOverrideSnapshot
 	Groups          []GroupSnapshot
 	Proxies         []ProxySnapshot

@@ -8,7 +8,7 @@ measured proxy switching. A Fyne desktop client and a keyboard-first TUI use the
 same local IPC service.
 
 The first usable release is a daily client: it starts a selected Mihomo binary,
-manages subscriptions/resources, monitors opted-in selector groups, performs
+manages subscriptions/resources, monitors managed selector groups, performs
 conservative automatic switching, exposes Fyne and TUI clients, and explicitly
 controls the OS HTTP/HTTPS System Proxy. TUN is deferred.
 
@@ -243,7 +243,9 @@ into one reload only when active bytes or rendered config changes.
 
 ## Monitor and switching policy
 
-The monitor runs only for explicitly opted-in managed `select` groups. Mihomo
+The monitor measures every managed `select` group while monitoring is enabled.
+Automatic switching is a separate, explicit per-group opt-in, so latency is
+visible without granting this application authority to move traffic. Mihomo
 `url-test` groups keep Mihomo's native policy. Manual selection disables
 automation for that group until explicit re-enable.
 
@@ -284,9 +286,10 @@ Lifecycle:
 
 Failure at any step stops partial state and restores/retains the last known-good
 runtime. System Proxy platform adapters set OS HTTP/HTTPS proxy values to the
-ready Mihomo listener and capture enough prior state to clear/restore project
-changes on controlled shutdown, failed start, listener change, or unexpected
-child exit. TUN is out of scope.
+ready Mihomo listener and own those values: controlled shutdown, failed start,
+listener change, and unexpected child exit reset them to their platform
+defaults, and a failed apply resets only what the application wrote. Prior
+user proxy settings are not captured or replayed. TUN is out of scope.
 
 ## IPC and clients
 

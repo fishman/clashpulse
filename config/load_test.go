@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fishman/clashpulse/monitor"
 )
 
 func writeFile(t *testing.T, dir, name, contents string) {
@@ -64,7 +66,7 @@ func TestLoadMonitorPolicyDefaultsAndOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if defaults.Monitor.TestURL != "http://cp.cloudflare.com/generate_204" || defaults.Monitor.Interval != 5*time.Minute || defaults.Monitor.Timeout != 5*time.Second || defaults.Monitor.Concurrency != 3 || defaults.Monitor.Threshold != 800*time.Millisecond || defaults.Monitor.AlertThreshold != 250*time.Millisecond || defaults.Monitor.ConsecutiveBadSamples != 3 || defaults.Monitor.MinImprovement != 100*time.Millisecond || defaults.Monitor.Cooldown != 10*time.Minute || defaults.Monitor.Jitter != 15*time.Second {
+	if defaults.Monitor.TestURL != "http://cp.cloudflare.com/generate_204" || defaults.Monitor.Interval != time.Minute || defaults.Monitor.Timeout != 5*time.Second || defaults.Monitor.Concurrency != 3 || defaults.Monitor.Threshold != 800*time.Millisecond || defaults.Monitor.AlertThreshold != 250*time.Millisecond || defaults.Monitor.ConsecutiveBadSamples != 3 || defaults.Monitor.MinImprovement != 100*time.Millisecond || defaults.Monitor.Cooldown != 5*time.Minute || defaults.Monitor.Jitter != 10*time.Second {
 		t.Fatalf("monitor policy defaults = %+v", defaults.Monitor)
 	}
 	writeFile(t, dir, "config.toml", "[monitor]\ntest_url = \"http://cp.cloudflare.com/generate_204\"\ntimeout = \"2s\"\nconcurrency = 4\nthreshold = \"600ms\"\nconsecutive_bad_samples = 2\nmin_improvement = \"150ms\"\ncooldown = \"0s\"\njitter = \"0s\"\n")
@@ -118,6 +120,71 @@ func TestPatchSettingsPersistsMonitorPolicy(t *testing.T) {
 	}
 	if updated.Monitor.TestURL != testURL || updated.Monitor.Interval != interval || updated.Monitor.Timeout != timeout || updated.Monitor.Concurrency != concurrency || updated.Monitor.Threshold != threshold || updated.Monitor.AlertThreshold != alertThreshold || updated.Monitor.ConsecutiveBadSamples != badSamples || updated.Monitor.MinImprovement != improvement || updated.Monitor.Cooldown != cooldown || updated.Monitor.Jitter != jitter {
 		t.Fatalf("persisted monitor policy = %+v", updated.Monitor)
+	}
+}
+
+func TestLoadSwitchPolicyAndURLTestDelays(t *testing.T) {
+	dir := t.TempDir()
+	defaults, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if defaults.Monitor.SwitchPolicy != monitor.SwitchFailover {
+		t.Fatalf("default switch policy = %q", defaults.Monitor.SwitchPolicy)
+	}
+	if defaults.Mihomo.URLTestInterval != 0 || defaults.Mihomo.URLTestTolerance != 0 {
+		t.Fatalf("unset url-test delays = %v, %v", defaults.Mihomo.URLTestInterval, defaults.Mihomo.URLTestTolerance)
+	}
+	writeFile(t, dir, "config.toml", "[monitor]\nswitch_policy = \"lowest_latency\"\n[mihomo]\nurl_test_interval = \"60s\"\nurl_test_tolerance = \"50ms\"\n")
+	configured, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if configured.Monitor.SwitchPolicy != monitor.SwitchLowestLatency || configured.Mihomo.URLTestInterval != time.Minute || configured.Mihomo.URLTestTolerance != 50*time.Millisecond {
+		t.Fatalf("configured switch policy %q with url-test delay %v/%v", configured.Monitor.SwitchPolicy, configured.Mihomo.URLTestInterval, configured.Mihomo.URLTestTolerance)
+	}
+}
+
+func TestPatchSettingsPersistsSwitchPolicyAndURLTestDelays(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "config.toml", "[monitor]\n")
+	current, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := monitor.SwitchLowestLatency
+	interval, tolerance := 10*time.Minute, 75*time.Millisecond
+	if err := PatchSettings(filepath.Join(dir, "config.toml"), current, SettingsPatch{
+		MonitorSwitchPolicy: &policy, MihomoURLTestInterval: &interval, MihomoURLTestTolerance: &tolerance,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Monitor.SwitchPolicy != policy || updated.Mihomo.URLTestInterval != interval || updated.Mihomo.URLTestTolerance != tolerance {
+		t.Fatalf("persisted switch policy %q with url-test delay %v/%v", updated.Monitor.SwitchPolicy, updated.Mihomo.URLTestInterval, updated.Mihomo.URLTestTolerance)
+	}
+}
+
+func TestLoadRejectsInvalidSwitchPolicyAndURLTestDelays(t *testing.T) {
+	for name, document := range map[string]string{
+		"unknown switch policy":     "[monitor]\nswitch_policy = \"fastest\"\n",
+		"subsecond url-test period": "[mihomo]\nurl_test_interval = \"500ms\"\n",
+		"url-test period over day":  "[mihomo]\nurl_test_interval = \"25h\"\n",
+		"negative url-test period":  "[mihomo]\nurl_test_interval = \"-1s\"\n",
+		"negative tolerance":        "[mihomo]\nurl_test_tolerance = \"-1ms\"\n",
+		"tolerance over minute":     "[mihomo]\nurl_test_tolerance = \"61s\"\n",
+		"submillisecond tolerance":  "[mihomo]\nurl_test_tolerance = \"500us\"\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, "config.toml", document)
+			if _, err := Load(dir); err == nil {
+				t.Fatalf("invalid setting accepted: %s", document)
+			}
+		})
 	}
 }
 

@@ -22,11 +22,15 @@ type SystemProxy struct {
 
 type Mihomo struct {
 	Binary string
+	// Zero leaves each group's own delay setting in the source profile untouched.
+	URLTestInterval  time.Duration
+	URLTestTolerance time.Duration
 }
 
 type Monitor struct {
 	Enabled               bool
 	TestURL               string
+	SwitchPolicy          string
 	Interval              time.Duration
 	Timeout               time.Duration
 	Concurrency           int

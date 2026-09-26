@@ -159,6 +159,22 @@ func TestRenderResourceDoesNotRepeatTableDetails(t *testing.T) {
 	}
 }
 
+func TestRenderHasNoDetailLineAboveStatusBar(t *testing.T) {
+	state := core.Snapshot{
+		Subscriptions: []core.SubscriptionSnapshot{{ID: "feed", Name: "Feed", SourceHost: "feed.example", Enabled: true, Active: true, LastCheck: 1700000000, NextDue: 1700003600, HashPrefix: "abcdef"}},
+		Filters:       []core.FilterSnapshot{{ID: "ads", ResourceID: "ads", Format: "mrs", Target: "traffic", SourceHost: "feed.example", Enabled: true, Validated: true}},
+		Resources:     []core.ResourceSnapshot{{ID: "cn", Kind: "rule-set", Format: "mrs", SourceHost: "feed.example", Enabled: true, Validated: true}},
+		Groups:        []core.GroupSnapshot{{ID: "group-id", Label: "Auto", Type: "Selector", Selected: "p1", Proxies: []string{"p1"}}},
+		Proxies:       []core.ProxySnapshot{{GroupID: "group-id", ID: "p1", Label: "node-a", LatencyMillis: 42, Outcome: "success"}},
+	}
+	for _, tab := range []Tab{TabProxies, TabSubscriptions, TabFilters, TabResources, TabSettings} {
+		model := NewModel().Apply(ipc.Event{Snapshot: state}).selectTab(tab)
+		rows := mockRender(t, model, 140, 12)
+		if strings.TrimSpace(rows[8]) != "" {
+			t.Fatalf("%s tab drew a detail line above the status bar: %q", viewTitle(tab), rows[8])
+		}
+	}
+}
 func TestRenderStatusIdentifiesConnectionAndActiveProfile(t *testing.T) {
 	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{
 		Subscriptions: []core.SubscriptionSnapshot{{ID: "primary", Name: "Primary", Active: true}},

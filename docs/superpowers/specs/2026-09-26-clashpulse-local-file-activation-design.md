@@ -2,7 +2,7 @@
 
 ## Goal
 
-`clashpulse activate <profile.yaml>` is one command to run a selected local Mihomo profile without adding a subscription or opening the GUI. It reports when the controller is ready, then remains in the foreground as the sole lifecycle owner. Ctrl-C stops Mihomo and restores any System Proxy settings the command changed. Activation failures identify the failed stage without displaying proxy credentials, subscription URLs, source paths, or raw Mihomo output. The same stage is visible to GUI and TUI clients when subscription activation fails.
+`clashpulse activate <profile.yaml>` is one command to run a selected local Mihomo profile without adding a subscription or opening the GUI. It reports when the controller is ready, then remains in the foreground as the sole lifecycle owner. Ctrl-C stops Mihomo and resets the System Proxy settings the command changed. Activation failures identify the failed stage without displaying proxy credentials, subscription URLs, source paths, or raw Mihomo output. The same stage is visible to GUI and TUI clients when subscription activation fails.
 
 ## Source and lifetime
 
@@ -12,7 +12,7 @@ The command uses the existing config.Store intent, selected Mihomo binary/capabi
 
 ## Foreground owner and IPC
 
-Reuse the app's exclusive state lock and lifecycle owner. The command starts the same per-user IPC service without a GUI and refuses to run alongside another desktop or headless owner. It prints a short success line only after the Mihomo controller responds with its initial proxy snapshot; a profile without groups can still be active. It then blocks until cancellation. Signal shutdown waits for child termination and restores System Proxy state; failures return a nonzero exit status. Unexpected child exit ends the foreground command with a safe error rather than leaving it apparently active. There is no daemonization or detached child.
+Reuse the app's exclusive state lock and lifecycle owner. The command starts the same per-user IPC service without a GUI and refuses to run alongside another desktop or headless owner. It prints a short success line only after the Mihomo controller responds with its initial proxy snapshot; a profile without groups can still be active. It then blocks until cancellation. Signal shutdown waits for child termination and resets System Proxy state; failures return a nonzero exit status. Unexpected child exit ends the foreground command with a safe error rather than leaving it apparently active. There is no daemonization or detached child.
 
 While running, restart, config reload, resource refresh, and monitor work use the immutable in-memory local profile. The existing IPC group-selection command remains available to a TUI client. An explicit later subscription activation may replace the local runtime transactionally; failure retains the local runtime. The subscription scheduler may refresh configured subscriptions but cannot silently switch the active local source.
 

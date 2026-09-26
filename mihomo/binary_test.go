@@ -142,18 +142,26 @@ func TestInspectRejectsBinaryWithoutConfigCheck(t *testing.T) {
 }
 
 func TestInspectGatesGeodataByKnownVersion(t *testing.T) {
-	current, err := Inspect(context.Background(), Selection{Kind: "path", Path: fakeBinary(t, "Mihomo Meta v1.19.31 linux amd64", 0)})
-	if err != nil {
-		t.Fatal(err)
+	for _, identity := range []string{
+		"Mihomo Meta v1.19.31 linux amd64",
+		"Mihomo Meta 1.19.30 linux amd64 with go1.26.6",
+		"Mihomo Meta v1.20.0 linux amd64",
+	} {
+		supported, err := Inspect(context.Background(), Selection{Kind: "path", Path: fakeBinary(t, identity, 0)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !supported.SupportsGeoIPDat || !supported.SupportsGeoSiteDat || !supported.SupportsMMDB {
+			t.Fatalf("%q missing geodata capabilities: %+v", identity, supported)
+		}
 	}
-	if !current.SupportsGeoIPDat || !current.SupportsGeoSiteDat || !current.SupportsMMDB {
-		t.Fatalf("known build missing documented geodata capabilities: %+v", current)
-	}
-	unknown, err := Inspect(context.Background(), Selection{Kind: "path", Path: fakeBinary(t, "unrecognized build", 0)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if unknown.SupportsGeoIPDat || unknown.SupportsGeoSiteDat || unknown.SupportsMMDB {
-		t.Fatalf("unknown build claimed geodata capability: %+v", unknown)
+	for _, identity := range []string{"Mihomo Meta v1.18.9 linux amd64", "unrecognized build"} {
+		unknown, err := Inspect(context.Background(), Selection{Kind: "path", Path: fakeBinary(t, identity, 0)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if unknown.SupportsGeoIPDat || unknown.SupportsGeoSiteDat || unknown.SupportsMMDB {
+			t.Fatalf("%q claimed geodata capability: %+v", identity, unknown)
+		}
 	}
 }

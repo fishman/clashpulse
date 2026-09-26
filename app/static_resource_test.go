@@ -63,16 +63,42 @@ func newStaticRuntime(t *testing.T) *staticRuntime {
 	failStart := filepath.Join(root, "fail-next-start")
 	proxyState := filepath.Join(root, "gsettings.json")
 	initialProxy := map[string]string{
-		"mode": "'manual'", "http-host": "'192.0.2.1'", "http-port": "8080",
-		"https-host": "'192.0.2.2'", "https-port": "8443", "use-same-proxy": "false",
+		"org.gnome.system.proxy mode": "'manual'", "org.gnome.system.proxy use-same-proxy": "false",
+		"org.gnome.system.proxy.http host": "'192.0.2.1'", "org.gnome.system.proxy.http port": "8080",
+		"org.gnome.system.proxy.https host": "'192.0.2.2'", "org.gnome.system.proxy.https port": "8443",
 	}
 	writeJSONFile(t, proxyState, initialProxy)
-	t.Setenv("XDG_CURRENT_DESKTOP", "GNOME")
 	t.Setenv("CLASHPULSE_FAKE_STARTS", startLog)
 	t.Setenv("CLASHPULSE_FAKE_MUTATIONS", mutationLog)
 	t.Setenv("CLASHPULSE_FAKE_PROXY_STATE", proxyState)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	gsettings := fmt.Sprintf("#!%s\nimport json, os, sys\npath=os.environ['CLASHPULSE_FAKE_PROXY_STATE']\nargs=sys.argv[1:]\nschema='org.gnome.system.proxy'\nkeys=['mode','http-host','http-port','https-host','https-port','use-same-proxy']\nif args[0]=='list-schemas': print(schema)\nelif args[0]=='list-keys': print(' '.join(keys))\nelif args[0]=='get': print(json.load(open(path))[args[2]])\nelif args[0]=='set':\n marker=os.getenv('CLASHPULSE_FAKE_GSETTINGS_FAIL_ONCE')\n if args[2]=='https-port' and marker and os.path.exists(marker):\n  os.remove(marker); sys.exit(1)\n d=json.load(open(path)); d[args[2]]=args[3]; json.dump(d,open(path,'w'))\n", python)
+	gsettings := fmt.Sprintf(`#!%s
+import json, os, sys
+path = os.environ['CLASHPULSE_FAKE_PROXY_STATE']
+args = sys.argv[1:]
+schemas = {'org.gnome.system.proxy': ['mode', 'use-same-proxy'], 'org.gnome.system.proxy.http': ['host', 'port'], 'org.gnome.system.proxy.https': ['host', 'port']}
+if os.getenv('CLASHPULSE_FAKE_GSETTINGS_NO_HTTPS_SCHEMA'):
+    schemas.pop('org.gnome.system.proxy.https')
+def read():
+    return json.load(open(path))
+def write(state):
+    json.dump(state, open(path, 'w'))
+if args[0] == 'list-schemas':
+    print('\n'.join(schemas))
+elif args[0] == 'get':
+    print(read()[args[1] + ' ' + args[2]])
+elif args[0] in ('set', 'reset'):
+    marker = os.getenv('CLASHPULSE_FAKE_GSETTINGS_FAIL_ONCE')
+    if args[1] == 'org.gnome.system.proxy.https' and args[2] == 'port' and marker and os.path.exists(marker):
+        os.remove(marker)
+        sys.exit(1)
+    state = read()
+    if args[0] == 'set':
+        state[args[1] + ' ' + args[2]] = args[3]
+    else:
+        state.pop(args[1] + ' ' + args[2], None)
+    write(state)
+`, python)
 	if err := os.WriteFile(filepath.Join(binDir, "gsettings"), []byte(gsettings), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +340,6 @@ func TestStaticResourceFailureRestoresRuntime(t *testing.T) {
 
 func TestStaticSystemProxyApplyFailureReportsSafeStage(t *testing.T) {
 	h := newStaticRuntime(t)
-	before := readJSONFile(t, h.proxyState)
 	marker := filepath.Join(h.root, "fail-proxy-once")
 	if err := os.WriteFile(marker, nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -329,8 +354,30 @@ func TestStaticSystemProxyApplyFailureReportsSafeStage(t *testing.T) {
 		t.Fatalf("failed proxy activation state = %v, controller=%t proxy=%t", err, h.service.controller != nil, h.service.proxyActive)
 	}
 
-	if !equalJSONMap(before, readJSONFile(t, h.proxyState)) {
-		t.Fatal("failed System Proxy Apply did not restore prior settings")
+	if left := readJSONFile(t, h.proxyState); len(left) != 0 {
+		t.Fatalf("failed System Proxy Apply left settings behind: %v", left)
+	}
+}
+
+func TestStaticUnsupportedSystemProxyEnvironmentReportsEnvironment(t *testing.T) {
+	h := newStaticRuntime(t)
+	t.Setenv("CLASHPULSE_FAKE_GSETTINGS_NO_HTTPS_SCHEMA", "1")
+	if _, err := h.service.subs.RefreshWith(h.ctx, h.subscription); err != nil {
+		t.Fatal(err)
+	}
+	h.service.runIntent(h.ctx, ipc.Command{Kind: ipc.CommandActivateSubscription, SubscriptionID: h.subscription.ID})
+
+	want := core.ActivationSystemProxyUnsupported.Message()
+	errors := h.service.snapshot.Errors
+	diagnostics := h.service.snapshot.Diagnostics
+	if len(errors) != 1 || errors[0].Message != want || errors[0].SourceID != h.subscription.ID {
+		t.Fatalf("unsupported session issue = %+v", errors)
+	}
+	if len(diagnostics) != 1 || diagnostics[0].Message != want {
+		t.Fatalf("unsupported session diagnostic = %+v", diagnostics)
+	}
+	if h.service.controller != nil || h.service.proxyActive {
+		t.Fatalf("unsupported session left runtime: controller=%t proxy=%t", h.service.controller != nil, h.service.proxyActive)
 	}
 }
 func TestLocalProfileResourceFailureReportsStableID(t *testing.T) {
@@ -358,7 +405,7 @@ func TestLocalActiveSourceDoesNotMarkSavedSubscriptionRunning(t *testing.T) {
 	}
 }
 
-func TestLocalProfileSystemProxyRestoredOnCancel(t *testing.T) {
+func TestLocalProfileSystemProxyResetOnCancel(t *testing.T) {
 	h := newStaticRuntime(t)
 	profile := filepath.Join(h.root, "local.yaml")
 	if err := os.WriteFile(profile, []byte("proxies:\n  - name: node-a\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a]\n"), 0o600); err != nil {
@@ -390,8 +437,8 @@ func TestLocalProfileSystemProxyRestoredOnCancel(t *testing.T) {
 	case <-time.After(7 * time.Second):
 		t.Fatal("local shutdown blocked")
 	}
-	if !equalJSONMap(before, readJSONFile(t, h.proxyState)) {
-		t.Fatal("local shutdown did not restore System Proxy")
+	if left := readJSONFile(t, h.proxyState); len(left) != 0 {
+		t.Fatalf("local shutdown did not reset System Proxy: %v", left)
 	}
 }
 

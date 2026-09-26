@@ -225,7 +225,15 @@ func (s *runtimeService) patchSettings(ctx context.Context, patch *ipc.ConfigPat
 		}
 		return nil
 	}
-	change := config.SettingsPatch{Binary: patch.Binary, SystemProxyEnabled: patch.SystemProxyEnabled, DNSListen: patch.DNSListen, MonitorEnabled: patch.MonitorEnabled, MonitorTestURL: patch.MonitorTestURL}
+	change := config.SettingsPatch{Binary: patch.Binary, SystemProxyEnabled: patch.SystemProxyEnabled, DNSListen: patch.DNSListen, MonitorEnabled: patch.MonitorEnabled, MonitorTestURL: patch.MonitorTestURL, MonitorSwitchPolicy: patch.MonitorSwitchPolicy}
+	if patch.URLTestIntervalSeconds != nil {
+		value := time.Duration(*patch.URLTestIntervalSeconds) * time.Second
+		change.MihomoURLTestInterval = &value
+	}
+	if patch.URLTestToleranceMillis != nil {
+		value := time.Duration(*patch.URLTestToleranceMillis) * time.Millisecond
+		change.MihomoURLTestTolerance = &value
+	}
 	if patch.MonitorIntervalSeconds != nil {
 		value := time.Duration(*patch.MonitorIntervalSeconds) * time.Second
 		change.MonitorInterval = &value
@@ -359,7 +367,7 @@ func (s *runtimeService) applyChange(ctx context.Context, _ config.Change) error
 				err = s.proxy.Restore(rollbackCtx)
 			}
 			if err != nil {
-				rollbackErrors = append(rollbackErrors, fmt.Errorf("clashpulse: restore prior system proxy: %w", err))
+				rollbackErrors = append(rollbackErrors, fmt.Errorf("clashpulse: roll back system proxy: %w", err))
 				rollbackFailed = true
 			} else {
 				s.proxyActive = runtimeBefore.proxyActive

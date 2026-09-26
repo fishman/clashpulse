@@ -63,8 +63,14 @@ func filterStatus(f core.FilterSnapshot) string {
 
 func proxyLatency(snapshot core.Snapshot, groupID, proxyID string) string {
 	for _, proxy := range snapshot.Proxies {
-		if proxy.GroupID == groupID && proxy.ID == proxyID && proxy.LatencyMillis > 0 {
+		if proxy.GroupID != groupID || proxy.ID != proxyID {
+			continue
+		}
+		if proxy.LatencyMillis > 0 {
 			return fmt.Sprintf("%d ms", proxy.LatencyMillis)
+		}
+		if proxy.MihomoMillis > 0 {
+			return fmt.Sprintf("%d ms (mihomo)", proxy.MihomoMillis)
 		}
 	}
 	return ""

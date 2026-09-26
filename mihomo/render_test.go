@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/filters"
@@ -192,6 +193,74 @@ func TestRenderPrependsFilterRuleBeforeSourceCatchall(t *testing.T) {
 	intent.Filters[0].Target = "missing"
 	if _, err := Render(profile, intent, ManagedPaths{"ads": path}, controller, Capability{}); err == nil {
 		t.Fatal("accepted missing filter target")
+	}
+}
+
+func TestRenderAppliesURLTestDelaysToOwnedGroupTypesOnly(t *testing.T) {
+	profile := []byte("proxies:\n  - name: alpha\n    type: direct\nproxy-groups:\n  - name: auto\n    type: url-test\n    interval: 300\n    proxies: [alpha]\n  - name: backup\n    type: fallback\n    proxies: [alpha]\n  - name: traffic\n    type: select\n    proxies: [alpha]\n")
+	controller := ControllerSettings{Address: "127.0.0.1:9090", Secret: "secret"}
+	rendered := func(t *testing.T, delays config.Mihomo) map[string]map[string]any {
+		t.Helper()
+		got, err := Render(profile, config.Snapshot{Mihomo: delays}, ManagedPaths{}, controller, Capability{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var document struct {
+			Groups []map[string]any `yaml:"proxy-groups"`
+		}
+		if err := yaml.Unmarshal(got, &document); err != nil {
+			t.Fatal(err)
+		}
+		byName := make(map[string]map[string]any, len(document.Groups))
+		for _, group := range document.Groups {
+			byName[group["name"].(string)] = group
+		}
+		return byName
+	}
+
+	untouched := rendered(t, config.Mihomo{})
+	if untouched["auto"]["interval"] != 300 || untouched["auto"]["tolerance"] != nil {
+		t.Fatalf("unset delay settings rewrote the profile: %v", untouched["auto"])
+	}
+	configured := rendered(t, config.Mihomo{URLTestInterval: 10 * time.Minute, URLTestTolerance: 50 * time.Millisecond})
+	if configured["auto"]["interval"] != 600 || configured["auto"]["tolerance"] != 50 {
+		t.Fatalf("url-test group delay = %v", configured["auto"])
+	}
+	if configured["backup"]["interval"] != 600 || configured["backup"]["tolerance"] != 50 {
+		t.Fatalf("fallback group delay = %v", configured["backup"])
+	}
+	if configured["traffic"]["interval"] != nil || configured["traffic"]["tolerance"] != nil {
+		t.Fatalf("select group was given delay settings: %v", configured["traffic"])
+	}
+
+	generated, err := Render(profile, config.Snapshot{Mihomo: config.Mihomo{URLTestInterval: 10 * time.Minute}}, ManagedPaths{}, controller, Capability{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	overrides, err := ExplainOverrides(profile, generated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, override := range overrides {
+		if override.Key == "proxy-groups" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("url-test delay change was not reported: %v", overrides)
+	}
+	plain, err := Render(profile, config.Snapshot{}, ManagedPaths{}, controller, Capability{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overrides, err = ExplainOverrides(profile, plain); err != nil {
+		t.Fatal(err)
+	}
+	for _, override := range overrides {
+		if override.Key == "proxy-groups" {
+			t.Fatalf("untouched groups reported as overridden: %v", overrides)
+		}
 	}
 }
 

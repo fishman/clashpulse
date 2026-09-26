@@ -12,8 +12,12 @@ const (
 	ActivationProcessStart        ActivationStage = "process_start"
 	ActivationControllerReadiness ActivationStage = "controller_readiness"
 	ActivationSystemProxy         ActivationStage = "system_proxy"
-	ActivationStateCommit         ActivationStage = "state_commit"
-	ActivationRollback            ActivationStage = "rollback"
+	// ActivationSystemProxyUnsupported separates a desktop environment this
+	// build cannot configure from an apply that failed. The cause is stripped at
+	// the subscription boundary, so the distinction travels as stage identity.
+	ActivationSystemProxyUnsupported ActivationStage = "system_proxy_unsupported"
+	ActivationStateCommit            ActivationStage = "state_commit"
+	ActivationRollback               ActivationStage = "rollback"
 )
 
 func (stage ActivationStage) Message() string {
@@ -32,6 +36,8 @@ func (stage ActivationStage) Message() string {
 		return "Mihomo controller did not become ready"
 	case ActivationSystemProxy:
 		return "System Proxy could not be applied"
+	case ActivationSystemProxyUnsupported:
+		return "system proxy is unsupported in this desktop environment"
 	case ActivationStateCommit:
 		return "private activation state could not be committed"
 	case ActivationRollback:

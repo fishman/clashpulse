@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -173,6 +174,15 @@ func activationResourceError(err error) error {
 		return core.WrapActivationResource(core.ActivationResources, resource.ResourceID, err)
 	}
 	return core.WrapActivation(core.ActivationResources, err)
+}
+
+// systemProxyActivation keeps an unconfigurable desktop environment out of the
+// retryable apply failure, which would otherwise read as a transient error.
+func systemProxyActivation(err error) error {
+	if unsupportedSystemProxy(err) {
+		return core.WrapActivation(core.ActivationSystemProxyUnsupported, err)
+	}
+	return core.WrapActivation(core.ActivationSystemProxy, err)
 }
 
 func overrideSnapshots(profile, candidate []byte) ([]core.ConfigOverrideSnapshot, error) {
@@ -547,7 +557,7 @@ func (s *runtimeService) applyCandidateAt(ctx context.Context, candidate []byte,
 		if err := s.proxy.Restore(ctx); err != nil {
 			s.configReportPending = priorReportPending
 			s.publish()
-			return core.WrapActivation(core.ActivationSystemProxy, err)
+			return systemProxyActivation(err)
 		}
 		s.proxyActive = false
 		if err := s.stopMonitorAndProcess(ctx); err != nil {
@@ -596,7 +606,7 @@ func (s *runtimeService) applyCandidateAt(ctx context.Context, candidate []byte,
 					_ = config.Write(activePath, oldConfig)
 				}
 			}
-			return core.WrapActivation(core.ActivationSystemProxy, err)
+			return systemProxyActivation(err)
 		}
 		s.proxyActive = true
 	}
@@ -814,6 +824,7 @@ func (s *runtimeService) start(ctx context.Context) error {
 func monitorPolicy(settings config.Monitor) monitor.Policy {
 	policy := monitor.DefaultPolicy()
 	policy.TestURL = settings.TestURL
+	policy.SwitchPolicy = settings.SwitchPolicy
 	policy.Interval = settings.Interval
 	policy.Timeout = settings.Timeout
 	policy.Concurrency = settings.Concurrency
@@ -833,12 +844,22 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 	}
 	s.groups = make(map[string]mihomo.Group, len(groups))
 	s.proxies = make(map[string]string, len(proxies))
+	// A rebuild must not discard probes already taken for these nodes, or every
+	// automatic switch blanks the latency column until the next interval.
+	carried := make(map[string]core.ProxySnapshot, len(s.snapshot.Proxies))
+	for _, proxy := range s.snapshot.Proxies {
+		carried[proxy.GroupID+"\x00"+proxy.ID] = proxy
+	}
 	s.snapshot.Groups = nil
 	s.snapshot.Proxies = nil
 	monitorGroups := make([]monitor.GroupState, 0, len(groups))
 	settings := s.store.Snapshot().Monitor
+	mihomoMillis := make(map[string]int64, len(proxies))
 	for _, proxy := range proxies {
 		s.proxies[opaqueID(proxy.Name)] = proxy.Name
+		if proxy.DelayMillis > 0 {
+			mihomoMillis[proxy.Name] = proxy.DelayMillis
+		}
 	}
 	for groupIndex, group := range groups {
 		if group.Type != "Selector" && group.Type != "select" && group.Type != "url-test" && group.Type != "URLTest" {
@@ -850,17 +871,24 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 			return fmt.Errorf("clashpulse: automation group %q is not a managed select group", id)
 		}
 		s.groups[id] = group
-		automatic := automaticProbeEnabled(group.Type, settings.Enabled, s.automation[id])
+		measured := probeEnabled(group.Type, settings.Enabled)
+		automatic := automationEnabled(group.Type, settings.Enabled, s.automation[id])
 		view := core.GroupSnapshot{ID: id, Label: proxyDisplayLabel(group.Name, "Group", groupIndex+1), Type: group.Type, Selected: opaqueID(group.Selected), AutomationEnabled: automatic, ManualOverride: s.manualOverride[id]}
+		labels := make(map[string]int, len(group.Proxies))
 		for proxyIndex, name := range group.Proxies {
 			proxyID := opaqueID(name)
 			s.proxies[proxyID] = name
 			view.Proxies = append(view.Proxies, proxyID)
-			s.snapshot.Proxies = append(s.snapshot.Proxies, core.ProxySnapshot{ID: proxyID, GroupID: id, Label: proxyDisplayLabel(name, "Proxy", proxyIndex+1)})
+			label := uniqueLabel(proxyDisplayLabel(name, "Proxy", proxyIndex+1), labels)
+			view := core.ProxySnapshot{ID: proxyID, GroupID: id, Label: label, MihomoMillis: mihomoMillis[name]}
+			if prior, ok := carried[id+"\x00"+proxyID]; ok {
+				view.LatencyMillis, view.FinishedAt, view.Outcome = prior.LatencyMillis, prior.FinishedAt, prior.Outcome
+			}
+			s.snapshot.Proxies = append(s.snapshot.Proxies, view)
 		}
 		s.snapshot.Groups = append(s.snapshot.Groups, view)
 		if managedSelector || group.Selected != "" {
-			monitorGroups = append(monitorGroups, monitor.GroupState{Group: group.Name, Selected: group.Selected, Proxies: append([]string(nil), group.Proxies...), ProbeEnabled: automatic, AutomationEnabled: automatic, ManualOverride: s.manualOverride[id], LastSwitchAt: s.lastSwitch[id]})
+			monitorGroups = append(monitorGroups, monitor.GroupState{Group: group.Name, Selected: group.Selected, Proxies: append([]string(nil), group.Proxies...), ProbeEnabled: measured, AutomationEnabled: automatic, ManualOverride: s.manualOverride[id], LastSwitchAt: s.lastSwitch[id]})
 		}
 	}
 	for id, enabled := range s.automation {
@@ -896,16 +924,41 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 	return nil
 }
 
-func automaticProbeEnabled(groupType string, monitoring, optedIn bool) bool {
-	return monitoring && optedIn && (groupType == "Selector" || groupType == "select")
+// probeEnabled measures a managed select group whenever the monitor is enabled.
+// Measurement is read-only, so it is not behind the per-group opt-in that grants
+// this application authority to move traffic. Mihomo's own url-test groups are
+// excluded: Mihomo keeps its native policy for them.
+func probeEnabled(groupType string, monitoring bool) bool {
+	return monitoring && (groupType == "Selector" || groupType == "select")
 }
 
+func automationEnabled(groupType string, monitoring, optedIn bool) bool {
+	return probeEnabled(groupType, monitoring) && optedIn
+}
+
+// Published node names advertise their provider's domain, and a displayed one
+// spreads with every screenshot or report, so a host in a name is masked.
+var nodeNameHost = regexp.MustCompile(`[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`)
+
+// A node name is shown as the profile wrote it, including non-ASCII names and
+// URLs. Userinfo ("@" marks a user:password@host URL, where masking cannot tell
+// which part is the secret) and a non-printable rune are the only reasons to
+// fall back to the positional label.
 func proxyDisplayLabel(name, fallback string, position int) string {
 	name = strings.TrimSpace(name)
-	if name != "" && utf8.RuneCountInString(name) <= 80 && strings.IndexFunc(name, func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune(" -_.()[]", r)
-	}) == -1 {
-		return name
+	if name == "" || utf8.RuneCountInString(name) > 80 || strings.Contains(name, "@") ||
+		strings.IndexFunc(name, func(r rune) bool { return !unicode.IsPrint(r) }) != -1 {
+		return fmt.Sprintf("%s %d", fallback, position)
 	}
-	return fmt.Sprintf("%s %d", fallback, position)
+	return nodeNameHost.ReplaceAllString(name, "[redacted]")
+}
+
+// uniqueLabel numbers a label repeated inside one group so two nodes sharing a
+// profile name stay distinguishable.
+func uniqueLabel(label string, seen map[string]int) string {
+	seen[label]++
+	if count := seen[label]; count > 1 {
+		return fmt.Sprintf("%s (%d)", label, count)
+	}
+	return label
 }

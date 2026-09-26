@@ -304,6 +304,15 @@ func (p *subscriptionPage) editSubscription(id string) {
 	}
 }
 
+// openDialog reports the editor on screen so Escape can dismiss it through its
+// cancel path, which releases this page's editor slot.
+func (p *subscriptionPage) openDialog() dialog.Dialog {
+	if p.editor == nil {
+		return nil
+	}
+	return p.editor.dialog
+}
+
 func (p *subscriptionPage) openSubscriptionEditor(existing *core.SubscriptionSnapshot) {
 	if p.editor != nil {
 		return
@@ -311,7 +320,9 @@ func (p *subscriptionPage) openSubscriptionEditor(existing *core.SubscriptionSna
 	e := &subscriptionEditor{existing: existing}
 	e.name = widget.NewEntry()
 	e.name.SetPlaceHolder("Display name")
-	e.source = widget.NewPasswordEntry()
+	// The URL is typed here and never loaded from the stored profile, so showing it
+	// reveals nothing the user did not enter; a masked field is uneditable in practice.
+	e.source = widget.NewEntry()
 	e.agent = widget.NewPasswordEntry()
 	e.refresh = widget.NewEntry()
 	e.timeout = widget.NewEntry()
@@ -793,6 +804,13 @@ type filterItem struct {
 	details *widget.Button
 }
 
+func (p *resourcePage) openDialog() dialog.Dialog {
+	if p.editor == nil {
+		return nil
+	}
+	return p.editor.dialog
+}
+
 func (p *resourcePage) openResourceEditor(existing *core.ResourceSnapshot) {
 	if p.editor != nil {
 		return
@@ -969,6 +987,13 @@ func validResourcePin(pin string) bool {
 	return err == nil
 }
 
+func (p *filterPage) openDialog() dialog.Dialog {
+	if p.editor == nil {
+		return nil
+	}
+	return p.editor.dialog
+}
+
 func (p *filterPage) openFilterEditor(existing *core.FilterSnapshot) {
 	if p.editor != nil {
 		return
@@ -1114,6 +1139,7 @@ type settingsPage struct {
 	binaryValues        [4]*widget.Label
 	binaryPath          string
 	threshold           *widget.Label
+	urlTestDelay        *widget.Label
 	monitor             *widget.Check
 	monitorState        core.MonitorSnapshot
 	systemProxy         *widget.Check
@@ -1133,6 +1159,7 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 	p.dns = newDNSSettings(send, window)
 	p.binary, p.binaryValues = newBinaryForm()
 	p.threshold = widget.NewLabel("Not configured")
+	p.urlTestDelay = widget.NewLabel("Profile default")
 	p.systemProxy = widget.NewCheck("Enable system proxy", func(enabled bool) {
 		if p.refreshing {
 			return
@@ -1184,6 +1211,7 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 			container.NewHBox(widget.NewLabel("Monitor interval"), p.interval),
 			container.NewHBox(widget.NewLabel("Alert threshold"), p.threshold, widget.NewButton("Change", p.editThreshold)),
 			widget.NewButton("Edit probe policy", p.editMonitorPolicy),
+			container.NewHBox(widget.NewLabel("Mihomo url-test delay"), p.urlTestDelay, widget.NewButton("Change", p.editURLTestDelay)),
 		),
 		"DNS": p.dns.view,
 	}
@@ -1265,6 +1293,7 @@ func (p *settingsPage) update(binary core.BinarySnapshot, monitor core.MonitorSn
 	}
 	if monitorChanged {
 		p.threshold.SetText(monitorThresholdLabel(monitor))
+		p.urlTestDelay.SetText(urlTestDelayLabel(monitor))
 	}
 	if monitorChanged || proxyChanged {
 		p.refreshing = true

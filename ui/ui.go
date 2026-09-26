@@ -95,11 +95,12 @@ type desktopUI struct {
 	viewStack  *fyne.Container
 	views      map[string]fyne.CanvasObject
 
-	overviewCounts      *widget.Form
+	overviewCounts      *fyne.Container
 	overviewCountValues []*widget.Label
 	binarySummary       *widget.Form
 	binaryValues        [4]*widget.Label
 	overridesRows       *fyne.Container
+	overridesSection    *fyne.Container
 	overrideLabels      []*widget.Label
 	switchSummary       *widget.Label
 	errorSummary        *widget.Label
@@ -121,13 +122,13 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 		connection: widget.NewLabel("Connecting to local service..."),
 	}
 	d.overviewCountValues = make([]*widget.Label, 0, 6)
-	countItems := make([]*widget.FormItem, 0, 6)
+	countCells := make([]fyne.CanvasObject, 0, 6)
 	for _, label := range []string{"Proxy groups", "Subscriptions", "Data resources", "Filter lists", "Jobs", "Reported issues"} {
 		value := widget.NewLabel("0")
 		d.overviewCountValues = append(d.overviewCountValues, value)
-		countItems = append(countItems, widget.NewFormItem(label, value))
+		countCells = append(countCells, container.NewVBox(widget.NewLabelWithStyle(label, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), value))
 	}
-	d.overviewCounts = widget.NewForm(countItems...)
+	d.overviewCounts = container.NewGridWithColumns(3, countCells...)
 	d.binarySummary, d.binaryValues = newBinaryForm()
 	d.overrideLabels = make([]*widget.Label, 14)
 	rows := make([]fyne.CanvasObject, len(d.overrideLabels))
@@ -140,6 +141,7 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 	d.overrideLabels[0].SetText("No managed overrides")
 	d.overrideLabels[0].Show()
 	d.overridesRows = container.NewVBox(rows...)
+	d.overridesSection = container.NewVBox(widget.NewLabelWithStyle("Generated config changes", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), d.overridesRows)
 	d.switchSummary = widget.NewLabel("No automatic switches recorded")
 	d.switchSummary.Wrapping = fyne.TextWrapWord
 	d.errorSummary = widget.NewLabel("No service errors")
@@ -165,7 +167,23 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 	d.viewStack = container.NewStack(d.views[viewNames[0]])
 	header := container.NewBorder(nil, nil, nil, d.connection, d.viewSelect)
 	w.SetContent(container.NewBorder(header, nil, nil, nil, d.viewStack))
+	d.installKeys()
 	return d
+}
+
+// installKeys binds the window keys Fyne leaves free: Control+Q quits and Escape
+// dismisses the top dialog.
+func (d *desktopUI) installKeys() {
+	d.window.Canvas().AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyQ, Modifier: fyne.KeyModifierControl}, func(fyne.Shortcut) {
+		if d.quit != nil {
+			d.quit()
+		}
+	})
+	d.window.Canvas().SetOnTypedKey(func(event *fyne.KeyEvent) {
+		if event.Name == fyne.KeyEscape {
+			d.dismissTopDialog()
+		}
+	})
 }
 
 func (d *desktopUI) overviewView() fyne.CanvasObject {
@@ -177,7 +195,7 @@ func (d *desktopUI) overviewView() fyne.CanvasObject {
 		widget.NewButton("Reload configuration", func() { d.enqueue(ipc.Command{Kind: ipc.CommandReloadConfiguration}) }),
 		widget.NewButton("View activity", d.openActivity),
 	)
-	return container.NewVScroll(container.NewVBox(title, d.overviewCounts, widget.NewLabelWithStyle("Mihomo binary", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), d.binarySummary, widget.NewLabelWithStyle("Generated config changes", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), d.overridesRows, d.switchSummary, d.errorSummary, controls))
+	return container.NewVScroll(container.NewVBox(title, d.overviewCounts, widget.NewLabelWithStyle("Mihomo binary", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), d.binarySummary, d.switchSummary, d.errorSummary, controls))
 }
 
 func (d *desktopUI) showView(name string) {
@@ -335,7 +353,9 @@ func (d *desktopUI) postSnapshot(snapshot core.Snapshot) {
 		}
 		if first || !reflect.DeepEqual(previous.ConfigOverrides, immutable.ConfigOverrides) {
 			d.updateOverrides(immutable.ConfigOverrides)
-			d.views["Overview"].Refresh()
+			if d.activity.dialog != nil {
+				d.activity.dialog.Refresh()
+			}
 		}
 		if first || !reflect.DeepEqual(previous.Switches, immutable.Switches) {
 			d.switchSummary.SetText(lastSwitchSummary(immutable))

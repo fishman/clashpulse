@@ -52,7 +52,7 @@ func TestControllerUsesTypedRequests(t *testing.T) {
 				t.Errorf("method = %s, want %s", got, want)
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"proxies": map[string]any{
-				"Direct":    map[string]any{"name": "Direct", "type": "Direct"},
+				"Direct":    map[string]any{"name": "Direct", "type": "Direct", "history": []map[string]any{{"delay": 90}, {"delay": 0}, {"delay": 42}}},
 				"Group / A": map[string]any{"name": "Group / A", "type": "Selector", "all": []string{"Direct"}, "now": "Direct"},
 			}})
 		case "/proxies/Group%20%2F%20A/delay":
@@ -107,6 +107,9 @@ func TestControllerUsesTypedRequests(t *testing.T) {
 	}
 	if got, want := len(proxies), 1; got != want || proxies[0].Name != "Direct" || proxies[0].Type != "Direct" {
 		t.Fatalf("proxies = %#v", proxies)
+	}
+	if got, want := proxies[0].DelayMillis, int64(42); got != want {
+		t.Fatalf("newest url-test delay = %d, want %d", got, want)
 	}
 	if got, want := len(groups), 1; got != want || groups[0].Name != "Group / A" || groups[0].Selected != "Direct" || len(groups[0].Proxies) != 1 || groups[0].Proxies[0] != "Direct" {
 		t.Fatalf("groups = %#v", groups)

@@ -141,18 +141,14 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 	if len(rows) == 0 && contentHeight > 0 {
 		setLine(cache.current, 2, " No items are currently reported by the service.", roleMuted)
 	}
+	// Only the Overview fallback keeps a line above the status bar: a narrow
+	// terminal drops the Details column, and the override reason has nowhere
+	// else to go. Every other tab shows row facts in columns only.
 	if len(overrideDetail) > 0 {
 		if len(overrideDetail) > 1 {
 			setLine(cache.current, height-5, overrideDetail[0], roleMuted)
 		}
 		setLine(cache.current, height-4, overrideDetail[len(overrideDetail)-1], roleMuted)
-	} else if height >= 6 && model.Tab != TabOverview {
-		for _, row := range rows {
-			if row.Selected {
-				setLine(cache.current, height-4, row.Detail, roleMuted)
-				break
-			}
-		}
 	}
 	if model.LogOpen {
 		drawLog(cache.current, width, height, model)

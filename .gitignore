@@ -2,3 +2,8 @@
 .superpowers/
 /clashpulse
 /clashpulse.exe
+# Scratch profiles, subscription dumps, and tool output: never committed.
+/test.yaml
+/clash-verge.yaml
+/fyne.txt
+/v2

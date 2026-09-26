@@ -17,6 +17,13 @@ type diagnosticEvent struct {
 	At                                time.Time
 }
 
+// unsupportedSystemProxy reports a desktop environment this build cannot
+// configure, as opposed to a System Proxy apply that failed and can be retried.
+// ponytail: stable sysproxy message prefix; move to a sentinel if sysproxy grows one.
+func unsupportedSystemProxy(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "sysproxy: unsupported")
+}
+
 func safeActivationReason(err error) (string, core.ActivationStage) {
 	if errors.Is(err, subscriptions.ErrRestore) {
 		return core.ActivationRollback.Message(), core.ActivationRollback

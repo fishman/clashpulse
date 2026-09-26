@@ -1,4 +1,4 @@
-// Package sysproxy applies and restores the desktop's HTTP and HTTPS proxy.
+// Package sysproxy applies and resets the desktop's HTTP and HTTPS proxy.
 //
 // Library review: github.com/Trisia/gosysproxy was considered and rejected
 // because it supports Windows only and its package API does not provide the
@@ -25,6 +25,10 @@ type Manager struct {
 	mu       sync.Mutex
 	runner   commandRunner
 	previous map[string]string
+	// applied marks settings this manager currently owns. Linux resets them
+	// instead of restoring prior values, so an untouched configuration is never
+	// mistaken for one this application wrote.
+	applied bool
 }
 
 // ProxySettings contains the active HTTP and HTTPS proxies; nil entries mean
