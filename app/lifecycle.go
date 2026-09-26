@@ -82,11 +82,19 @@ func (s *runtimeService) renderProfile(ctx context.Context, profile []byte) ([]b
 
 func (s *runtimeService) renderWithHome(ctx context.Context, profile []byte, intent config.Snapshot, home string, paths map[string]string, capability mihomo.Capability) ([]byte, error) {
 	if err := dns.Validate(ctx, intent, paths); err != nil {
-		return nil, err
+		return nil, core.WrapActivation(core.ActivationConfigValidation, err)
 	}
-	return mihomo.Render(profile, intent, mihomo.ManagedPaths(paths), mihomo.ControllerSettings{
+	candidate, err := mihomo.Render(profile, intent, mihomo.ManagedPaths(paths), mihomo.ControllerSettings{
 		Address: s.controllerAddress, Secret: s.secret, HomeDir: home, ProxyPort: s.proxyPort,
 	}, capability)
+	if err != nil {
+		var missing *mihomo.CapabilityError
+		if errors.As(err, &missing) {
+			return nil, core.WrapActivationResource(core.ActivationBinary, missing.ResourceID, err)
+		}
+		return nil, core.WrapActivation(core.ActivationConfigValidation, err)
+	}
+	return candidate, nil
 }
 
 func (s *runtimeService) validatedCandidate(ctx context.Context, profile []byte, intent config.Snapshot, home string, paths map[string]string, capability mihomo.Capability) ([]byte, error) {
@@ -114,27 +122,30 @@ func (s *runtimeService) validateGenerated(ctx context.Context, candidate []byte
 
 func (s *runtimeService) validateWithHome(ctx context.Context, candidate []byte, capability mihomo.Capability, home string) error {
 	if err := privateDirectory(s.stateDir); err != nil {
-		return err
+		return core.WrapActivation(core.ActivationStateCommit, err)
 	}
 	file, err := os.CreateTemp(s.stateDir, ".candidate-*.yaml")
 	if err != nil {
-		return fmt.Errorf("clashpulse: stage generated configuration: %w", err)
+		return core.WrapActivation(core.ActivationStateCommit, err)
 	}
 	defer os.Remove(file.Name())
 	defer file.Close()
 	if err := file.Chmod(0o600); err != nil {
-		return err
+		return core.WrapActivation(core.ActivationStateCommit, err)
 	}
 	if _, err := file.Write(candidate); err != nil {
-		return err
+		return core.WrapActivation(core.ActivationStateCommit, err)
 	}
 	if err := file.Sync(); err != nil {
-		return err
+		return core.WrapActivation(core.ActivationStateCommit, err)
 	}
 	if err := file.Close(); err != nil {
-		return err
+		return core.WrapActivation(core.ActivationStateCommit, err)
 	}
-	return mihomo.ValidateInHome(ctx, capability, file.Name(), home)
+	if err := mihomo.ValidateInHome(ctx, capability, file.Name(), home); err != nil {
+		return core.WrapActivation(core.ActivationConfigValidation, err)
+	}
+	return nil
 }
 
 type runtimeBackup struct {
@@ -150,7 +161,7 @@ type runtimeBackup struct {
 func (s *runtimeService) applyGenerated(ctx context.Context, profile []byte) error {
 	capability, err := s.selectedCapability(ctx)
 	if err != nil {
-		return err
+		return core.WrapActivation(core.ActivationBinary, err)
 	}
 	intent := s.store.Snapshot()
 	home, paths, err := s.registry.PathsWithHome(intent)
@@ -163,7 +174,11 @@ func (s *runtimeService) applyGenerated(ctx context.Context, profile []byte) err
 	}
 	plan, err := s.registry.Stage(ctx, intent, download.Direct)
 	if err != nil {
-		return err
+		var resource *resources.ResourceFailure
+		if errors.As(err, &resource) {
+			return core.WrapActivationResource(core.ActivationResources, resource.ResourceID, err)
+		}
+		return core.WrapActivation(core.ActivationResources, err)
 	}
 	if err := plan.Validate(func(home string, paths map[string]string) error {
 		_, validationErr := s.validatedCandidate(ctx, profile, intent, home, paths, capability)
@@ -172,7 +187,13 @@ func (s *runtimeService) applyGenerated(ctx context.Context, profile []byte) err
 		_ = plan.Abort()
 		return err
 	}
-	return s.applyResourcePlan(ctx, plan, profile, capability, true)
+	if err := s.applyResourcePlan(ctx, plan, profile, capability, true); err != nil {
+		if _, ok := core.PublicActivation(err); ok || ctx.Err() != nil {
+			return err
+		}
+		return core.WrapActivation(core.ActivationResources, err)
+	}
+	return nil
 }
 
 func (s *runtimeService) applyActivationCandidate(ctx context.Context, candidate []byte, capability mihomo.Capability, home string) error {
@@ -266,6 +287,9 @@ func (s *runtimeService) restoreResourceRuntime(ctx context.Context, backup *run
 	cleanup, done := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer done()
 	var cleanupErr error
+	rollbackFailed := func(err error) error {
+		return core.WrapActivation(core.ActivationRollback, errors.Join(cause, cleanupErr, err))
+	}
 	if s.controller != nil {
 		if err := s.proxy.Restore(cleanup); err != nil {
 			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("clashpulse: disable candidate system proxy: %w", err))
@@ -273,15 +297,15 @@ func (s *runtimeService) restoreResourceRuntime(ctx context.Context, backup *run
 			s.proxyActive = false
 		}
 		if err := s.stopMonitorAndProcess(cleanup); err != nil {
-			return errors.Join(cause, cleanupErr, fmt.Errorf("clashpulse: stop candidate before resource rollback: %w", err))
+			return rollbackFailed(fmt.Errorf("clashpulse: stop candidate before resource rollback: %w", err))
 		}
 	}
 	if err := s.process.Stop(cleanup); err != nil {
-		return errors.Join(cause, cleanupErr, fmt.Errorf("clashpulse: wait for stopped Mihomo: %w", err))
+		return rollbackFailed(fmt.Errorf("clashpulse: wait for stopped Mihomo: %w", err))
 	}
 	if committed {
 		if err := backup.resourcePlan.Rollback(); err != nil {
-			return errors.Join(cause, cleanupErr, fmt.Errorf("clashpulse: restore resource files: %w", err))
+			return rollbackFailed(fmt.Errorf("clashpulse: restore resource files: %w", err))
 		}
 	}
 	if err := backup.resourcePlan.Abort(); err != nil {
@@ -290,10 +314,10 @@ func (s *runtimeService) restoreResourceRuntime(ctx context.Context, backup *run
 	if backup.running {
 		path := filepath.Join(s.stateDir, "generated.yaml")
 		if err := config.Write(path, backup.generated); err != nil {
-			return errors.Join(cause, cleanupErr, fmt.Errorf("clashpulse: restore generated configuration: %w", err))
+			return rollbackFailed(fmt.Errorf("clashpulse: restore generated configuration: %w", err))
 		}
 		if err := s.startProcess(cleanup, backup.cap, backup.home, path); err != nil {
-			return errors.Join(cause, cleanupErr, fmt.Errorf("clashpulse: restart previous Mihomo: %w", err))
+			return rollbackFailed(fmt.Errorf("clashpulse: restart previous Mihomo: %w", err))
 		}
 		s.generated, s.cap, s.resourceHome = bytes.Clone(backup.generated), backup.cap, backup.home
 		if err := s.restoreSelections(cleanup, backup.selected); err != nil {
@@ -315,16 +339,19 @@ func (s *runtimeService) restoreResourceRuntime(ctx context.Context, backup *run
 		s.publish()
 	} else if len(backup.generated) > 0 {
 		if err := config.Write(filepath.Join(s.stateDir, "generated.yaml"), backup.generated); err != nil {
-			return errors.Join(cause, cleanupErr, fmt.Errorf("clashpulse: restore generated configuration: %w", err))
+			return rollbackFailed(fmt.Errorf("clashpulse: restore generated configuration: %w", err))
 		}
 		s.generated, s.cap, s.resourceHome = backup.generated, backup.cap, backup.home
 	} else {
 		if err := os.Remove(filepath.Join(s.stateDir, "generated.yaml")); err != nil && !os.IsNotExist(err) {
-			return errors.Join(cause, cleanupErr, err)
+			return rollbackFailed(err)
 		}
 		s.generated, s.cap, s.resourceHome = nil, mihomo.Capability{}, ""
 	}
-	return errors.Join(cause, cleanupErr)
+	if cleanupErr != nil {
+		return rollbackFailed(nil)
+	}
+	return cause
 }
 func (s *runtimeService) restoreActivation(ctx context.Context, previousProfile []byte) (result error) {
 	backup := s.activationBackup
@@ -387,11 +414,11 @@ func (s *runtimeService) applyCandidate(ctx context.Context, candidate []byte, c
 	oldSelected := selectedGroups(s.groups)
 	if wasRunning {
 		if err := s.proxy.Restore(ctx); err != nil {
-			return err
+			return core.WrapActivation(core.ActivationSystemProxy, err)
 		}
 		s.proxyActive = false
 		if err := s.stopMonitorAndProcess(ctx); err != nil {
-			return err
+			return core.WrapActivation(core.ActivationRollback, err)
 		}
 	}
 	activePath := filepath.Join(s.stateDir, "generated.yaml")
@@ -399,7 +426,7 @@ func (s *runtimeService) applyCandidate(ctx context.Context, candidate []byte, c
 		if wasRunning {
 			s.restorePrevious(ctx, oldConfig, oldCap, oldHome, wasProxy, oldSelected)
 		}
-		return err
+		return core.WrapActivation(core.ActivationStateCommit, err)
 	}
 	if err := s.startProcess(ctx, capability, home, activePath); err != nil {
 		if wasRunning {
@@ -413,7 +440,7 @@ func (s *runtimeService) applyCandidate(ctx context.Context, candidate []byte, c
 		if err := s.restoreSelections(ctx, oldSelected); err != nil {
 			_ = s.stopMonitorAndProcess(ctx)
 			s.restorePrevious(ctx, oldConfig, oldCap, oldHome, wasProxy, oldSelected)
-			return err
+			return core.WrapActivation(core.ActivationControllerReadiness, err)
 		}
 	}
 	s.generated, s.cap, s.resourceHome = bytes.Clone(candidate), capability, home
@@ -425,7 +452,7 @@ func (s *runtimeService) applyCandidate(ctx context.Context, candidate []byte, c
 			if restoreErr != nil {
 				s.proxyActive = true
 				s.publish()
-				return errors.Join(err, fmt.Errorf("clashpulse: system proxy rollback failed: %w", restoreErr))
+				return core.WrapActivation(core.ActivationRollback, errors.Join(err, restoreErr))
 			}
 			_ = s.stopMonitorAndProcess(ctx)
 			if wasRunning {
@@ -433,7 +460,7 @@ func (s *runtimeService) applyCandidate(ctx context.Context, candidate []byte, c
 			} else if len(oldConfig) > 0 {
 				_ = config.Write(activePath, oldConfig)
 			}
-			return err
+			return core.WrapActivation(core.ActivationSystemProxy, err)
 		}
 		s.proxyActive = true
 	}
@@ -519,14 +546,14 @@ func (s *runtimeService) restoreSelections(ctx context.Context, selected map[str
 
 func (s *runtimeService) startProcess(ctx context.Context, capability mihomo.Capability, home, path string) error {
 	if home != s.registry.Home() {
-		return fmt.Errorf("clashpulse: invalid managed data home")
+		return core.WrapActivation(core.ActivationResources, fmt.Errorf("clashpulse: invalid managed data home"))
 	}
 	if err := s.process.Start(s.processCtx, mihomo.StartPlan{Capability: capability, ConfigPath: path, Args: []string{"-d", home}}); err != nil {
-		return err
+		return core.WrapActivation(core.ActivationProcessStart, err)
 	}
 	controller, err := mihomo.NewController("http://"+s.controllerAddress, s.secret, &http.Client{Timeout: time.Second})
 	if err != nil {
-		return s.stopStartedProcess(ctx, err)
+		return s.stopStartedProcess(ctx, core.WrapActivation(core.ActivationControllerReadiness, err))
 	}
 	readyCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -536,7 +563,7 @@ func (s *runtimeService) startProcess(ctx context.Context, capability mihomo.Cap
 		}
 		select {
 		case <-readyCtx.Done():
-			return s.stopStartedProcess(ctx, fmt.Errorf("clashpulse: Mihomo controller did not become ready: %w", readyCtx.Err()))
+			return s.stopStartedProcess(ctx, core.WrapActivation(core.ActivationControllerReadiness, readyCtx.Err()))
 		case <-time.After(50 * time.Millisecond):
 		}
 	}
@@ -545,7 +572,7 @@ func (s *runtimeService) startProcess(ctx context.Context, capability mihomo.Cap
 	if err := s.refreshGroups(ctx); err != nil {
 		s.running.Store(false)
 		s.controller = nil
-		return s.stopStartedProcess(ctx, err)
+		return s.stopStartedProcess(ctx, core.WrapActivation(core.ActivationControllerReadiness, err))
 	}
 	s.exited = s.process.Exited()
 	return nil
@@ -555,7 +582,7 @@ func (s *runtimeService) stopStartedProcess(ctx context.Context, cause error) er
 	cleanup, done := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer done()
 	if err := s.process.Stop(cleanup); err != nil {
-		return errors.Join(cause, fmt.Errorf("clashpulse: failed to stop Mihomo after startup error: %w", err))
+		return core.WrapActivation(core.ActivationRollback, errors.Join(cause, err))
 	}
 	return cause
 }

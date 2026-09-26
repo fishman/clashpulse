@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/fishman/clashpulse/config"
+	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/download"
 	"gopkg.in/yaml.v3"
 )
@@ -318,6 +319,9 @@ func (s *Service) Activate(ctx context.Context, id string) error {
 		if contextErr := safeContextError(ctx); contextErr != nil {
 			return contextErr
 		}
+		if public, ok := core.PublicActivation(err); ok {
+			return errors.Join(ErrActivation, public)
+		}
 		return ErrActivation
 	}
 	alreadyApplied := s.store.isActive(id) && record.AppliedProfileHash == record.Hash && record.AppliedCandidateHash == record.CandidateHash
@@ -350,19 +354,19 @@ func (s *Service) Activate(ctx context.Context, id string) error {
 	if s.options.Finalize != nil {
 		if err := s.options.Finalize(); err != nil {
 			if restoreErr := s.options.Restore(context.WithoutCancel(ctx), bytes.Clone(previousProfile)); restoreErr != nil {
-				return errors.Join(ErrActivation, ErrRestore, err, restoreErr)
+				return errors.Join(ErrActivation, ErrRestore, &core.ActivationError{Stage: core.ActivationRollback})
 			}
 			if !alreadyApplied {
 				if restoreErr := s.store.restoreApplied(previousID, previousHash, previousCandidate); restoreErr != nil {
-					return errors.Join(ErrActivation, ErrStore, err, restoreErr)
+					return errors.Join(ErrActivation, ErrStore, &core.ActivationError{Stage: core.ActivationRollback})
 				}
 				if pendingResource {
 					if cleanupErr := s.store.clearActivationPending(); cleanupErr != nil {
-						return errors.Join(ErrActivation, err, cleanupErr)
+						return errors.Join(ErrActivation, ErrStore, &core.ActivationError{Stage: core.ActivationStateCommit})
 					}
 				}
 			}
-			return errors.Join(ErrActivation, err)
+			return errors.Join(ErrActivation, &core.ActivationError{Stage: core.ActivationStateCommit})
 		}
 	}
 	if pendingResource {

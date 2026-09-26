@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/fishman/clashpulse/config"
+	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/download"
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/resources"
@@ -68,7 +70,7 @@ func newStaticRuntime(t *testing.T) *staticRuntime {
 	t.Setenv("CLASHPULSE_FAKE_MUTATIONS", mutationLog)
 	t.Setenv("CLASHPULSE_FAKE_PROXY_STATE", proxyState)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	gsettings := fmt.Sprintf("#!%s\nimport json, os, sys\npath=os.environ['CLASHPULSE_FAKE_PROXY_STATE']\nargs=sys.argv[1:]\nschema='org.gnome.system.proxy'\nkeys=['mode','http-host','http-port','https-host','https-port','use-same-proxy']\nif args[0]=='list-schemas': print(schema)\nelif args[0]=='list-keys': print(' '.join(keys))\nelif args[0]=='get': print(json.load(open(path))[args[2]])\nelif args[0]=='set':\n d=json.load(open(path)); d[args[2]]=args[3]; json.dump(d,open(path,'w'))\n", python)
+	gsettings := fmt.Sprintf("#!%s\nimport json, os, sys\npath=os.environ['CLASHPULSE_FAKE_PROXY_STATE']\nargs=sys.argv[1:]\nschema='org.gnome.system.proxy'\nkeys=['mode','http-host','http-port','https-host','https-port','use-same-proxy']\nif args[0]=='list-schemas': print(schema)\nelif args[0]=='list-keys': print(' '.join(keys))\nelif args[0]=='get': print(json.load(open(path))[args[2]])\nelif args[0]=='set':\n marker=os.getenv('CLASHPULSE_FAKE_GSETTINGS_FAIL_ONCE')\n if args[2]=='https-port' and marker and os.path.exists(marker):\n  os.remove(marker); sys.exit(1)\n d=json.load(open(path)); d[args[2]]=args[3]; json.dump(d,open(path,'w'))\n", python)
 	if err := os.WriteFile(filepath.Join(binDir, "gsettings"), []byte(gsettings), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -236,9 +238,10 @@ func TestStaticResourceFailureRestoresRuntime(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		marker func(*staticRuntime) string
+		stage  core.ActivationStage
 	}{
-		{name: "final path validation", marker: func(h *staticRuntime) string { return h.failValidation }},
-		{name: "controller readiness", marker: func(h *staticRuntime) string { return h.failStart }},
+		{name: "final path validation", marker: func(h *staticRuntime) string { return h.failValidation }, stage: core.ActivationConfigValidation},
+		{name: "controller readiness", marker: func(h *staticRuntime) string { return h.failStart }, stage: core.ActivationControllerReadiness},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			h := newStaticRuntime(t)
@@ -271,8 +274,10 @@ func TestStaticResourceFailureRestoresRuntime(t *testing.T) {
 			if err := os.WriteFile(test.marker(h), nil, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			if err := h.service.applyPreparedResourceRefresh(h.ctx, prepared); err == nil {
-				t.Fatal("accepted a failed post-promotion validation or controller start")
+			err = h.service.applyPreparedResourceRefresh(h.ctx, prepared)
+			public, ok := core.PublicActivation(err)
+			if err == nil || !ok || public.Stage != test.stage {
+				t.Fatalf("resource failure stage = %v, want %s", err, test.stage)
 			}
 			for id, path := range paths {
 				data, err := os.ReadFile(path)
@@ -302,6 +307,55 @@ func TestStaticResourceFailureRestoresRuntime(t *testing.T) {
 				t.Fatalf("resource bytes changed while prior Mihomo was running: %v", err)
 			}
 		})
+	}
+}
+
+func TestStaticSystemProxyApplyFailureReportsSafeStage(t *testing.T) {
+	h := newStaticRuntime(t)
+	before := readJSONFile(t, h.proxyState)
+	marker := filepath.Join(h.root, "fail-proxy-once")
+	if err := os.WriteFile(marker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CLASHPULSE_FAKE_GSETTINGS_FAIL_ONCE", marker)
+	if _, err := h.service.subs.RefreshWith(h.ctx, h.subscription); err != nil {
+		t.Fatal(err)
+	}
+	err := h.service.subs.Activate(h.ctx, h.subscription.ID)
+	public, ok := core.PublicActivation(err)
+	if !ok || public.Stage != core.ActivationSystemProxy || h.service.controller != nil || h.service.proxyActive {
+		t.Fatalf("failed proxy activation state = %v, controller=%t proxy=%t", err, h.service.controller != nil, h.service.proxyActive)
+	}
+	if !equalJSONMap(before, readJSONFile(t, h.proxyState)) {
+		t.Fatal("failed System Proxy Apply did not restore prior settings")
+	}
+}
+
+func TestResourceRollbackFailureReportsRollbackStage(t *testing.T) {
+	h := newStaticRuntime(t)
+	h.activate(t)
+	if err := h.service.stop(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	h.setUpdatedSources(t)
+	plan, err := h.service.registry.StageDue(h.ctx, h.service.store.Snapshot(), download.Direct, []string{"list-a", "list-b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := plan.ValidateResources(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := plan.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(h.service.registry.Home(), ".resources.txn")); err != nil {
+		t.Fatal(err)
+	}
+	cause := core.WrapActivation(core.ActivationConfigValidation, errors.New("candidate rejected"))
+	err = h.service.restoreResourceRuntime(h.ctx, &runtimeBackup{resourcePlan: plan}, cause, true)
+	public, ok := core.PublicActivation(err)
+	if !ok || public.Stage != core.ActivationRollback {
+		t.Fatalf("failed rollback concealed its stage: %v", err)
 	}
 }
 

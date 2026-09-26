@@ -7,9 +7,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/fishman/clashpulse/config"
+	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/download"
 )
 
@@ -233,5 +235,50 @@ func TestPendingActivationRestoresSelectionAfterResourceRollback(t *testing.T) {
 	}
 	if id, err := accepted.ActiveID(); err != nil || id != "new" {
 		t.Fatalf("accepted activation was reverted after a later resource update: %q, %v", id, err)
+	}
+}
+
+func TestActivationFailureStage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("proxies:\n  - name: alpha\n    type: direct\n"))
+	}))
+	defer server.Close()
+	_, service := makeService(t, server, nil, nil)
+	if _, err := service.Add(config.Subscription{ID: "feed", URL: server.URL, AllowHTTP: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Refresh(context.Background(), "feed"); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		stage core.ActivationStage
+		id    string
+	}{
+		{core.ActivationControllerReadiness, ""},
+		{core.ActivationResources, "geosite"},
+	} {
+		service.options.Apply = func(context.Context, []byte) error {
+			return core.WrapActivationResource(test.stage, test.id, errors.New("password=private https://feed.invalid/?token=private"))
+		}
+		err := service.Activate(context.Background(), "feed")
+		public, ok := core.PublicActivation(err)
+		if !errors.Is(err, ErrActivation) || !ok || public.Stage != test.stage || public.ResourceID != test.id ||
+			strings.Contains(err.Error(), "password=private") || strings.Contains(err.Error(), "token=private") || strings.Contains(err.Error(), "feed.invalid") {
+			t.Fatalf("activation lost stage or leaked private cause: %v", err)
+		}
+	}
+	service.options.Apply = func(context.Context, []byte) error { return nil }
+	service.options.Finalize = func() error { return errors.New("https://feed.invalid/?token=private") }
+	service.options.Restore = func(context.Context, []byte) error { return nil }
+	err := service.Activate(context.Background(), "feed")
+	public, ok := core.PublicActivation(err)
+	if !ok || public.Stage != core.ActivationStateCommit || strings.Contains(err.Error(), "token=private") || strings.Contains(err.Error(), "feed.invalid") {
+		t.Fatalf("state commit failure leaked private cause: %v", err)
+	}
+	service.options.Restore = func(context.Context, []byte) error { return errors.New("password=private") }
+	err = service.Activate(context.Background(), "feed")
+	public, ok = core.PublicActivation(err)
+	if !ok || public.Stage != core.ActivationRollback || strings.Contains(err.Error(), "password=private") {
+		t.Fatalf("rollback failure leaked private cause: %v", err)
 	}
 }

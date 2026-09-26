@@ -444,6 +444,14 @@ func (s *runtimeService) reportErrorScoped(kind, sourceID string, err error) {
 			failure.Message = "subscription " + status.Error()
 		}
 	}
+	if kind == "activate_subscription" {
+		if message, stage := safeActivationReason(err); message != "" {
+			failure.Message = message
+			if stage == core.ActivationBinary {
+				s.snapshot.Binary.LastCompatibilityFailure = message
+			}
+		}
+	}
 	if s.upsertIssue(failure) {
 		s.appendDiagnostic(safeDiagnostic(kind, sourceID, err))
 	}

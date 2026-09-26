@@ -1,14 +1,18 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/download"
+	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/subscriptions"
 )
 
@@ -90,5 +94,53 @@ func TestUnresolvedIssuesSurviveDiagnosticHistoryLimit(t *testing.T) {
 	}
 	if len(service.snapshot.Errors) != core.MaxDiagnostics+1 || service.snapshot.Errors[0].SourceID != "feed-000" {
 		t.Fatalf("old unresolved issue was evicted: count=%d first=%+v", len(service.snapshot.Errors), service.snapshot.Errors[0])
+	}
+}
+
+func TestDiagnosticsExposeSafeActivationStage(t *testing.T) {
+	service, err := newRuntimeService(t.TempDir(), t.TempDir(), config.Snapshot{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := ipc.NewServer(ipc.ServerOptions{
+		Endpoint:        filepath.Join(t.TempDir(), "service.sock"),
+		Handler:         func(context.Context, ipc.Command) error { return nil },
+		InitialSnapshot: service.snapshot,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	service.server = server
+	service.snapshot.Errors = []core.ErrorSnapshot{{Kind: "resource", SourceID: "other", Message: "resource update failed"}}
+	public, _ := core.PublicActivation(core.WrapActivationResource(core.ActivationResources, "geosite", errors.New("https://feed.invalid/?token=private")))
+	service.reportErrorScoped("activate_subscription", "feed", errors.Join(subscriptions.ErrActivation, public))
+	if len(service.snapshot.Errors) != 2 || service.snapshot.Errors[1].Message != public.Error() ||
+		len(service.snapshot.Diagnostics) != 1 || service.snapshot.Diagnostics[0].Message != public.Error() ||
+		strings.Contains(fmt.Sprint(service.snapshot.Errors, service.snapshot.Diagnostics), "private") {
+		t.Fatalf("activation stage missing or leaked: %+v %+v", service.snapshot.Errors, service.snapshot.Diagnostics)
+	}
+	service.resolveIssue("activate_subscription", "feed")
+	if len(service.snapshot.Errors) != 1 || service.snapshot.Errors[0].SourceID != "other" {
+		t.Fatalf("activation recovery cleared unrelated issue: %+v", service.snapshot.Errors)
+	}
+	service.reportErrorScoped("config_reload", "", errors.New("bad config"))
+	if service.snapshot.Errors[1].Message == public.Error() {
+		t.Fatal("activation stage leaked into config reload issue")
+	}
+	service.reportErrorScoped("activate_subscription", "feed", subscriptions.ErrStore)
+	if got := service.snapshot.Errors[len(service.snapshot.Errors)-1].Message; got != core.ActivationStateCommit.Message() {
+		t.Fatalf("store failure stage = %q", got)
+	}
+	if got := service.snapshot.Diagnostics[len(service.snapshot.Diagnostics)-1].Message; got != core.ActivationStateCommit.Message() {
+		t.Fatalf("store diagnostic stage = %q", got)
+	}
+	service.reportErrorScoped("activate_subscription", "feed", errors.Join(subscriptions.ErrStore, subscriptions.ErrRestore))
+	if got := service.snapshot.Errors[len(service.snapshot.Errors)-1].Message; got != core.ActivationRollback.Message() {
+		t.Fatalf("rollback failure stage = %q", got)
+	}
+	message, stage := safeActivationReason(errors.Join(core.WrapActivation(core.ActivationConfigValidation, errors.New("candidate rejected")), subscriptions.ErrRestore))
+	if stage != core.ActivationRollback || message != core.ActivationRollback.Message() {
+		t.Fatalf("rollback sentinel hidden by original failure: %s, %s", stage, message)
 	}
 }

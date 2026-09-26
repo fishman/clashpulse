@@ -17,6 +17,23 @@ type diagnosticEvent struct {
 	At                                time.Time
 }
 
+func safeActivationReason(err error) (string, core.ActivationStage) {
+	if errors.Is(err, subscriptions.ErrRestore) {
+		return core.ActivationRollback.Message(), core.ActivationRollback
+	}
+	if public, ok := core.PublicActivation(err); ok {
+		return public.Error(), public.Stage
+	}
+	switch {
+	case errors.Is(err, subscriptions.ErrActivationCleanupPending):
+		return "activation committed; cleanup pending", core.ActivationStateCommit
+	case errors.Is(err, subscriptions.ErrStore):
+		return core.ActivationStateCommit.Message(), core.ActivationStateCommit
+	default:
+		return "", ""
+	}
+}
+
 func safeDiagnostic(kind, sourceID string, err error) diagnosticEvent {
 	if !validDiagnosticID(kind) {
 		kind = "service"
@@ -29,6 +46,12 @@ func safeDiagnostic(kind, sourceID string, err error) diagnosticEvent {
 		return event
 	}
 	event.Severity, event.Message = "error", "operation failed"
+	if kind == "activate_subscription" {
+		if message, _ := safeActivationReason(err); message != "" {
+			event.Message = message
+			return event
+		}
+	}
 	if status, ok := download.StatusErrorFrom(err); ok {
 		event.Message = status.Error()
 		return event
