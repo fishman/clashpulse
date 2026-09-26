@@ -20,6 +20,7 @@ type transactionJournal struct {
 	Version   int               `json:"version"`
 	Phase     string            `json:"phase"`
 	BackupDir string            `json:"backup_dir"`
+	MaxBytes  int64             `json:"max_bytes"`
 	Previous  stateDocument     `json:"previous"`
 	Candidate stateDocument     `json:"candidate"`
 	Files     []transactionFile `json:"files"`
@@ -42,9 +43,20 @@ func (r *Registry) recoverTransaction() error {
 	if err != nil {
 		return err
 	}
+	if journal.Phase == "accepted" {
+		current, err := loadStateFile(filepath.Join(r.home, stateFileName))
+		if err != nil || current.Version != 2 || current.CommitID != journal.Candidate.CommitID {
+			return fmt.Errorf("resources: accepted transaction has no matching committed manifest")
+		}
+		if err := verifyManifestFiles(r.home, journal.Candidate, journal.MaxBytes); err != nil {
+			return err
+		}
+		return removeTransaction(r.home, dir)
+	}
 	if err := restoreTransaction(r.home, path, dir, journal); err != nil {
 		return fmt.Errorf("resources: recover interrupted promotion: %w", err)
 	}
+	r.recoveredRollback = true
 	return nil
 }
 
@@ -123,7 +135,7 @@ func (r *Registry) migrateV1(previous stateDocument) (stateDocument, error) {
 		}
 		paths[id] = path
 	}
-	transactionDir, err := r.promote(previous, candidate, paths, false)
+	transactionDir, err := r.promote(previous, candidate, paths)
 	if err != nil {
 		return stateDocument{}, err
 	}
@@ -136,7 +148,7 @@ func (r *Registry) migrateV1(previous stateDocument) (stateDocument, error) {
 	return candidate, nil
 }
 
-func (r *Registry) promote(previous, candidate stateDocument, staged map[string]string, legacy bool) (string, error) {
+func (r *Registry) promote(previous, candidate stateDocument, staged map[string]string) (string, error) {
 	if err := ensureRoot(r.home); err != nil {
 		return "", err
 	}
@@ -179,7 +191,7 @@ func (r *Registry) promote(previous, candidate stateDocument, staged map[string]
 		}
 	}()
 	journal := transactionJournal{
-		Version: 1, Phase: "promoting", BackupDir: filepath.Base(transactionDir),
+		Version: 1, Phase: "promoting", BackupDir: filepath.Base(transactionDir), MaxBytes: r.maxBytes,
 		Previous: cloneState(previous), Candidate: cloneState(candidate),
 	}
 	names := make(map[string]struct{}, len(previousNames)+len(candidateNames))
@@ -205,11 +217,11 @@ func (r *Registry) promote(previous, candidate stateDocument, staged map[string]
 			}
 			file.HadPrevious = true
 			file.PreviousSHA256 = state.SHA256
-			file.Backup = fmt.Sprintf("file-%03d.bak", index)
+			file.Backup = fmt.Sprintf("file-%08x.bak", index)
 			if err := writeStaged(filepath.Join(transactionDir, file.Backup), transactionDir, body); err != nil {
 				return "", err
 			}
-		} else if !legacy {
+		} else {
 			if _, err := os.Lstat(filepath.Join(r.home, name)); err == nil {
 				return "", fmt.Errorf("resources: unmanaged destination already exists: %s", name)
 			} else if !os.IsNotExist(err) {
@@ -251,7 +263,7 @@ func (r *Registry) promote(previous, candidate stateDocument, staged map[string]
 			if err != nil {
 				return "", r.failPromotion(journalPath, transactionDir, err)
 			}
-			if err := writeManagedAtomic(path, r.home, body, 0o400); err != nil {
+			if err := writeManagedAtomic(path, r.home, body, 0o600); err != nil {
 				return "", r.failPromotion(journalPath, transactionDir, err)
 			}
 		} else if file.HadPrevious {
@@ -320,7 +332,7 @@ func readTransaction(home, journalPath string) (transactionJournal, string, erro
 }
 
 func validateJournal(journal transactionJournal) error {
-	if journal.Version != 1 || journal.Phase != "promoting" || !validPrivateDir(journal.BackupDir) || !strings.HasPrefix(journal.BackupDir, transactionDirPrefix) {
+	if journal.Version != 1 || (journal.Phase != "promoting" && journal.Phase != "accepted") || journal.MaxBytes <= 0 || !validPrivateDir(journal.BackupDir) || !strings.HasPrefix(journal.BackupDir, transactionDirPrefix) {
 		return fmt.Errorf("resources: invalid transaction journal")
 	}
 	if err := validateStateDocument(journal.Previous); err != nil {
@@ -380,7 +392,11 @@ func validateJournal(journal transactionJournal) error {
 }
 
 func validBackupName(name string) bool {
-	return len(name) == len("file-000.bak") && strings.HasPrefix(name, "file-") && strings.HasSuffix(name, ".bak")
+	if len(name) != len("file-00000000.bak") || !strings.HasPrefix(name, "file-") || !strings.HasSuffix(name, ".bak") || filepath.Base(name) != name {
+		return false
+	}
+	_, err := hex.DecodeString(name[len("file-"):len("file-00000000")])
+	return err == nil
 }
 
 func restoreTransaction(home, journalPath, backupDir string, journal transactionJournal) error {
@@ -388,11 +404,11 @@ func restoreTransaction(home, journalPath, backupDir string, journal transaction
 		path := filepath.Join(home, file.Name)
 		if file.HadPrevious {
 			backupPath := filepath.Join(backupDir, file.Backup)
-			body, err := readManaged(backupPath, DefaultMaxBytes)
+			body, err := readManaged(backupPath, journal.MaxBytes)
 			if err != nil || digest(body) != file.PreviousSHA256 {
 				return fmt.Errorf("resources: transaction backup is missing or changed")
 			}
-			if err := writeManagedAtomic(path, home, body, 0o400); err != nil {
+			if err := writeManagedAtomic(path, home, body, 0o600); err != nil {
 				return err
 			}
 			continue
@@ -402,7 +418,7 @@ func restoreTransaction(home, journalPath, backupDir string, journal transaction
 		} else if err != nil {
 			return err
 		}
-		body, err := readManaged(path, DefaultMaxBytes)
+		body, err := readManaged(path, journal.MaxBytes)
 		if err != nil || file.CandidateSHA256 == "" || digest(body) != file.CandidateSHA256 {
 			return fmt.Errorf("resources: refusing to remove changed transaction destination")
 		}
@@ -427,19 +443,32 @@ func restoreTransaction(home, journalPath, backupDir string, journal transaction
 
 func finalizeTransaction(home, transactionDir string) error {
 	journalPath := filepath.Join(home, transactionFileName)
-	if err := os.Remove(journalPath); err != nil && !os.IsNotExist(err) {
+	journal, dir, err := readTransaction(home, journalPath)
+	if err != nil {
 		return err
 	}
-	if err := syncDirectory(home); err != nil {
+	if dir != transactionDir {
+		return fmt.Errorf("resources: transaction directory changed")
+	}
+	if journal.Phase != "accepted" {
+		journal.Phase = "accepted"
+		if err := writeJSONAtomic(journalPath, home, journal); err != nil {
+			current, _, readErr := readTransaction(home, journalPath)
+			if readErr != nil || current.Phase != "accepted" {
+				return err
+			}
+		}
+	}
+	return removeTransaction(home, transactionDir)
+}
+
+func removeTransaction(home, transactionDir string) error {
+	if err := os.Remove(filepath.Join(home, transactionFileName)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	if transactionDir != "" {
-		if err := verifyRealDirectory(transactionDir, home); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-		if err := os.RemoveAll(transactionDir); err != nil {
-			return err
-		}
+	_ = syncDirectory(home)
+	if verifyRealDirectory(transactionDir, home) == nil {
+		_ = os.RemoveAll(transactionDir)
 	}
 	return nil
 }
@@ -559,7 +588,7 @@ func makePrivateDir(parent, prefix string) (string, error) {
 func validPrivateDir(name string) bool {
 	for _, prefix := range []string{transactionDirPrefix, ".resource-stage-"} {
 		if strings.HasPrefix(name, prefix) && len(name) == len(prefix)+32 {
-			_, err := hexDecode(strings.TrimPrefix(name, prefix))
+			_, err := hex.DecodeString(strings.TrimPrefix(name, prefix))
 			return err == nil
 		}
 	}
@@ -572,15 +601,6 @@ func ensureRoot(home string) error {
 		return fmt.Errorf("resources: managed root is unsafe")
 	}
 	return nil
-}
-
-func syncDirectory(path string) error {
-	directory, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer directory.Close()
-	return directory.Sync()
 }
 
 func removeLegacyGenerations(root string) error {
@@ -602,8 +622,4 @@ func removeLegacyGenerations(root string) error {
 		}
 	}
 	return nil
-}
-
-func hexDecode(value string) ([]byte, error) {
-	return hex.DecodeString(value)
 }

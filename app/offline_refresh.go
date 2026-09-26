@@ -209,6 +209,9 @@ func (s *runtimeService) refreshResources(ctx context.Context, snapshot config.S
 		_ = prepared.plan.Abort()
 		return directRefreshFailure("resource", ids[0], err)
 	}
+	if err := prepared.plan.Finalize(); err != nil {
+		return directRefreshFailure("resource", ids[0], err)
+	}
 	return nil
 }
 

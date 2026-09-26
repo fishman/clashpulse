@@ -45,19 +45,31 @@ func newRuntimeServiceWithResponseCapture(configDir, stateDir string, initial co
 	for _, id := range initial.Monitor.AutomatedGroups {
 		s.automation[id] = true
 	}
-	subStore, err := subscriptions.NewStore(filepath.Join(stateDir, "subscriptions"))
-	if err != nil {
-		return nil, err
-	}
 	downloader := download.NewClient(func(route download.Route) (http.RoundTripper, error) { return s.transport(route, false) })
 	downloader.SetCaptureErrorBody(captureErrorBody)
 	s.registry, err = resources.NewRegistry(filepath.Join(stateDir, "resources"), downloader)
 	if err != nil {
 		return nil, err
 	}
+	subStore, err := subscriptions.NewStore(filepath.Join(stateDir, "subscriptions"))
+	if err != nil {
+		return nil, err
+	}
+	if err := subStore.RecoverPendingActivation(s.registry.RecoveredRollback()); err != nil {
+		return nil, err
+	}
 	s.subs, err = subscriptions.NewService(subStore, subscriptions.Options{
 		Transport: s.transport, Render: s.renderProfile, Validate: s.validateGenerated,
 		Apply: s.applyGenerated, Restore: s.restoreActivation,
+		Finalize: func() error {
+			if s.activationBackup != nil && s.activationBackup.resourcePlan != nil {
+				return s.activationBackup.resourcePlan.Finalize()
+			}
+			return nil
+		},
+		PendingResource: func() bool {
+			return s.activationBackup != nil && s.activationBackup.resourcePlan != nil
+		},
 		CaptureErrorBody: captureErrorBody,
 		OnChange: func() {
 			select {

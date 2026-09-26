@@ -302,6 +302,7 @@ func (s *Service) Activate(ctx context.Context, id string) error {
 	if hashBytes(candidate) != record.CandidateHash {
 		return ErrStore
 	}
+	previousID, previousHash, previousCandidate := s.store.appliedIdentity()
 	var previousProfile []byte
 	_, previousProfile, err = s.store.ActiveProfile()
 	if err != nil && err != ErrNoSnapshot {
@@ -316,14 +317,48 @@ func (s *Service) Activate(ctx context.Context, id string) error {
 		}
 		return ErrActivation
 	}
-	if s.store.isActive(id) && record.AppliedProfileHash == record.Hash && record.AppliedCandidateHash == record.CandidateHash {
-		return nil
-	}
-	if err := s.store.setApplied(id, record.Hash, record.CandidateHash); err != nil {
-		if restoreErr := s.options.Restore(context.WithoutCancel(ctx), bytes.Clone(previousProfile)); restoreErr != nil {
-			return errors.Join(ErrStore, ErrRestore)
+	alreadyApplied := s.store.isActive(id) && record.AppliedProfileHash == record.Hash && record.AppliedCandidateHash == record.CandidateHash
+	pendingResource := !alreadyApplied && s.options.PendingResource != nil && s.options.PendingResource()
+	if !alreadyApplied {
+		if pendingResource {
+			if err := s.store.markActivationPending(previousID, previousHash, previousCandidate); err != nil {
+				if restoreErr := s.options.Restore(context.WithoutCancel(ctx), bytes.Clone(previousProfile)); restoreErr != nil {
+					return errors.Join(ErrStore, ErrRestore, restoreErr)
+				}
+				return ErrStore
+			}
 		}
-		return ErrStore
+		if err := s.store.setApplied(id, record.Hash, record.CandidateHash); err != nil {
+			if restoreErr := s.options.Restore(context.WithoutCancel(ctx), bytes.Clone(previousProfile)); restoreErr != nil {
+				return errors.Join(ErrStore, ErrRestore)
+			}
+			if pendingResource {
+				_ = s.store.clearActivationPending()
+			}
+			return ErrStore
+		}
+	}
+	if s.options.Finalize != nil {
+		if err := s.options.Finalize(); err != nil {
+			if restoreErr := s.options.Restore(context.WithoutCancel(ctx), bytes.Clone(previousProfile)); restoreErr != nil {
+				return errors.Join(ErrActivation, ErrRestore, err, restoreErr)
+			}
+			if !alreadyApplied {
+				if restoreErr := s.store.restoreApplied(previousID, previousHash, previousCandidate); restoreErr != nil {
+					return errors.Join(ErrActivation, ErrStore, err, restoreErr)
+				}
+				if pendingResource {
+					_ = s.store.clearActivationPending()
+				}
+			}
+			return errors.Join(ErrActivation, err)
+		}
+	}
+	if pendingResource {
+		_ = s.store.clearActivationPending()
+	}
+	if !alreadyApplied {
+		s.store.cleanupApplied()
 	}
 	return nil
 }

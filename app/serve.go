@@ -51,7 +51,7 @@ type serviceWorkRecord struct {
 
 type preparedResourceRefresh struct {
 	plan       *resources.Plan
-	candidate  []byte
+	profile    []byte
 	capability mihomo.Capability
 }
 
@@ -113,15 +113,14 @@ func (s *runtimeService) prepareResourceRefresh(ctx context.Context, ids []strin
 	if err != nil {
 		return nil, err
 	}
-	prepared := &preparedResourceRefresh{plan: plan}
+	prepared := &preparedResourceRefresh{plan: plan, profile: profile}
 	prepared.capability, err = s.selectedCapability(ctx)
 	if err != nil {
 		_ = plan.Abort()
 		return nil, err
 	}
 	if err := plan.Validate(func(home string, paths map[string]string) error {
-		var renderErr error
-		prepared.candidate, renderErr = s.validatedCandidate(ctx, profile, intent, home, paths, prepared.capability)
+		_, renderErr := s.validatedCandidate(ctx, profile, intent, home, paths, prepared.capability)
 		return renderErr
 	}); err != nil {
 		_ = plan.Abort()
@@ -167,20 +166,13 @@ func (s *runtimeService) applyPreparedResourceRefresh(ctx context.Context, prepa
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	changed := prepared.plan.Changed()
+	if prepared.profile != nil && prepared.plan.Changed() {
+		return s.applyResourcePlan(ctx, prepared.plan, prepared.profile, prepared.capability, false)
+	}
 	if _, err := prepared.plan.Commit(); err != nil {
 		return err
 	}
-	if !changed || prepared.candidate == nil {
-		return nil
-	}
-	if err := s.applyCandidate(ctx, prepared.candidate, prepared.capability, prepared.plan.Home()); err != nil {
-		if rollbackErr := prepared.plan.Rollback(); rollbackErr != nil {
-			return fmt.Errorf("resource reload failed and rollback could not restore prior generation")
-		}
-		return err
-	}
-	return nil
+	return prepared.plan.Finalize()
 }
 
 func (s *runtimeService) runServiceWork(ctx context.Context, requests <-chan serviceWorkRequest, results chan<- serviceWorkResult) {

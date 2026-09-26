@@ -116,16 +116,10 @@ func (r *Registry) stageDue(ctx context.Context, snapshot config.Snapshot, route
 	}
 	plan.stageID = filepath.Base(stageDir)
 	plan.directory = stageDir
-	r.mu.Lock()
-	r.pending[plan.stageID] = struct{}{}
-	r.mu.Unlock()
 	staged := false
 	defer func() {
 		if !staged {
 			_ = os.RemoveAll(stageDir)
-			r.mu.Lock()
-			delete(r.pending, plan.stageID)
-			r.mu.Unlock()
 		}
 	}()
 	for id, item := range prepared {
@@ -412,6 +406,11 @@ func (p *Plan) Commit() (map[string]string, error) {
 	r := p.registry
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if _, err := os.Lstat(filepath.Join(r.home, transactionFileName)); err == nil {
+		return nil, fmt.Errorf("resources: another resource transaction awaits finalization")
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("resources: inspect pending transaction: %w", err)
+	}
 	current, err := loadStateFile(filepath.Join(r.home, stateFileName))
 	if err != nil {
 		return nil, err
@@ -425,7 +424,7 @@ func (p *Plan) Commit() (map[string]string, error) {
 	}
 	document := stateDocument{Version: 2, CommitID: commitID, Resources: cloneResourceStates(p.resources)}
 	if p.changed {
-		p.transactionDir, err = r.promote(current, document, p.paths, false)
+		p.transactionDir, err = r.promote(current, document, p.paths)
 	} else {
 		err = writeStateAtomic(filepath.Join(r.home, stateFileName), r.home, document)
 	}
@@ -466,6 +465,17 @@ func (p *Plan) Finalize() error {
 	if current.Version != 2 || current.CommitID != p.commitID {
 		return fmt.Errorf("resources: cannot finalize after another manifest was committed")
 	}
+	if p.stageID != "" {
+		if filepath.Base(p.directory) != p.stageID || !validPrivateDir(p.stageID) || filepath.Dir(p.directory) != r.home {
+			return fmt.Errorf("resources: staged directory is unsafe")
+		}
+		if err := verifyRealDirectory(p.directory, r.home); err != nil {
+			return fmt.Errorf("resources: staged directory is unsafe: %w", err)
+		}
+		if err := os.RemoveAll(p.directory); err != nil {
+			return fmt.Errorf("resources: remove staged resources: %w", err)
+		}
+	}
 	if p.changed {
 		journal, transactionDir, err := readTransaction(r.home, filepath.Join(r.home, transactionFileName))
 		if err != nil {
@@ -477,12 +487,6 @@ func (p *Plan) Finalize() error {
 		if err := finalizeTransaction(r.home, transactionDir); err != nil {
 			return err
 		}
-	}
-	if p.stageID != "" {
-		if err := os.RemoveAll(p.directory); err != nil {
-			return fmt.Errorf("resources: remove staged resources: %w", err)
-		}
-		delete(r.pending, p.stageID)
 	}
 	p.finalized = true
 	p.closed = true
@@ -555,7 +559,6 @@ func (p *Plan) Abort() error {
 		} else if !os.IsNotExist(err) {
 			return fmt.Errorf("resources: staged directory is unsafe: %w", err)
 		}
-		delete(r.pending, p.stageID)
 	}
 	p.closed = true
 	return nil
@@ -572,7 +575,7 @@ func (p *Plan) verifyStagedFiles() error {
 		if err := ensureRoot(p.directory); err != nil {
 			return fmt.Errorf("resources: managed root is unsafe: %w", err)
 		}
-	} else if err := verifyRealDirectory(p.directory, p.registry.root); err != nil {
+	} else if err := verifyRealDirectory(p.directory, p.registry.home); err != nil {
 		return fmt.Errorf("resources: staged resource directory is unsafe: %w", err)
 	}
 	for id, path := range p.paths {
@@ -589,14 +592,6 @@ func (p *Plan) verifyStagedFiles() error {
 		}
 	}
 	return nil
-}
-
-func newGenerationID() (string, error) {
-	var id [16]byte
-	if _, err := rand.Read(id[:]); err != nil {
-		return "", err
-	}
-	return "gen-" + hex.EncodeToString(id[:]), nil
 }
 
 func newCommitID() (string, error) {

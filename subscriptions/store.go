@@ -189,7 +189,6 @@ func NewStore(dir string) (*Store, error) {
 		}
 		store.records[id] = record
 	}
-	store.cleanupUnusedGenerations()
 	return store, nil
 }
 
@@ -559,7 +558,97 @@ func (s *Store) setApplied(id, profileHash, candidateHash string) error {
 	s.activeID = id
 	s.activeProfileHash = profileHash
 	s.activeCandidateHash = candidateHash
+	return nil
+}
+
+func (s *Store) appliedIdentity() (string, string, string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.activeID, s.activeProfileHash, s.activeCandidateHash
+}
+
+func (s *Store) restoreApplied(id, profileHash, candidateHash string) error {
+	if id != "" {
+		return s.setApplied(id, profileHash, candidateHash)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := os.Remove(filepath.Join(s.dir, "active.json")); err != nil && !os.IsNotExist(err) {
+		return ErrStore
+	}
+	for recordID, record := range s.records {
+		record.Active = false
+		record.AppliedHash, record.AppliedProfileHash, record.AppliedCandidateHash = "", "", ""
+		s.records[recordID] = record
+	}
+	s.activeID, s.activeProfileHash, s.activeCandidateHash = "", "", ""
+	return nil
+}
+
+func (s *Store) cleanupApplied() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.cleanupUnusedGenerations()
+}
+
+const activationPendingFile = ".activation-pending.json"
+
+type pendingActivation struct {
+	ID            string `json:"id"`
+	ProfileHash   string `json:"profile_hash"`
+	CandidateHash string `json:"candidate_hash"`
+}
+
+func (s *Store) markActivationPending(id, profileHash, candidateHash string) error {
+	path := filepath.Join(s.dir, activationPendingFile)
+	if _, err := os.Lstat(path); err == nil || !os.IsNotExist(err) {
+		return ErrStore
+	}
+	data, err := json.Marshal(pendingActivation{ID: id, ProfileHash: profileHash, CandidateHash: candidateHash})
+	if err != nil || config.Write(path, data) != nil {
+		return ErrStore
+	}
+	return nil
+}
+
+func (s *Store) clearActivationPending() error {
+	if err := os.Remove(filepath.Join(s.dir, activationPendingFile)); err != nil && !os.IsNotExist(err) {
+		return ErrStore
+	}
+	return nil
+}
+
+// RecoverPendingActivation reconciles the durable subscription pointer with
+// the resource journal before either becomes visible to application clients.
+func (s *Store) RecoverPendingActivation(resourcesRolledBack bool) error {
+	path := filepath.Join(s.dir, activationPendingFile)
+	if _, err := os.Lstat(path); os.IsNotExist(err) {
+		s.cleanupApplied()
+		return nil
+	} else if err != nil {
+		return ErrStore
+	}
+	data, err := readPrivateFile(path, 1<<20)
+	if err != nil {
+		return ErrStore
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	var pending pendingActivation
+	if decoder.Decode(&pending) != nil || requireJSONEOF(decoder) != nil ||
+		pending.ID != "" && !validID(pending.ID) || !validOptionalHash(pending.ProfileHash) || !validOptionalHash(pending.CandidateHash) ||
+		(pending.ID == "" && (pending.ProfileHash != "" || pending.CandidateHash != "")) {
+		return ErrStore
+	}
+	if resourcesRolledBack {
+		if err := s.restoreApplied(pending.ID, pending.ProfileHash, pending.CandidateHash); err != nil {
+			return err
+		}
+	}
+	if err := s.clearActivationPending(); err != nil {
+		return err
+	}
+	s.cleanupApplied()
 	return nil
 }
 

@@ -68,7 +68,6 @@ type runtimeService struct {
 	proxyActive               bool
 	generated                 []byte
 	resourceHome              string
-	releaseResource           func()
 	forceRestart              bool
 	activationBackup          *runtimeBackup
 	groups                    map[string]mihomo.Group

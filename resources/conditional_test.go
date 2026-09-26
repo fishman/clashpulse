@@ -12,7 +12,7 @@ import (
 	"github.com/fishman/clashpulse/download"
 )
 
-func TestUnchangedRefreshRetainsCommittedGeneration(t *testing.T) {
+func TestUnchangedRefreshKeepsStableResourceBytes(t *testing.T) {
 	body := []byte("payload:\n  - example.com\n")
 	requests := 0
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -75,10 +75,6 @@ func TestUnchangedRefreshRetainsCommittedGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	initialGenerations, err := os.ReadDir(registry.root)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	for i := 0; i < 2; i++ {
 		plan, err := registry.Stage(context.Background(), snapshot, download.Direct)
@@ -107,10 +103,6 @@ func TestUnchangedRefreshRetainsCommittedGeneration(t *testing.T) {
 		currentInfo, err := os.Stat(firstPaths[resource.ID])
 		if err != nil || !currentInfo.ModTime().Equal(resourceInfo.ModTime()) {
 			t.Fatalf("unchanged stage %d rewrote active resource file: info=%v err=%v", i, currentInfo, err)
-		}
-		generations, err := os.ReadDir(registry.root)
-		if err != nil || len(generations) != len(initialGenerations) {
-			t.Fatalf("unchanged stage %d created a generation: count=%d err=%v", i, len(generations), err)
 		}
 	}
 	if requests != 3 {

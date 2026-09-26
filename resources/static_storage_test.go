@@ -117,6 +117,33 @@ func TestMigrateV1Generation(t *testing.T) {
 		t.Fatalf("old generation remains after migration: %v", err)
 	}
 }
+func TestCommittedV2CleansLegacyGenerationAfterCrash(t *testing.T) {
+	home := t.TempDir()
+	legacyRoot := filepath.Join(home, legacyDirName)
+	legacy := filepath.Join(legacyRoot, "gen-00000000000000000000000000000003")
+	if err := os.MkdirAll(legacy, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	resource := config.Resource{ID: "geoip", Kind: config.ResourceGeoIP, Format: config.FormatDAT, Enabled: true}
+	body := []byte("migrated")
+	if err := os.WriteFile(filepath.Join(home, filename(resource)), body, 0o400); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legacy, filename(resource)), body, 0o400); err != nil {
+		t.Fatal(err)
+	}
+	state := staticTestState(resource, body)
+	manifest := stateDocument{Version: 2, CommitID: strings.Repeat("d", 32), Resources: map[string]resourceState{resource.ID: state}}
+	if err := writeStateAtomic(filepath.Join(home, stateFileName), home, manifest); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewRegistry(home, localResourceClient()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatalf("committed v2 left migrated legacy bytes: %v", err)
+	}
+}
 
 func TestRejectCorruptV1Migration(t *testing.T) {
 	home := t.TempDir()
@@ -180,7 +207,7 @@ func TestRecoverPartialStaticPromotion(t *testing.T) {
 	}
 	journalFiles := make([]map[string]any, 0, 3)
 	for i, resource := range resources {
-		backupName := fmt.Sprintf("file-%03d.bak", i)
+		backupName := fmt.Sprintf("file-%08x.bak", i)
 		if err := os.WriteFile(filepath.Join(backupDir, backupName), oldBodies[i], 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -198,7 +225,7 @@ func TestRecoverPartialStaticPromotion(t *testing.T) {
 		t.Fatal(err)
 	}
 	journal := map[string]any{
-		"version": 1, "phase": "promoting", "backup_dir": filepath.Base(backupDir),
+		"version": 1, "phase": "promoting", "backup_dir": filepath.Base(backupDir), "max_bytes": DefaultMaxBytes,
 		"previous": prior, "candidate": candidate, "files": journalFiles,
 	}
 	encoded, err := json.Marshal(journal)
@@ -212,6 +239,9 @@ func TestRecoverPartialStaticPromotion(t *testing.T) {
 	registry, err := NewRegistry(home, localResourceClient())
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !registry.RecoveredRollback() {
+		t.Fatal("interrupted promotion was not reported to application recovery")
 	}
 	for i, resource := range resources {
 		data, err := os.ReadFile(filepath.Join(home, filename(resource)))
@@ -227,6 +257,110 @@ func TestRecoverPartialStaticPromotion(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(home, transactionFileName)); !os.IsNotExist(err) {
 		t.Fatalf("transaction journal remains after recovery: %v", err)
+	}
+}
+
+func TestAcceptedTransactionSurvivesRestart(t *testing.T) {
+	home := t.TempDir()
+	source := filepath.Join(home, "source.dat")
+	if err := os.WriteFile(source, []byte("accepted bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := NewRegistry(filepath.Join(home, "resources"), localResourceClient())
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := config.Snapshot{Resources: []config.Resource{{ID: "geoip", Kind: config.ResourceGeoIP, Format: config.FormatDAT, URL: source, Enabled: true}}}
+	plan, err := registry.Stage(context.Background(), snapshot, download.Direct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := plan.ValidateResources(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := plan.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	journalPath := filepath.Join(registry.home, transactionFileName)
+	journal, _, err := readTransaction(registry.home, journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	journal.Phase = "accepted"
+	if err := writeJSONAtomic(journalPath, registry.home, journal); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := NewRegistry(registry.home, localResourceClient())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.RecoveredRollback() {
+		t.Fatal("accepted transaction was reported as a rollback")
+	}
+	paths, err := reopened.Paths(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(paths["geoip"]); err != nil || string(got) != "accepted bytes" {
+		t.Fatalf("accepted resource lost after restart: %q, %v", got, err)
+	}
+	if _, err := os.Stat(journalPath); !os.IsNotExist(err) {
+		t.Fatalf("accepted journal was not cleaned: %v", err)
+	}
+}
+
+func TestPendingResourceTransactionRejectsSecondCommit(t *testing.T) {
+	home := t.TempDir()
+	source := filepath.Join(home, "source.dat")
+	if err := os.WriteFile(source, []byte("first"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := NewRegistry(filepath.Join(home, "resources"), localResourceClient())
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := config.Snapshot{Resources: []config.Resource{{ID: "geoip", Kind: config.ResourceGeoIP, Format: config.FormatDAT, URL: source, Enabled: true}}}
+	initial, err := registry.Stage(context.Background(), snapshot, download.Direct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := initial.ValidateResources(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := initial.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := initial.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(source, []byte("second"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	first, err := registry.Stage(context.Background(), snapshot, download.Direct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.ValidateResources(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	second, err := registry.Stage(context.Background(), snapshot, download.Direct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Changed() {
+		t.Fatal("same candidate unexpectedly changed")
+	}
+	if err := second.ValidateResources(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := second.Commit(); err == nil {
+		t.Fatal("overwrote an unfinalized resource transaction")
+	}
+	if err := first.Rollback(); err != nil {
+		t.Fatalf("first plan can no longer roll back: %v", err)
 	}
 }
 

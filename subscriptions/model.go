@@ -101,6 +101,8 @@ type Options struct {
 	Validate         ValidateFunc
 	Apply            ApplyFunc
 	Restore          RestoreFunc
+	Finalize         func() error
+	PendingResource  func() bool
 	Current          CurrentFunc
 	MaxBytes         int64
 	CaptureErrorBody bool

@@ -99,7 +99,7 @@ func TestPinnedResourceMismatchRetainsPreviousGeneration(t *testing.T) {
 		t.Fatalf("known-good content after mismatch = %q, err = %v", after, err)
 	}
 	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != 0o400 {
+	if err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("committed file mode = %v, err = %v", info, err)
 	}
 }
@@ -297,7 +297,7 @@ func TestStaticPromotionsKeepStablePathsAndRollbackBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	foreignDirectory := filepath.Join(registry.root, "leave-alone")
+	foreignDirectory := filepath.Join(registry.home, "leave-alone")
 	if err := os.Mkdir(foreignDirectory, 0o700); err != nil {
 		t.Fatal(err)
 	}

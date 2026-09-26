@@ -51,15 +51,13 @@ type stateDocument struct {
 }
 
 type Registry struct {
-	home     string
-	root     string
-	client   *download.Client
-	maxBytes int64
-	mu       sync.Mutex
-	active   stateDocument
-	failures map[string]string
-	pending  map[string]struct{}
-	pins     map[string]int
+	home              string
+	client            *download.Client
+	maxBytes          int64
+	mu                sync.Mutex
+	active            stateDocument
+	failures          map[string]string
+	recoveredRollback bool
 }
 
 func resourceStateMatches(resource config.Resource, state resourceState) bool {
@@ -99,8 +97,8 @@ func NewRegistry(home string, client *download.Client) (*Registry, error) {
 		return nil, fmt.Errorf("resources: secure managed home: %w", err)
 	}
 	registry := &Registry{
-		home: absolute, root: absolute, client: client, maxBytes: DefaultMaxBytes,
-		failures: make(map[string]string), pending: make(map[string]struct{}), pins: make(map[string]int),
+		home: absolute, client: client, maxBytes: DefaultMaxBytes,
+		failures: make(map[string]string),
 	}
 	if err := registry.recoverTransaction(); err != nil {
 		return nil, err
@@ -118,6 +116,11 @@ func NewRegistry(home string, client *download.Client) (*Registry, error) {
 			return nil, err
 		}
 	}
+	if active.Version == 2 && active.CommitID != "" && verifyManifestFiles(absolute, active, registry.maxBytes) == nil {
+		if err := removeLegacyGenerations(filepath.Join(absolute, legacyDirName)); err != nil {
+			return nil, fmt.Errorf("resources: remove migrated generations: %w", err)
+		}
+	}
 	registry.active = active
 	return registry, nil
 }
@@ -128,6 +131,11 @@ func (r *Registry) Home() string {
 		return ""
 	}
 	return r.home
+}
+
+// RecoveredRollback reports that startup restored an unaccepted resource set.
+func (r *Registry) RecoveredRollback() bool {
+	return r != nil && r.recoveredRollback
 }
 
 // SetMaxBytes sets the positive per-resource source size limit. Configure it
@@ -209,17 +217,6 @@ func (r *Registry) ActiveHome() (string, error) {
 		return "", err
 	}
 	return r.home, nil
-}
-
-// AcquireGeneration remains a no-op lease for callers across the static-path cutover.
-func (r *Registry) AcquireGeneration(home string) (func(), error) {
-	if r == nil {
-		return nil, fmt.Errorf("resources: nil registry")
-	}
-	if home == "" || filepath.Clean(home) == r.home {
-		return func() {}, nil
-	}
-	return nil, fmt.Errorf("resources: home is not the managed resource root")
 }
 
 func (r *Registry) pathsLocked(snapshot config.Snapshot) (map[string]string, error) {
@@ -379,23 +376,6 @@ func validateStateDocument(document stateDocument) error {
 		return err
 	}
 	return nil
-}
-
-func (r *Registry) loadState() (stateDocument, error) {
-	document, err := loadStateFile(filepath.Join(r.home, stateFileName))
-	if err != nil {
-		return stateDocument{}, err
-	}
-	if document.Version == 1 && document.Generation != "" {
-		legacyRoot := filepath.Join(r.home, legacyDirName)
-		if err := verifyRealDirectory(legacyRoot, r.home); err != nil {
-			return stateDocument{}, fmt.Errorf("resources: legacy generation root is unsafe: %w", err)
-		}
-		if err := verifyRealDirectory(filepath.Join(legacyRoot, document.Generation), legacyRoot); err != nil {
-			return stateDocument{}, fmt.Errorf("resources: legacy generation is unsafe: %w", err)
-		}
-	}
-	return document, nil
 }
 
 func writeStateAtomic(path, parent string, document stateDocument) error {

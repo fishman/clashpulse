@@ -45,19 +45,35 @@ func (s *runtimeService) renderProfile(ctx context.Context, profile []byte) ([]b
 	if err == nil {
 		return s.renderWithHome(ctx, profile, intent, home, paths, capability)
 	}
+	if s.controller != nil {
+		return nil, fmt.Errorf("clashpulse: managed resources are unavailable while Mihomo is running")
+	}
 	plan, err := s.registry.Stage(ctx, intent, download.Direct)
 	if err != nil {
 		return nil, err
 	}
 	defer plan.Abort()
-	var candidate []byte
 	if err := plan.Validate(func(home string, paths map[string]string) error {
-		candidate, err = s.validatedCandidate(ctx, profile, intent, home, paths, capability)
-		return err
+		_, validationErr := s.validatedCandidate(ctx, profile, intent, home, paths, capability)
+		return validationErr
 	}); err != nil {
 		return nil, err
 	}
 	if _, err := plan.Commit(); err != nil {
+		return nil, err
+	}
+	rollback := func(cause error) ([]byte, error) {
+		return nil, errors.Join(cause, plan.Rollback())
+	}
+	home, paths, err = s.registry.PathsWithHome(intent)
+	if err != nil {
+		return rollback(err)
+	}
+	candidate, err := s.validatedCandidate(ctx, profile, intent, home, paths, capability)
+	if err != nil {
+		return rollback(err)
+	}
+	if err := plan.Finalize(); err != nil {
 		return nil, err
 	}
 	s.resourceDirty.Store(true)
@@ -149,38 +165,14 @@ func (s *runtimeService) applyGenerated(ctx context.Context, profile []byte) err
 	if err != nil {
 		return err
 	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = plan.Abort()
-		}
-	}()
-	var candidate []byte
 	if err := plan.Validate(func(home string, paths map[string]string) error {
-		candidate, err = s.validatedCandidate(ctx, profile, intent, home, paths, capability)
-		return err
+		_, validationErr := s.validatedCandidate(ctx, profile, intent, home, paths, capability)
+		return validationErr
 	}); err != nil {
+		_ = plan.Abort()
 		return err
 	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if _, err := plan.Commit(); err != nil {
-		return err
-	}
-	committed = true
-	s.resourceDirty.Store(true)
-	if err := s.applyActivationCandidate(ctx, candidate, capability, plan.Home(), plan); err != nil {
-		s.resourceDirty.Store(true)
-		if rollbackErr := plan.Rollback(); rollbackErr != nil {
-			return fmt.Errorf("clashpulse: resource rollback failed during activation")
-		}
-		if abortErr := plan.Abort(); abortErr != nil {
-			return fmt.Errorf("clashpulse: resource cleanup failed during activation")
-		}
-		return err
-	}
-	return nil
+	return s.applyResourcePlan(ctx, plan, profile, capability, true)
 }
 
 func (s *runtimeService) applyActivationCandidate(ctx context.Context, candidate []byte, capability mihomo.Capability, home string, plan *resources.Plan) error {
@@ -191,6 +183,141 @@ func (s *runtimeService) applyActivationCandidate(ctx context.Context, candidate
 	}
 	return nil
 }
+
+func (s *runtimeService) applyResourcePlan(ctx context.Context, plan *resources.Plan, profile []byte, capability mihomo.Capability, activation bool) error {
+	backup := &runtimeBackup{generated: bytes.Clone(s.generated), cap: s.cap, home: s.resourceHome, running: s.controller != nil, proxyActive: s.proxyActive, selected: selectedGroups(s.groups), resourcePlan: plan}
+	defer s.resourceDirty.Store(true)
+	if err := ctx.Err(); err != nil {
+		_ = plan.Abort()
+		return err
+	}
+	if !plan.Changed() {
+		if _, err := plan.Commit(); err != nil {
+			_ = plan.Abort()
+			return err
+		}
+		if err := plan.Finalize(); err != nil {
+			return err
+		}
+		if !activation && backup.running {
+			return nil
+		}
+		home, paths, err := s.registry.PathsWithHome(s.store.Snapshot())
+		if err != nil {
+			return err
+		}
+		candidate, err := s.renderWithHome(ctx, profile, s.store.Snapshot(), home, paths, capability)
+		if err != nil {
+			return err
+		}
+		if activation {
+			return s.applyActivationCandidate(ctx, candidate, capability, home, nil)
+		}
+		return s.applyCandidate(ctx, candidate, capability, home)
+	}
+	if backup.running {
+		if err := s.proxy.Restore(ctx); err != nil {
+			_ = plan.Abort()
+			return err
+		}
+		s.proxyActive = false
+		if err := s.stopMonitorAndProcess(ctx); err != nil {
+			return s.restoreResourceRuntime(ctx, backup, err, false)
+		}
+	}
+	if _, err := plan.Commit(); err != nil {
+		_ = plan.Abort()
+		return s.restoreResourceRuntime(ctx, backup, err, false)
+	}
+	intent := s.store.Snapshot()
+	home, paths, err := s.registry.PathsWithHome(intent)
+	if err == nil {
+		var candidate []byte
+		candidate, err = s.validatedCandidate(ctx, profile, intent, home, paths, capability)
+		if err == nil {
+			err = s.applyCandidate(ctx, candidate, capability, home)
+		}
+		if err == nil && backup.running {
+			err = s.restoreSelections(ctx, backup.selected)
+		}
+	}
+	if err != nil {
+		return s.restoreResourceRuntime(ctx, backup, err, true)
+	}
+	if activation {
+		s.activationBackup = backup
+		return nil
+	}
+	if err := plan.Finalize(); err != nil {
+		return s.restoreResourceRuntime(ctx, backup, err, true)
+	}
+	return nil
+}
+
+func (s *runtimeService) restoreResourceRuntime(ctx context.Context, backup *runtimeBackup, cause error, committed bool) error {
+	cleanup, done := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer done()
+	var cleanupErr error
+	if s.controller != nil {
+		if err := s.proxy.Restore(cleanup); err != nil {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("clashpulse: disable candidate system proxy: %w", err))
+		} else {
+			s.proxyActive = false
+		}
+		if err := s.stopMonitorAndProcess(cleanup); err != nil {
+			return errors.Join(cause, cleanupErr, fmt.Errorf("clashpulse: stop candidate before resource rollback: %w", err))
+		}
+	}
+	if err := s.process.Stop(cleanup); err != nil {
+		return errors.Join(cause, cleanupErr, fmt.Errorf("clashpulse: wait for stopped Mihomo: %w", err))
+	}
+	if committed {
+		if err := backup.resourcePlan.Rollback(); err != nil {
+			return errors.Join(cause, cleanupErr, fmt.Errorf("clashpulse: restore resource files: %w", err))
+		}
+	}
+	if err := backup.resourcePlan.Abort(); err != nil {
+		cleanupErr = errors.Join(cleanupErr, fmt.Errorf("clashpulse: remove staged resources: %w", err))
+	}
+	if backup.running {
+		path := filepath.Join(s.stateDir, "generated.yaml")
+		if err := config.Write(path, backup.generated); err != nil {
+			return errors.Join(cause, cleanupErr, fmt.Errorf("clashpulse: restore generated configuration: %w", err))
+		}
+		if err := s.startProcess(cleanup, backup.cap, backup.home, path); err != nil {
+			return errors.Join(cause, cleanupErr, fmt.Errorf("clashpulse: restart previous Mihomo: %w", err))
+		}
+		s.generated, s.cap, s.resourceHome = bytes.Clone(backup.generated), backup.cap, backup.home
+		if err := s.restoreSelections(cleanup, backup.selected); err != nil {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("clashpulse: restore proxy selection: %w", err))
+		}
+		if backup.proxyActive && !s.proxyActive {
+			if err := s.proxy.Apply(cleanup, fmt.Sprintf("127.0.0.1:%d", s.proxyPort)); err != nil {
+				cleanupErr = errors.Join(cleanupErr, fmt.Errorf("clashpulse: restore system proxy: %w", err))
+			} else {
+				s.proxyActive = true
+			}
+		} else if !backup.proxyActive && s.proxyActive {
+			if err := s.proxy.Restore(cleanup); err != nil {
+				cleanupErr = errors.Join(cleanupErr, fmt.Errorf("clashpulse: clear system proxy: %w", err))
+			} else {
+				s.proxyActive = false
+			}
+		}
+		s.publish()
+	} else if len(backup.generated) > 0 {
+		if err := config.Write(filepath.Join(s.stateDir, "generated.yaml"), backup.generated); err != nil {
+			return errors.Join(cause, cleanupErr, fmt.Errorf("clashpulse: restore generated configuration: %w", err))
+		}
+		s.generated, s.cap, s.resourceHome = backup.generated, backup.cap, backup.home
+	} else {
+		if err := os.Remove(filepath.Join(s.stateDir, "generated.yaml")); err != nil && !os.IsNotExist(err) {
+			return errors.Join(cause, cleanupErr, err)
+		}
+		s.generated, s.cap, s.resourceHome = nil, mihomo.Capability{}, ""
+	}
+	return errors.Join(cause, cleanupErr)
+}
 func (s *runtimeService) restoreActivation(ctx context.Context, previousProfile []byte) (result error) {
 	backup := s.activationBackup
 	s.activationBackup = nil
@@ -198,16 +325,8 @@ func (s *runtimeService) restoreActivation(ctx context.Context, previousProfile 
 		return fmt.Errorf("clashpulse: no prior runtime was captured")
 	}
 	if backup.resourcePlan != nil {
-		defer func() {
-			s.resourceDirty.Store(true)
-			if err := backup.resourcePlan.Rollback(); err != nil {
-				result = errors.Join(result, fmt.Errorf("clashpulse: resource rollback failed during activation restore"))
-				return
-			}
-			if err := backup.resourcePlan.Abort(); err != nil {
-				result = errors.Join(result, fmt.Errorf("clashpulse: resource cleanup failed during activation restore"))
-			}
-		}()
+		s.resourceDirty.Store(true)
+		return s.restoreResourceRuntime(ctx, backup, nil, true)
 	}
 	if !backup.running {
 		if err := s.stop(ctx); err != nil {
@@ -391,15 +510,12 @@ func (s *runtimeService) restoreSelections(ctx context.Context, selected map[str
 }
 
 func (s *runtimeService) startProcess(ctx context.Context, capability mihomo.Capability, home, path string) error {
-	release, err := s.registry.AcquireGeneration(home)
-	if err != nil {
-		return err
+	if home != s.registry.Home() {
+		return fmt.Errorf("clashpulse: invalid managed data home")
 	}
 	if err := s.process.Start(s.processCtx, mihomo.StartPlan{Capability: capability, ConfigPath: path, Args: []string{"-d", home}}); err != nil {
-		release()
 		return err
 	}
-	s.releaseResource = release
 	controller, err := mihomo.NewController("http://"+s.controllerAddress, s.secret, &http.Client{Timeout: time.Second})
 	if err != nil {
 		return s.stopStartedProcess(ctx, err)
@@ -433,10 +549,6 @@ func (s *runtimeService) stopStartedProcess(ctx context.Context, cause error) er
 	if err := s.process.Stop(cleanup); err != nil {
 		return errors.Join(cause, fmt.Errorf("clashpulse: failed to stop Mihomo after startup error: %w", err))
 	}
-	if s.releaseResource != nil {
-		s.releaseResource()
-		s.releaseResource = nil
-	}
 	return cause
 }
 
@@ -452,10 +564,6 @@ func (s *runtimeService) stopMonitorAndProcess(ctx context.Context) error {
 	s.controller = nil
 	if err := s.process.Stop(ctx); err != nil {
 		return err
-	}
-	if s.releaseResource != nil {
-		s.releaseResource()
-		s.releaseResource = nil
 	}
 	s.groups = make(map[string]mihomo.Group)
 	s.proxies = make(map[string]string)
@@ -493,24 +601,14 @@ func (s *runtimeService) start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer plan.Abort()
-	var candidate []byte
 	if err := plan.Validate(func(home string, paths map[string]string) error {
-		candidate, err = s.validatedCandidate(ctx, profile, intent, home, paths, capability)
-		return err
+		_, validationErr := s.validatedCandidate(ctx, profile, intent, home, paths, capability)
+		return validationErr
 	}); err != nil {
+		_ = plan.Abort()
 		return err
 	}
-	if _, err := plan.Commit(); err != nil {
-		return err
-	}
-	s.resourceDirty.Store(true)
-	if err := s.applyCandidate(ctx, candidate, capability, plan.Home()); err != nil {
-		_ = plan.Rollback()
-		s.resourceDirty.Store(true)
-		return err
-	}
-	return nil
+	return s.applyResourcePlan(ctx, plan, profile, capability, false)
 }
 
 func monitorPolicy(settings config.Monitor) monitor.Policy {

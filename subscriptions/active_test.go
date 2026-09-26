@@ -2,6 +2,7 @@ package subscriptions
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -133,5 +134,85 @@ func TestActiveProfileSwitchPersistsAcrossRestart(t *testing.T) {
 	}
 	if id, err := newService.ActiveID(); err != nil || id != second.ID {
 		t.Fatalf("ActiveID after deleting old profile = %q, %v", id, err)
+	}
+}
+
+func TestFinalizeFailureRestoresPreviousAppliedProfile(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("proxies:\n  - name: " + r.URL.Path[1:] + "\n    type: direct\n"))
+	}))
+	defer server.Close()
+	store, service := makeService(t, server, nil, nil)
+	for _, id := range []string{"old", "new"} {
+		if _, err := service.Add(config.Subscription{ID: id, URL: server.URL + "/" + id, AllowHTTP: true}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := service.Refresh(context.Background(), id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := service.Activate(context.Background(), "old"); err != nil {
+		t.Fatal(err)
+	}
+	restored := false
+	service.options.Restore = func(_ context.Context, profile []byte) error {
+		restored = string(profile) == "proxies:\n  - name: old\n    type: direct\n"
+		return nil
+	}
+	service.options.Finalize = func() error { return errors.New("resource journal cannot finalize") }
+	if err := service.Activate(context.Background(), "new"); err == nil {
+		t.Fatal("accepted activation after resource finalization failure")
+	}
+	if !restored {
+		t.Fatal("activation failure did not restore previous runtime")
+	}
+	reopened, err := NewStore(store.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, profile, err := reopened.ActiveProfile()
+	if err != nil || id != "old" || string(profile) != "proxies:\n  - name: old\n    type: direct\n" {
+		t.Fatalf("persisted active profile after failed finalization = %q, %q, %v", id, profile, err)
+	}
+}
+
+func TestPendingActivationRestoresSelectionAfterResourceRollback(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("proxies:\n  - name: " + r.URL.Path[1:] + "\n    type: direct\n"))
+	}))
+	defer server.Close()
+	store, service := makeService(t, server, nil, nil)
+	for _, id := range []string{"old", "new"} {
+		if _, err := service.Add(config.Subscription{ID: id, URL: server.URL + "/" + id, AllowHTTP: true}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := service.Refresh(context.Background(), id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := service.Activate(context.Background(), "old"); err != nil {
+		t.Fatal(err)
+	}
+	oldID, oldProfile, oldCandidate := store.appliedIdentity()
+	if err := store.markActivationPending(oldID, oldProfile, oldCandidate); err != nil {
+		t.Fatal(err)
+	}
+	newRecord, exists := store.get("new")
+	if !exists {
+		t.Fatal("candidate subscription disappeared")
+	}
+	if err := store.setApplied("new", newRecord.Hash, newRecord.CandidateHash); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := NewStore(store.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reopened.RecoverPendingActivation(true); err != nil {
+		t.Fatal(err)
+	}
+	id, profile, err := reopened.ActiveProfile()
+	if err != nil || id != "old" || string(profile) != "proxies:\n  - name: old\n    type: direct\n" {
+		t.Fatalf("recovered active profile = %q, %q, %v", id, profile, err)
 	}
 }
