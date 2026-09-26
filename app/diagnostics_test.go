@@ -73,3 +73,11 @@ func TestPublicSubscriptionFailureShowsStatusWithoutRawDetail(t *testing.T) {
 		t.Fatal("untrusted failure detail escaped to IPC")
 	}
 }
+
+func TestScheduledResourceRefreshResolvesActiveIssue(t *testing.T) {
+	service := &runtimeService{snapshot: core.Snapshot{Errors: []core.ErrorSnapshot{{Kind: "resource", Message: "resource update failed"}}}}
+	service.completeScheduledResourceRefresh()
+	if len(service.snapshot.Errors) != 0 || len(service.snapshot.Diagnostics) != 1 || service.snapshot.Diagnostics[0].Message != "recovered" {
+		t.Fatalf("scheduled success did not resolve resource issue: %+v", service.snapshot)
+	}
+}

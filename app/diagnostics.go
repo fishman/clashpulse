@@ -133,3 +133,7 @@ func (s *runtimeService) reconcileSubscriptionFailures(entries []subscriptions.E
 		}
 	}
 }
+
+func (s *runtimeService) completeScheduledResourceRefresh() {
+	s.resolveIssue("resource", "")
+}

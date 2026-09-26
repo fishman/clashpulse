@@ -132,6 +132,21 @@ func TestFormSpaceEventTogglesInsteadOfTyping(t *testing.T) {
 	}
 }
 
+func TestControlRuneSavesOpenForm(t *testing.T) {
+	editor, err := form.New([]form.Field{{ID: "enabled", Label: "Enabled", Kind: form.Toggle, Value: "false"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	model := NewModel()
+	model.Modal = &Modal{Kind: ModalMonitorSetting, Form: editor}
+	model, _, _ = model.HandleKey("space")
+	key := keyForModelEvent(model, tcell.NewEventKeyEx(tcell.KeyRune, "s", tcell.ModCtrl, true, 0, 1))
+	model, command, quit := model.HandleKey(key)
+	if key != "ctrl+s" || quit || command == nil || command.Config == nil || command.Config.MonitorEnabled == nil || !*command.Config.MonitorEnabled || model.Modal != nil {
+		t.Fatalf("control-rune save failed: key=%q command=%#v", key, command)
+	}
+}
+
 func TestRunExplainsUnavailableIPCService(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()

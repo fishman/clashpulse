@@ -46,3 +46,4 @@ func TestSnapshotClonesDiagnostics(t *testing.T) {
 		t.Fatal("IPC snapshot retained mutable diagnostic entry")
 	}
 }
+

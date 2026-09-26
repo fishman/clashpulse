@@ -313,6 +313,9 @@ func (s *runtimeService) run(ctx context.Context) error {
 			} else if record.scheduled {
 				if err != nil {
 					s.reportError("resource", err)
+				} else {
+					s.completeScheduledResourceRefresh()
+					s.publish()
 				}
 				s.subScheduler.WakeResources()
 			}

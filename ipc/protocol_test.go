@@ -72,12 +72,17 @@ func TestSnapshotRejectsInvalidSubscriptionPolicy(t *testing.T) {
 	}
 	for _, item := range []core.SubscriptionSnapshot{
 		{ID: "feed", Route: "remote"},
-		{ID: "feed", Route: "direct", RefreshIntervalSeconds: 86400*30 + 1},
-		{ID: "feed", Route: "direct", TimeoutSeconds: 301},
 	} {
 		if err := validateSnapshot(core.Snapshot{Subscriptions: []core.SubscriptionSnapshot{item}}); err == nil {
 			t.Fatal("invalid subscription policy escaped local IPC boundary")
 		}
+	}
+}
+
+func TestSnapshotAcceptsExistingLongSubscriptionPolicy(t *testing.T) {
+	snapshot := core.Snapshot{Subscriptions: []core.SubscriptionSnapshot{{ID: "feed", Route: "direct", RefreshIntervalSeconds: 31 * 86400, TimeoutSeconds: 301}}}
+	if err := validateSnapshot(snapshot); err != nil {
+		t.Fatalf("valid persisted subscription durations blocked IPC startup: %v", err)
 	}
 }
 

@@ -114,7 +114,7 @@ func Run(ctx context.Context, endpoint string) error {
 
 func keyForModelEvent(model Model, event *tcell.EventKey) string {
 	key := eventKeyName(event)
-	if event != nil && model.Modal != nil && event.Key() == tcell.KeyRune && (model.Modal.Form == nil || key != "space") {
+	if event != nil && model.Modal != nil && event.Key() == tcell.KeyRune && event.Modifiers()&tcell.ModCtrl == 0 && (model.Modal.Form == nil || key != "space") {
 		return event.Str()
 	}
 	return key

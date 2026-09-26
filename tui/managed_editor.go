@@ -131,8 +131,8 @@ func managedFormIntent(modal *Modal) (*ipc.Command, string) {
 				}
 				patch.Enabled = &enabled
 			case "interval":
-				if len(value) > 10 || !validSubscriptionNumber(value, 1, uint64(^uint32(0))) {
-					return nil, "Interval must be between 1 and 4294967295 seconds."
+				if !validSubscriptionNumber(value, 60, 86400*30) {
+					return nil, "Interval must be between 60 and 2592000 seconds."
 				}
 				interval, _ := strconv.ParseUint(value, 10, 32)
 				seconds := uint32(interval)

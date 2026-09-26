@@ -25,6 +25,15 @@ The GUI needs a graphical desktop session (X11 or Wayland on Linux). Its tray us
 
 In the GUI, add an HTTPS subscription, refresh it, then activate the downloaded profile. Open a second terminal for `./clashpulse tui`; the TUI connects to the running desktop service and does not start one itself. On Windows use `.\clashpulse.exe` and `.\clashpulse.exe tui`.
 
+Close the desktop before direct refresh; the command takes the same private-state lock and refuses concurrent service access:
+
+```sh
+./clashpulse refresh subscription <id>
+./clashpulse refresh resource <id>
+```
+
+Subscription refresh stores a validated snapshot but does not activate it. Resource refresh validates the candidate configuration before promotion; the next desktop start applies it.
+
 Press `?` in TUI views for keyboard help (`F1` inside editors), or `~` to view and scroll current-session activity; `q` closes either overlay without quitting. In the GUI, use Overview > View activity. Both activity views show only sanitized IPC diagnostics, not subscription URLs or credentials.
 
 Settings has Mihomo binary, System Proxy, Monitor, and DNS sections. Its sidebar becomes a dropdown when the sidebar and selected section cannot fit side by side.

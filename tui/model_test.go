@@ -380,6 +380,19 @@ func TestResourceFormToggleRetainsPrivateSource(t *testing.T) {
 	}
 }
 
+func TestResourceFormRejectsIntervalOutsideIPCRange(t *testing.T) {
+	for _, seconds := range []string{"1", "2592001"} {
+		model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Resources: []core.ResourceSnapshot{{ID: "geo", Kind: "geosite.dat", Format: "dat", Enabled: true}}}}).selectTab(TabResources)
+		model.Selection[TabResources] = "resource:geo"
+		model, _, _ = model.HandleKey("e")
+		model = setFormText(t, model, "interval", seconds)
+		model, command, _ := model.HandleKey("ctrl+s")
+		if command != nil || model.Modal == nil || model.Notice == "" {
+			t.Fatalf("resource interval %s reached IPC or closed form: %#v", seconds, command)
+		}
+	}
+}
+
 func TestFilterFormToggleRetainsSource(t *testing.T) {
 	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Filters: []core.FilterSnapshot{{ID: "ads", ResourceID: "geo", Format: "yaml", Target: "DIRECT", Enabled: true}}}})
 	model.Tab = TabFilters

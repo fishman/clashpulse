@@ -177,6 +177,24 @@ func TestRenderLogKeepsBottomStatus(t *testing.T) {
 	}
 }
 
+func TestRenderShortNarrowLogShowsLatestMessage(t *testing.T) {
+	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Diagnostics: []core.DiagnosticSnapshot{{At: 100, Severity: "error", Kind: "subscription", SourceID: "feed", Message: "HTTP 406"}}}})
+	model, _, _ = model.HandleKey("~")
+	rows := mockRender(t, model, 30, 6)
+	if !strings.Contains(rows[2], "HTTP 406") || strings.Contains(rows[2], "No session diagnostics") || !strings.Contains(rows[5], "IPC connected") {
+		t.Fatalf("short log lost the reported error: %q", rows)
+	}
+}
+
+func TestRenderFiveRowLogKeepsLatestDiagnostic(t *testing.T) {
+	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Diagnostics: []core.DiagnosticSnapshot{{At: 100, Severity: "error", Kind: "subscription", SourceID: "feed", Message: "HTTP 406"}}}})
+	model, _, _ = model.HandleKey("~")
+	rows := mockRender(t, model, 30, 5)
+	if !strings.Contains(rows[2], "HTTP 406") {
+		t.Fatalf("five-row log lost the latest message: %q", rows)
+	}
+}
+
 func TestRenderHelpOverlayKeepsBottomStatus(t *testing.T) {
 	model := NewModel().selectTab(TabSettings)
 	model, _, _ = model.HandleKey("?")

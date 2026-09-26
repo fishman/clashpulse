@@ -212,8 +212,22 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 func drawLog(lines []renderLine, width, height int, model Model) {
 	diagnostics := model.snapshot.Snapshot.Diagnostics
 	setLine(lines, 1, "Session log ("+itoa(len(diagnostics))+")", roleAccent)
-	rows := height - 5
-	if rows <= 0 {
+	if height < 3 {
+		return
+	}
+	rows := max(1, height-5)
+	if len(diagnostics) == 0 {
+		setLine(lines, 2, "No session diagnostics.", roleMuted)
+		return
+	}
+	if rows == 1 {
+		index := max(0, min(len(diagnostics)-1-model.LogOffset, len(diagnostics)-1))
+		diagnostic := diagnostics[index]
+		role := roleBase
+		if diagnostic.Severity == "error" {
+			role = roleError
+		}
+		setLine(lines, 2, diagnostic.Severity+": "+diagnostic.Message, role)
 		return
 	}
 	perEntry := 1
@@ -226,10 +240,6 @@ func drawLog(lines []renderLine, width, height int, model Model) {
 		start = 0
 	}
 	end := min(start+visible, len(diagnostics))
-	if start == end {
-		setLine(lines, 2, "No session diagnostics.", roleMuted)
-		return
-	}
 	y := 2
 	for _, diagnostic := range diagnostics[start:end] {
 		role := roleBase
