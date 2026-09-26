@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -182,7 +183,7 @@ func TestRefreshAndDownloadWithoutIDRunAllEnabledSources(t *testing.T) {
 
 func TestShowResponseFlagPrintsOptInHTTPBody(t *testing.T) {
 	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
-	status := download.StatusError{Code: 403, ResponseBody: "gateway denied"}
+	status := download.StatusError{Code: http.StatusOK, ResponseBody: "gateway denied"}
 	code := runMainContextWithRefreshOptions(context.Background(), []string{"refresh", "subscription", "feed", "--show-response"}, stdout, stderr,
 		func(context.Context) error { t.Fatal("response inspection started the service"); return nil },
 		func(context.Context, func(context.Context) error) error {
@@ -193,9 +194,9 @@ func TestShowResponseFlagPrintsOptInHTTPBody(t *testing.T) {
 			if !show || kind != "subscription" || id != "feed" {
 				t.Fatalf("refresh options = %q, %q, show=%t", kind, id, show)
 			}
-			return fmt.Errorf("clashpulse: refresh subscription feed: %w", status)
+			return fmt.Errorf("clashpulse: refresh subscription feed: invalid proxy profile: %w", status)
 		})
-	if code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "HTTP 403") || !strings.Contains(stderr.String(), "gateway denied") {
+	if code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "HTTP 200 OK") || !strings.Contains(stderr.String(), "gateway denied") {
 		t.Fatalf("show-response output = code %d, stdout %q, stderr %q", code, stdout.String(), stderr.String())
 	}
 }

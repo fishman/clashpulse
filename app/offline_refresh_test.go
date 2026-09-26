@@ -122,3 +122,34 @@ func TestDirectRefreshFailurePreservesHTTPStatus(t *testing.T) {
 		t.Fatalf("HTTP status was hidden from refresh failure: %v", err)
 	}
 }
+
+func TestRefreshAtShowResponseIncludesHTTP200ProfileOnFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("not a proxy profile\n"))
+	}))
+	defer server.Close()
+	configDir, stateDir := t.TempDir(), t.TempDir()
+	if err := privateDirectory(configDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Seed(configDir); err != nil {
+		t.Fatal(err)
+	}
+	initial, err := config.Load(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name, source := "Feed", server.URL+"/profile"
+	enabled, allowHTTP := true, true
+	interval, timeout := time.Hour, 3*time.Second
+	if err := config.PatchSubscription(filepath.Join(configDir, "subscriptions.toml"), initial, "feed", config.SubscriptionEdit{
+		Name: &name, URL: &source, Enabled: &enabled, AllowHTTP: &allowHTTP, RefreshInterval: &interval, Timeout: &timeout,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	err = RefreshAtWithOptions(t.Context(), configDir, stateDir, "subscription", "feed", RefreshOptions{ShowResponse: true})
+	response, ok := download.HTTPResponseFrom(err)
+	if err == nil || !ok || response.Code != http.StatusOK || response.ResponseBody != "not a proxy profile\n" {
+		t.Fatalf("successful HTTP profile response was lost from validation failure: %+v, %v", response, err)
+	}
+}

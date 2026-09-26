@@ -146,7 +146,7 @@ func (s *Service) refresh(ctx context.Context, id string, supplied *config.Subsc
 	}
 	if !validProfileYAML(profile) {
 		s.recordFailure(id, checkedAt, ErrInvalidProfile)
-		return Result{}, ErrInvalidProfile
+		return Result{}, s.responseFailure(ErrInvalidProfile, response)
 	}
 	candidate, err := s.options.Render(operationCtx, bytes.Clone(profile))
 	if err != nil {
@@ -154,14 +154,14 @@ func (s *Service) refresh(ctx context.Context, id string, supplied *config.Subsc
 			return Result{}, contextErr
 		}
 		s.recordFailure(id, checkedAt, ErrRender)
-		return Result{}, ErrRender
+		return Result{}, s.responseFailure(ErrRender, response)
 	}
 	if contextErr := s.recordContextFailure(operationCtx, id, checkedAt); contextErr != nil {
 		return Result{}, contextErr
 	}
 	if len(candidate) == 0 || int64(len(candidate)) > maxCandidateBytes {
 		s.recordFailure(id, checkedAt, ErrRender)
-		return Result{}, ErrRender
+		return Result{}, s.responseFailure(ErrRender, response)
 	}
 	candidate = bytes.Clone(candidate)
 	if err := s.options.Validate(operationCtx, bytes.Clone(candidate)); err != nil {
@@ -169,23 +169,23 @@ func (s *Service) refresh(ctx context.Context, id string, supplied *config.Subsc
 			return Result{}, contextErr
 		}
 		s.recordFailure(id, checkedAt, ErrValidation)
-		return Result{}, ErrValidation
+		return Result{}, s.responseFailure(ErrValidation, response)
 	}
 	if contextErr := s.recordContextFailure(operationCtx, id, checkedAt); contextErr != nil {
 		return Result{}, contextErr
 	}
 	if !s.sourceIsCurrent(record.Subscription) {
-		return Result{}, ErrSourceChanged
+		return Result{}, s.responseFailure(ErrSourceChanged, response)
 	}
 	previous, err := s.store.promote(id, profile, candidate, checkedAt, response.ETag, response.LastModified, usage)
 	if err != nil {
-		return Result{}, ErrStore
+		return Result{}, s.responseFailure(ErrStore, response)
 	}
 	if !s.sourceIsCurrent(record.Subscription) {
 		if rollbackErr := s.store.rollbackPromotion(id, previous, profileHash, hashBytes(candidate)); rollbackErr != nil {
-			return Result{}, errors.Join(ErrSourceChanged, ErrStore)
+			return Result{}, errors.Join(s.responseFailure(ErrSourceChanged, response), ErrStore)
 		}
-		return Result{}, ErrSourceChanged
+		return Result{}, s.responseFailure(ErrSourceChanged, response)
 	}
 	s.store.finalizePromotion(id)
 	if s.options.OnChange != nil {
@@ -201,6 +201,13 @@ func (s *Service) recordContextFailure(ctx context.Context, id string, checkedAt
 		return err
 	}
 	return nil
+}
+
+func (s *Service) responseFailure(err error, response download.Response) error {
+	if !s.options.CaptureErrorBody {
+		return err
+	}
+	return errors.Join(err, download.StatusError{Code: response.StatusCode, ResponseBody: response.DiagnosticBody})
 }
 
 func (s *Service) installLatestLocked(subscription config.Subscription) error {

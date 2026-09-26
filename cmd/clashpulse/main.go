@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -105,12 +106,16 @@ func runRefreshCommandWithOptions(ctx context.Context, args []string, stdout io.
 	}
 	if err := refresh(ctx, kind, id, showResponse); err != nil {
 		if showResponse {
-			if status, ok := download.StatusErrorFrom(err); ok {
-				body := status.ResponseBody
+			if response, ok := download.HTTPResponseFrom(err); ok {
+				body := response.ResponseBody
 				if body == "" {
 					body = "<empty>"
 				}
-				return fmt.Errorf("%w\nHTTP error response body (bounded):\n%s", err, body)
+				status := fmt.Sprintf("HTTP %d", response.Code)
+				if reason := http.StatusText(response.Code); reason != "" {
+					status += " " + reason
+				}
+				return fmt.Errorf("%w\n%s response body (bounded):\n%s", err, status, body)
 			}
 		}
 		return err

@@ -403,3 +403,15 @@ func TestFetchCapturesBoundedPrintableErrorBodyOnlyWhenRequested(t *testing.T) {
 		t.Fatalf("opt-in response body was not bounded printable text: %+v, %v", status, err)
 	}
 }
+
+func TestHTTPResponseFromAcceptsSuccessStatusForLaterFailure(t *testing.T) {
+	response := StatusError{Code: http.StatusOK, ResponseBody: "invalid profile"}
+	err := fmt.Errorf("candidate validation failed: %w", response)
+	got, ok := HTTPResponseFrom(err)
+	if !ok || got.Code != http.StatusOK || got.ResponseBody != "invalid profile" {
+		t.Fatalf("HTTP response details were lost: %+v, %v", got, ok)
+	}
+	if _, ok := StatusErrorFrom(err); ok {
+		t.Fatal("successful response was classified as an HTTP error status")
+	}
+}

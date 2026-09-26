@@ -180,6 +180,12 @@ func (s *runtimeService) resourceRefreshFailure(snapshot config.Snapshot, ids []
 			} else if status.LastFailure == resources.ErrPinMismatch.Error() {
 				message = "SHA-256 pin mismatch"
 			}
+			if len(ids) == 1 {
+				if response, found := download.HTTPResponseFrom(cause); found && !response.Valid() {
+					failures = append(failures, refreshFailure{message: fmt.Sprintf("clashpulse: refresh resource %s: %s", id, message), status: response})
+					continue
+				}
+			}
 			failures = append(failures, fmt.Errorf("clashpulse: refresh resource %s: %s", id, message))
 		}
 		if len(failures) > 0 {
@@ -212,8 +218,10 @@ type refreshFailure struct {
 
 func (e refreshFailure) Error() string { return e.message }
 func (e refreshFailure) Unwrap() error { return e.status }
+
 func directRefreshFailure(kind, id string, err error) error {
 	status, hasStatus := download.StatusErrorFrom(err)
+	response, hasResponse := download.HTTPResponseFrom(err)
 	message := safeDiagnostic("refresh_"+kind, id, err).Message
 	if hasStatus {
 		message = httpStatusMessage(status)
@@ -223,6 +231,8 @@ func directRefreshFailure(kind, id string, err error) error {
 			message = "source is not available"
 		case errors.Is(err, subscriptions.ErrNoSnapshot):
 			message = "no active validated profile for resource validation"
+		case errors.Is(err, subscriptions.ErrRender):
+			message = "candidate profile generation failed"
 		case errors.Is(err, resources.ErrPinMismatch):
 			message = "SHA-256 pin mismatch"
 		}
@@ -236,8 +246,8 @@ func directRefreshFailure(kind, id string, err error) error {
 		scope += "s"
 	}
 	fullMessage := fmt.Sprintf("clashpulse: refresh %s: %s", scope, message)
-	if hasStatus {
-		return refreshFailure{message: fullMessage, status: status}
+	if hasResponse {
+		return refreshFailure{message: fullMessage, status: response}
 	}
 	return errors.New(fullMessage)
 }

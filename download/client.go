@@ -40,6 +40,7 @@ type Request struct {
 type Response struct {
 	StatusCode           int
 	Body                 []byte
+	DiagnosticBody       string
 	ETag                 string
 	LastModified         string
 	SubscriptionUserInfo string
@@ -55,17 +56,23 @@ func (e StatusError) Error() string { return fmt.Sprintf("HTTP %d", e.Code) }
 
 func (e StatusError) Valid() bool { return e.Code >= 400 && e.Code <= 599 }
 
-// StatusErrorFrom extracts a valid status from wrapped value or pointer errors.
-func StatusErrorFrom(err error) (StatusError, bool) {
+// HTTPResponseFrom extracts captured response details from a wrapped error.
+func HTTPResponseFrom(err error) (StatusError, bool) {
 	var status StatusError
-	if errors.As(err, &status) && status.Valid() {
+	if errors.As(err, &status) && status.Code >= 100 && status.Code <= 599 {
 		return status, true
 	}
 	var pointer *StatusError
-	if errors.As(err, &pointer) && pointer != nil && pointer.Valid() {
+	if errors.As(err, &pointer) && pointer != nil && pointer.Code >= 100 && pointer.Code <= 599 {
 		return *pointer, true
 	}
 	return StatusError{}, false
+}
+
+// StatusErrorFrom extracts only 4xx and 5xx statuses.
+func StatusErrorFrom(err error) (StatusError, bool) {
+	status, ok := HTTPResponseFrom(err)
+	return status, ok && status.Valid()
 }
 
 // ParseStatus accepts only bounded numeric error statuses, not arbitrary server text.
@@ -171,10 +178,15 @@ func (c *Client) Fetch(ctx context.Context, req Request) (Response, error) {
 		if err != nil {
 			return Response{}, err
 		}
+		diagnosticBody := ""
+		if req.CaptureErrorBody || c.captureErrorBody {
+			diagnosticBody = captureErrorResponse(bytes.NewReader(body))
+		}
 		etag, lastModified := scopedValidators(response.Header, current, origin)
 		return Response{
 			StatusCode:           response.StatusCode,
 			Body:                 body,
+			DiagnosticBody:       diagnosticBody,
 			ETag:                 etag,
 			LastModified:         lastModified,
 			SubscriptionUserInfo: boundedUsageHeader(response.Header.Get("Subscription-Userinfo")),

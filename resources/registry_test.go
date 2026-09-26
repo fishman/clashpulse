@@ -414,3 +414,24 @@ func TestPromotionsPruneSupersededGenerationsAndRetainRunningHome(t *testing.T) 
 		t.Fatalf("unmanaged generation-root entry was removed: info=%v, err=%v", info, err)
 	}
 }
+
+func TestStageDueRetainsCapturedSuccessfulResponseOnValidationFailure(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("not a rule-set"))
+	}))
+	defer server.Close()
+	client := download.NewClient(func(download.Route) (http.RoundTripper, error) { return server.Client().Transport, nil })
+	client.SetCaptureErrorBody(true)
+	registry, err := NewRegistry(t.TempDir(), client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := config.Snapshot{Resources: []config.Resource{{
+		ID: "domains", Kind: config.ResourceRuleSet, Format: config.FormatYAML, RuleType: config.RuleDomain, URL: server.URL, Enabled: true,
+	}}}
+	_, err = registry.StageDue(context.Background(), snapshot, download.Direct, []string{"domains"})
+	response, ok := download.HTTPResponseFrom(err)
+	if err == nil || !ok || response.Code != http.StatusOK || response.ResponseBody != "not a rule-set" {
+		t.Fatalf("successful HTTP response disappeared from resource validation error: %+v, %v", response, err)
+	}
+}

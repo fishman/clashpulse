@@ -35,7 +35,7 @@ Close the desktop before direct refresh; the command takes the same private-stat
 
 Without a kind, refresh updates all enabled subscriptions and resources. Without an ID, it updates every enabled source of that kind. Subscription refresh stores validated snapshots but does not activate them. Resource refresh validates the candidate configuration before promotion; the next desktop start applies it.
 
-Add `--show-response` to print up to 4 KiB of printable HTTP error response text to local stderr. The URL and body remain hidden by default.
+Add `--show-response` to print up to 4 KiB of printable HTTP response text when a refresh fails. Output is local stderr only; URLs and response bodies stay hidden by default.
 
 Press `?` in TUI views for keyboard help (`F1` inside editors), or `~` to view and scroll current-session activity; `q` closes either overlay without quitting. In the GUI, use Overview > View activity. Both activity views show only sanitized IPC diagnostics, not subscription URLs or credentials.
 

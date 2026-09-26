@@ -210,18 +210,25 @@ func prepareResources(ctx context.Context, registry *Registry, snapshot config.S
 			prepared[resource.ID] = item
 			continue
 		}
-		body, etag, lastModified, err := stagedBody(ctx, registry, resource, route, maxBytes, base, previousDirectory)
+		body, etag, lastModified, responseCode, responseBody, err := stagedBody(ctx, registry, resource, route, maxBytes, base, previousDirectory)
 		if err != nil {
 			failures = append(failures, registry.recordFailure(resource.ID, err))
 			continue
 		}
 		if err := Validate(resource, body); err != nil {
+			if responseBody != "" {
+				err = errors.Join(err, download.StatusError{Code: responseCode, ResponseBody: responseBody})
+			}
 			failures = append(failures, registry.recordFailure(resource.ID, err))
 			continue
 		}
 		sum := digest(body)
 		if resource.SHA256 != "" && !strings.EqualFold(resource.SHA256, sum) {
-			failures = append(failures, registry.recordFailure(resource.ID, ErrPinMismatch))
+			failure := error(ErrPinMismatch)
+			if responseBody != "" {
+				failure = errors.Join(failure, download.StatusError{Code: responseCode, ResponseBody: responseBody})
+			}
+			failures = append(failures, registry.recordFailure(resource.ID, failure))
 			continue
 		}
 		checkedAt := time.Now().UTC().Unix()
@@ -268,10 +275,10 @@ func prepareCommittedResource(resource config.Resource, state resourceState, pre
 	return preparedResource{resource: resource, state: state, sourcePath: path}, nil
 }
 
-func stagedBody(ctx context.Context, registry *Registry, resource config.Resource, route download.Route, maxBytes int64, base stateDocument, previousDirectory string) ([]byte, string, string, error) {
+func stagedBody(ctx context.Context, registry *Registry, resource config.Resource, route download.Route, maxBytes int64, base stateDocument, previousDirectory string) ([]byte, string, string, int, string, error) {
 	if !isRemote(resource.URL) {
 		body, err := readLocal(resource.URL, maxBytes)
-		return body, "", "", err
+		return body, "", "", 0, "", err
 	}
 	old := base.Resources[resource.ID]
 	sourceHash := digest([]byte(resource.URL))
@@ -292,19 +299,19 @@ func stagedBody(ctx context.Context, registry *Registry, resource config.Resourc
 		LastModified: old.LastModified, MaxBytes: maxBytes,
 	})
 	if err != nil {
-		return nil, "", "", err
+		return nil, "", "", 0, "", err
 	}
 	if response.StatusCode == 304 {
 		if previousDirectory == "" || old.SourceHash != sourceHash || old.SHA256 == "" {
-			return nil, "", "", fmt.Errorf("conditional response has no verified cached resource")
+			return nil, "", "", response.StatusCode, response.DiagnosticBody, fmt.Errorf("conditional response has no verified cached resource")
 		}
 		oldPath := filepath.Join(previousDirectory, filename(resource))
 		body, err := readManaged(oldPath, maxBytes)
 		if err != nil || digest(body) != old.SHA256 {
-			return nil, "", "", fmt.Errorf("conditional response has no verified cached resource")
+			return nil, "", "", response.StatusCode, response.DiagnosticBody, fmt.Errorf("conditional response has no verified cached resource")
 		}
 		if resource.SHA256 != "" && !strings.EqualFold(resource.SHA256, old.SHA256) {
-			return nil, "", "", ErrPinMismatch
+			return nil, "", "", response.StatusCode, response.DiagnosticBody, ErrPinMismatch
 		}
 		etag, lastModified := old.ETag, old.LastModified
 		if response.ETag != "" {
@@ -313,9 +320,9 @@ func stagedBody(ctx context.Context, registry *Registry, resource config.Resourc
 		if response.LastModified != "" {
 			lastModified = response.LastModified
 		}
-		return body, etag, lastModified, nil
+		return body, etag, lastModified, response.StatusCode, response.DiagnosticBody, nil
 	}
-	return response.Body, response.ETag, response.LastModified, nil
+	return response.Body, response.ETag, response.LastModified, response.StatusCode, response.DiagnosticBody, nil
 }
 
 // Changed reports whether enabled resource identities or bytes differ from the
