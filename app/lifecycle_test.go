@@ -303,6 +303,17 @@ func TestDownloadedProfileActivatesAfterDesktopStarts(t *testing.T) {
 	if err := config.Write(filepath.Join(configDir, "subscriptions.toml"), []byte(fmt.Sprintf("[[subscription]]\nid = \"daily\"\nurl = %q\nenabled = true\nallow_http = true\n", server.URL+"/profile?token=private"))); err != nil {
 		t.Fatal(err)
 	}
+	resourceFile := filepath.Join(root, "ads.yaml")
+	if err := os.WriteFile(resourceFile, []byte("payload:\n  - example.com\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	resourcesTOML := fmt.Sprintf("[[resource]]\nid = \"ads\"\nkind = \"rule-set\"\nformat = \"yaml\"\nrule_type = \"domain\"\nurl = %q\nenabled = true\n", resourceFile)
+	if err := config.Write(filepath.Join(configDir, "resources.toml"), []byte(resourcesTOML)); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Write(filepath.Join(configDir, "filters.toml"), []byte("[[filter]]\nid = \"ads\"\nresource = \"ads\"\nformat = \"yaml\"\ntarget = \"select-main\"\nenabled = true\n")); err != nil {
+		t.Fatal(err)
+	}
 	if err := DownloadAtWithOptions(t.Context(), configDir, stateDir, "daily", RefreshOptions{}); err != nil {
 		t.Fatalf("offline download: %v", err)
 	}
@@ -344,7 +355,7 @@ func TestDownloadedProfileActivatesAfterDesktopStarts(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := waitAppSnapshot(t, ctx, client, func(state core.Snapshot) bool {
-		return len(state.Subscriptions) == 1 && state.Subscriptions[0].Active && len(state.Groups) == 1 && len(state.Jobs) == 0
+		return len(state.Subscriptions) == 1 && state.Subscriptions[0].Active && len(state.Groups) == 1 && len(state.Resources) == 1 && state.Resources[0].Validated && len(state.Jobs) == 0
 	})
 	if state.Groups[0].Label != "select-main" {
 		t.Fatalf("activated group missing: %+v", state.Groups)

@@ -20,6 +20,7 @@ import (
 	"github.com/fishman/clashpulse/download"
 	"github.com/fishman/clashpulse/mihomo"
 	"github.com/fishman/clashpulse/monitor"
+	"github.com/fishman/clashpulse/resources"
 )
 
 func (s *runtimeService) selectedCapability(ctx context.Context) (mihomo.Capability, error) {
@@ -121,12 +122,13 @@ func (s *runtimeService) validateWithHome(ctx context.Context, candidate []byte,
 }
 
 type runtimeBackup struct {
-	generated   []byte
-	cap         mihomo.Capability
-	home        string
-	running     bool
-	proxyActive bool
-	selected    map[string]string
+	generated    []byte
+	cap          mihomo.Capability
+	home         string
+	running      bool
+	proxyActive  bool
+	selected     map[string]string
+	resourcePlan *resources.Plan
 }
 
 func (s *runtimeService) applyGenerated(ctx context.Context, profile []byte) error {
@@ -136,26 +138,76 @@ func (s *runtimeService) applyGenerated(ctx context.Context, profile []byte) err
 	}
 	intent := s.store.Snapshot()
 	home, paths, err := s.registry.PathsWithHome(intent)
+	if err == nil {
+		candidate, err := s.renderWithHome(ctx, profile, intent, home, paths, capability)
+		if err != nil {
+			return err
+		}
+		return s.applyActivationCandidate(ctx, candidate, capability, home, nil)
+	}
+	plan, err := s.registry.Stage(ctx, intent, download.Direct)
 	if err != nil {
 		return err
 	}
-	candidate, err := s.renderWithHome(ctx, profile, intent, home, paths, capability)
-	if err != nil {
+	committed := false
+	defer func() {
+		if !committed {
+			_ = plan.Abort()
+		}
+	}()
+	var candidate []byte
+	if err := plan.Validate(func(home string, paths map[string]string) error {
+		candidate, err = s.validatedCandidate(ctx, profile, intent, home, paths, capability)
+		return err
+	}); err != nil {
 		return err
 	}
-	s.activationBackup = &runtimeBackup{generated: bytes.Clone(s.generated), cap: s.cap, home: s.resourceHome, running: s.controller != nil, proxyActive: s.proxyActive, selected: selectedGroups(s.groups)}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if _, err := plan.Commit(); err != nil {
+		return err
+	}
+	committed = true
+	s.resourceDirty.Store(true)
+	if err := s.applyActivationCandidate(ctx, candidate, capability, plan.Home(), plan); err != nil {
+		s.resourceDirty.Store(true)
+		if rollbackErr := plan.Rollback(); rollbackErr != nil {
+			return fmt.Errorf("clashpulse: resource rollback failed during activation")
+		}
+		if abortErr := plan.Abort(); abortErr != nil {
+			return fmt.Errorf("clashpulse: resource cleanup failed during activation")
+		}
+		return err
+	}
+	return nil
+}
+
+func (s *runtimeService) applyActivationCandidate(ctx context.Context, candidate []byte, capability mihomo.Capability, home string, plan *resources.Plan) error {
+	s.activationBackup = &runtimeBackup{generated: bytes.Clone(s.generated), cap: s.cap, home: s.resourceHome, running: s.controller != nil, proxyActive: s.proxyActive, selected: selectedGroups(s.groups), resourcePlan: plan}
 	if err := s.applyCandidate(ctx, candidate, capability, home); err != nil {
 		s.activationBackup = nil
 		return err
 	}
 	return nil
 }
-
-func (s *runtimeService) restoreActivation(ctx context.Context, previousProfile []byte) error {
+func (s *runtimeService) restoreActivation(ctx context.Context, previousProfile []byte) (result error) {
 	backup := s.activationBackup
 	s.activationBackup = nil
 	if backup == nil {
 		return fmt.Errorf("clashpulse: no prior runtime was captured")
+	}
+	if backup.resourcePlan != nil {
+		defer func() {
+			s.resourceDirty.Store(true)
+			if err := backup.resourcePlan.Rollback(); err != nil {
+				result = errors.Join(result, fmt.Errorf("clashpulse: resource rollback failed during activation restore"))
+				return
+			}
+			if err := backup.resourcePlan.Abort(); err != nil {
+				result = errors.Join(result, fmt.Errorf("clashpulse: resource cleanup failed during activation restore"))
+			}
+		}()
 	}
 	if !backup.running {
 		if err := s.stop(ctx); err != nil {
