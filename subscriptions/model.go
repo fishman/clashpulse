@@ -129,7 +129,7 @@ func NewService(store *Store, options Options) (*Service, error) {
 		return nil, ErrInvalid
 	}
 	if options.MaxBytes == 0 {
-		options.MaxBytes = defaultMaxProfileBytes
+		options.MaxBytes = DefaultMaxProfileBytes
 	}
 	if options.MaxBytes < 0 || options.MaxBytes > maxProfileBytes {
 		return nil, ErrInvalid

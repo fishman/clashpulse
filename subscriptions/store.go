@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	defaultMaxProfileBytes int64 = 10 << 20
+	DefaultMaxProfileBytes int64 = 10 << 20
 	maxProfileBytes        int64 = 32 << 20
 	maxCandidateBytes      int64 = 64 << 20
 )
