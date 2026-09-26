@@ -21,24 +21,26 @@ import (
 // the selected executable. Commit is impossible until this callback succeeds.
 type CandidateValidator func(home string, paths map[string]string) error
 
-// Plan is one immutable staged generation. Stage never changes active resource
-// files or metadata. The caller validates the complete candidate configuration
-// before Commit atomically changes the active-generation pointer.
+// Plan stages candidate resource bytes without changing the committed files.
+// Commit promotes them under stable names and leaves a recovery journal until
+// Finalize acknowledges that the runtime accepted the replacement.
 type Plan struct {
-	mu         sync.Mutex
-	registry   *Registry
-	generation string
-	directory  string
-	maxBytes   int64
-	paths      map[string]string
-	resources  map[string]resourceState
-	base       stateDocument
-	changed    bool
-	validated  bool
-	committed  bool
-	commitID   string
-	rolledBack bool
-	closed     bool
+	mu             sync.Mutex
+	registry       *Registry
+	stageID        string
+	directory      string
+	transactionDir string
+	maxBytes       int64
+	paths          map[string]string
+	resources      map[string]resourceState
+	base           stateDocument
+	changed        bool
+	validated      bool
+	committed      bool
+	commitID       string
+	rolledBack     bool
+	finalized      bool
+	closed         bool
 }
 
 // Stage refreshes every enabled resource and is intended for startup or binary
@@ -88,57 +90,41 @@ func (r *Registry) stageDue(ctx context.Context, snapshot config.Snapshot, route
 	if err != nil {
 		return nil, err
 	}
-
 	previousDirectory := ""
-	if base.Generation != "" {
-		previousDirectory = filepath.Join(r.root, base.Generation)
+	if len(base.Resources) > 0 {
+		previousDirectory = r.home
 	}
 	prepared, err := prepareResources(ctx, r, snapshot, route, maxBytes, base, previousDirectory, due)
 	if err != nil {
 		return nil, err
 	}
 	plan := &Plan{
-		registry: r, maxBytes: maxBytes, base: cloneState(base),
+		registry: r, maxBytes: maxBytes, base: cloneState(base), directory: r.home,
 		paths: make(map[string]string, len(prepared)), resources: make(map[string]resourceState, len(prepared)),
 		changed: !sameResourceGeneration(prepared, base.Resources),
 	}
 	if !plan.changed {
-		plan.generation = base.Generation
-		if base.Generation != "" {
-			plan.directory = previousDirectory
-		}
 		for id, item := range prepared {
-			plan.paths[id] = filepath.Join(plan.directory, filename(item.resource))
+			plan.paths[id] = filepath.Join(r.home, filename(item.resource))
 			plan.resources[id] = item.state
 		}
 		return plan, nil
 	}
-	generation, err := newGenerationID()
+	stageDir, err := makePrivateDir(r.home, ".resource-stage-")
 	if err != nil {
-		return nil, fmt.Errorf("resources: create generation identity: %w", err)
+		return nil, fmt.Errorf("resources: create staged resource directory: %w", err)
 	}
+	plan.stageID = filepath.Base(stageDir)
+	plan.directory = stageDir
 	r.mu.Lock()
-	if err := verifyRealDirectory(r.root, r.home); err != nil {
-		r.mu.Unlock()
-		return nil, fmt.Errorf("resources: generation root is unsafe: %w", err)
-	}
-	directory := filepath.Join(r.root, generation)
-	if err := os.Mkdir(directory, 0o700); err != nil {
-		r.mu.Unlock()
-		return nil, fmt.Errorf("resources: create staged generation: %w", err)
-	}
-	r.pending[generation] = struct{}{}
+	r.pending[plan.stageID] = struct{}{}
 	r.mu.Unlock()
-	plan.generation = generation
-	plan.directory = directory
-	failed := true
+	staged := false
 	defer func() {
-		if failed {
+		if !staged {
+			_ = os.RemoveAll(stageDir)
 			r.mu.Lock()
-			if verifyRealDirectory(r.root, r.home) == nil && verifyRealDirectory(directory, r.root) == nil {
-				_ = os.RemoveAll(directory)
-			}
-			delete(r.pending, generation)
+			delete(r.pending, plan.stageID)
 			r.mu.Unlock()
 		}
 	}()
@@ -150,8 +136,8 @@ func (r *Registry) stageDue(ctx context.Context, snapshot config.Snapshot, route
 				return nil, fmt.Errorf("resource %q committed copy changed while staging", id)
 			}
 		}
-		path := filepath.Join(directory, filename(item.resource))
-		if err := writeStaged(path, directory, body); err != nil {
+		path := filepath.Join(stageDir, filename(item.resource))
+		if err := writeStaged(path, stageDir, body); err != nil {
 			return nil, fmt.Errorf("resource %q: %w", id, err)
 		}
 		if err := os.Chmod(path, 0o400); err != nil {
@@ -160,7 +146,7 @@ func (r *Registry) stageDue(ctx context.Context, snapshot config.Snapshot, route
 		plan.paths[id] = path
 		plan.resources[id] = item.state
 	}
-	failed = false
+	staged = true
 	return plan, nil
 }
 
@@ -174,13 +160,14 @@ func (r *Registry) stageSnapshot(snapshot config.Snapshot) (int64, stateDocument
 	if err != nil {
 		return 0, stateDocument{}, err
 	}
-	if base.Generation != r.active.Generation || base.CommitID != r.active.CommitID {
-		return 0, stateDocument{}, fmt.Errorf("resources: active generation changed outside registry")
+	if base.Version != r.active.Version || base.CommitID != r.active.CommitID {
+		return 0, stateDocument{}, fmt.Errorf("resources: active manifest changed outside registry")
 	}
-	if base.Generation != "" {
-		if err := verifyRealDirectory(filepath.Join(r.root, base.Generation), r.root); err != nil {
-			return 0, stateDocument{}, err
-		}
+	if base.Version != 2 {
+		return 0, stateDocument{}, fmt.Errorf("resources: legacy manifest requires migration")
+	}
+	if err := ensureRoot(r.home); err != nil {
+		return 0, stateDocument{}, err
 	}
 	return r.maxBytes, base, nil
 }
@@ -349,11 +336,13 @@ func sameResourceGeneration(next map[string]preparedResource, active map[string]
 	return true
 }
 
-// Home returns this candidate's Mihomo data home. Fixed-name geodata and
-// registry-controlled provider files all live directly in this directory.
+// Home returns the staged candidate home, or the stable root after commit.
 func (p *Plan) Home() string {
 	if p == nil {
 		return ""
+	}
+	if p.committed {
+		return p.registry.home
 	}
 	return p.directory
 }
@@ -404,8 +393,7 @@ func (p *Plan) ValidateResources() error {
 	return p.Validate(func(string, map[string]string) error { return nil })
 }
 
-// Commit atomically selects this generation after resource or candidate validation.
-// The current and prior generations remain available to the runtime and rollback.
+// Commit promotes the complete file set and leaves rollback data until Finalize.
 func (p *Plan) Commit() (map[string]string, error) {
 	if p == nil {
 		return nil, fmt.Errorf("resources: nil plan")
@@ -428,62 +416,45 @@ func (p *Plan) Commit() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if current.Generation != p.base.Generation || current.CommitID != p.base.CommitID {
-		return nil, fmt.Errorf("resources: active generation changed while candidate was being validated")
-	}
-	if p.changed {
-		if err := r.collectOldGenerationsLocked(current.Generation, p.generation); err != nil {
-			return nil, err
-		}
+	if current.Version != p.base.Version || current.CommitID != p.base.CommitID {
+		return nil, fmt.Errorf("resources: active manifest changed while candidate was being validated")
 	}
 	commitID, err := newCommitID()
 	if err != nil {
 		return nil, fmt.Errorf("resources: create commit identity: %w", err)
 	}
-	document := stateDocument{Version: 1, Generation: p.generation, CommitID: commitID, Resources: cloneResourceStates(p.resources)}
-	if err := writeStateAtomic(filepath.Join(r.home, stateFileName), r.home, document); err != nil {
+	document := stateDocument{Version: 2, CommitID: commitID, Resources: cloneResourceStates(p.resources)}
+	if p.changed {
+		p.transactionDir, err = r.promote(current, document, p.paths, false)
+	} else {
+		err = writeStateAtomic(filepath.Join(r.home, stateFileName), r.home, document)
+	}
+	if err != nil {
 		return nil, err
 	}
 	r.active = document
-	delete(r.pending, p.generation)
 	p.commitID = commitID
 	p.committed = true
-	return clonePaths(p.paths), nil
+	stablePaths := make(map[string]string, len(p.resources))
+	for id, state := range p.resources {
+		stablePaths[id] = filepath.Join(r.home, resourceFilename(id, state))
+	}
+	p.paths = stablePaths
+	return clonePaths(stablePaths), nil
 }
 
-func (r *Registry) collectOldGenerationsLocked(active, candidate string) error {
-	if err := verifyRealDirectory(r.root, r.home); err != nil {
-		return fmt.Errorf("resources: generation root is unsafe: %w", err)
-	}
-	entries, err := os.ReadDir(r.root)
-	if err != nil {
-		return fmt.Errorf("resources: list generations: %w", err)
-	}
-	for _, entry := range entries {
-		name := entry.Name()
-		if !entry.IsDir() || !validGeneration(name) || name == active || name == candidate || r.pins[name] > 0 {
-			continue
-		}
-		if _, pending := r.pending[name]; pending {
-			continue
-		}
-		if err := os.RemoveAll(filepath.Join(r.root, name)); err != nil {
-			return fmt.Errorf("resources: remove superseded generation: %w", err)
-		}
-	}
-	return nil
-}
-
-// Rollback restores the previously committed generation after runtime readiness
-// fails. It refuses to overwrite a generation committed after this plan.
-func (p *Plan) Rollback() error {
+// Finalize discards rollback files after the runtime has accepted this commit.
+func (p *Plan) Finalize() error {
 	if p == nil {
 		return fmt.Errorf("resources: nil plan")
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.finalized {
+		return nil
+	}
 	if !p.committed || p.rolledBack {
-		return fmt.Errorf("resources: plan is not an unrolled committed generation")
+		return fmt.Errorf("resources: plan is not an unrolled committed plan")
 	}
 	r := p.registry
 	r.mu.Lock()
@@ -492,10 +463,64 @@ func (p *Plan) Rollback() error {
 	if err != nil {
 		return err
 	}
-	if current.Generation != p.generation || current.CommitID != p.commitID {
-		return fmt.Errorf("resources: cannot roll back after another generation was committed")
+	if current.Version != 2 || current.CommitID != p.commitID {
+		return fmt.Errorf("resources: cannot finalize after another manifest was committed")
 	}
-	if err := writeStateAtomic(filepath.Join(r.home, stateFileName), r.home, cloneState(p.base)); err != nil {
+	if p.changed {
+		journal, transactionDir, err := readTransaction(r.home, filepath.Join(r.home, transactionFileName))
+		if err != nil {
+			return err
+		}
+		if journal.Candidate.CommitID != p.commitID || transactionDir != p.transactionDir {
+			return fmt.Errorf("resources: transaction does not belong to this plan")
+		}
+		if err := finalizeTransaction(r.home, transactionDir); err != nil {
+			return err
+		}
+	}
+	if p.stageID != "" {
+		if err := os.RemoveAll(p.directory); err != nil {
+			return fmt.Errorf("resources: remove staged resources: %w", err)
+		}
+		delete(r.pending, p.stageID)
+	}
+	p.finalized = true
+	p.closed = true
+	return nil
+}
+
+// Rollback restores the previous stable files and manifest after runtime failure.
+func (p *Plan) Rollback() error {
+	if p == nil {
+		return fmt.Errorf("resources: nil plan")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.committed || p.rolledBack || p.finalized {
+		return fmt.Errorf("resources: plan is not an unfinalized committed plan")
+	}
+	r := p.registry
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	current, err := loadStateFile(filepath.Join(r.home, stateFileName))
+	if err != nil {
+		return err
+	}
+	if current.Version != 2 || current.CommitID != p.commitID {
+		return fmt.Errorf("resources: cannot roll back after another manifest was committed")
+	}
+	if p.changed {
+		journal, transactionDir, err := readTransaction(r.home, filepath.Join(r.home, transactionFileName))
+		if err != nil {
+			return err
+		}
+		if journal.Candidate.CommitID != p.commitID || transactionDir != p.transactionDir {
+			return fmt.Errorf("resources: transaction does not belong to this plan")
+		}
+		if err := restoreTransaction(r.home, filepath.Join(r.home, transactionFileName), transactionDir, journal); err != nil {
+			return err
+		}
+	} else if err := writeStateAtomic(filepath.Join(r.home, stateFileName), r.home, cloneState(p.base)); err != nil {
 		return err
 	}
 	r.active = cloneState(p.base)
@@ -503,39 +528,34 @@ func (p *Plan) Rollback() error {
 	return nil
 }
 
-// Abort removes a staged generation that has not been committed. Committed
-// generations must be restored through Rollback and are never implicitly deleted.
+// Abort discards an uncommitted staging directory after validation or rollback.
 func (p *Plan) Abort() error {
 	if p == nil {
 		return nil
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.committed && !p.rolledBack {
-		return fmt.Errorf("resources: committed generation must be rolled back, not aborted")
-	}
 	if p.closed {
 		return nil
 	}
-	if p.changed && p.directory != "" {
+	if p.committed && !p.rolledBack {
+		return fmt.Errorf("resources: committed plan must be finalized or rolled back")
+	}
+	if p.stageID != "" {
 		r := p.registry
 		r.mu.Lock()
-		if r.pins[p.generation] == 0 {
-			if err := verifyRealDirectory(r.root, r.home); err != nil {
-				r.mu.Unlock()
-				return fmt.Errorf("resources: generation root is unsafe: %w", err)
-			}
-			if err := verifyRealDirectory(p.directory, r.root); err != nil && !os.IsNotExist(err) {
-				r.mu.Unlock()
-				return fmt.Errorf("resources: staged generation is unsafe: %w", err)
-			}
-			if err := os.RemoveAll(p.directory); err != nil {
-				r.mu.Unlock()
-				return fmt.Errorf("resources: remove staged generation: %w", err)
-			}
+		defer r.mu.Unlock()
+		if filepath.Base(p.directory) != p.stageID || !validPrivateDir(p.stageID) || filepath.Dir(p.directory) != r.home {
+			return fmt.Errorf("resources: staged directory is unsafe")
 		}
-		delete(r.pending, p.generation)
-		r.mu.Unlock()
+		if err := verifyRealDirectory(p.directory, r.home); err == nil {
+			if err := os.RemoveAll(p.directory); err != nil {
+				return fmt.Errorf("resources: remove staged resources: %w", err)
+			}
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("resources: staged directory is unsafe: %w", err)
+		}
+		delete(r.pending, p.stageID)
 	}
 	p.closed = true
 	return nil
@@ -548,8 +568,12 @@ func (p *Plan) verifyStagedFiles() error {
 	if len(p.paths) == 0 && p.directory == "" {
 		return nil
 	}
-	if err := verifyRealDirectory(p.directory, p.registry.root); err != nil {
-		return fmt.Errorf("resources: staged generation is unsafe: %w", err)
+	if p.directory == p.registry.home {
+		if err := ensureRoot(p.directory); err != nil {
+			return fmt.Errorf("resources: managed root is unsafe: %w", err)
+		}
+	} else if err := verifyRealDirectory(p.directory, p.registry.root); err != nil {
+		return fmt.Errorf("resources: staged resource directory is unsafe: %w", err)
 	}
 	for id, path := range p.paths {
 		if filepath.Clean(path) != filepath.Join(p.directory, filepath.Base(path)) {

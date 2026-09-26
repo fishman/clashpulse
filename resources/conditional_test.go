@@ -61,6 +61,9 @@ func TestUnchangedRefreshRetainsCommittedGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := first.Finalize(); err != nil {
+		t.Fatal(err)
+	}
 	activeHome, err := registry.ActiveHome()
 	if err != nil {
 		t.Fatal(err)
@@ -93,6 +96,9 @@ func TestUnchangedRefreshRetainsCommittedGeneration(t *testing.T) {
 		}
 		if _, err := plan.Commit(); err != nil {
 			t.Fatalf("commit unchanged stage %d: %v", i, err)
+		}
+		if err := plan.Finalize(); err != nil {
+			t.Fatal(err)
 		}
 		gotHome, err := registry.ActiveHome()
 		if err != nil || gotHome != activeHome {

@@ -46,6 +46,9 @@ func TestStageDueRefreshesOnlyDueResourcesAndCopiesOthers(t *testing.T) {
 	if _, err := initial.Commit(); err != nil {
 		t.Fatal(err)
 	}
+	if err := initial.Finalize(); err != nil {
+		t.Fatal(err)
+	}
 
 	mu.Lock()
 	bodies["/one"] = "updated.example\n"
@@ -71,6 +74,9 @@ func TestStageDueRefreshesOnlyDueResourcesAndCopiesOthers(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := candidate.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := candidate.Finalize(); err != nil {
 		t.Fatal(err)
 	}
 

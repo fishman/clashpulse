@@ -18,10 +18,11 @@ import (
 )
 
 const (
-	DefaultMaxBytes   int64 = 64 << 20
-	stateFileName           = ".resources.json"
-	generationDirName       = "generations"
-	maxStateBytes     int64 = 1 << 20
+	DefaultMaxBytes     int64 = 64 << 20
+	stateFileName             = ".resources.json"
+	legacyDirName             = "generations"
+	transactionFileName       = ".resources.txn"
+	maxStateBytes       int64 = 1 << 20
 )
 
 var ErrPinMismatch = errors.New("resource SHA-256 pin mismatch")
@@ -48,6 +49,7 @@ type stateDocument struct {
 	CommitID   string                   `json:"commit_id,omitempty"`
 	Resources  map[string]resourceState `json:"resources"`
 }
+
 type Registry struct {
 	home     string
 	root     string
@@ -69,8 +71,8 @@ func sameResourceState(left, right resourceState) bool {
 	return left.Kind == right.Kind && left.Format == right.Format && left.RuleType == right.RuleType
 }
 
-// NewRegistry creates or opens the private resource store. The supplied
-// downloader owns HTTP limits, redirects, routing and TLS policy.
+// NewRegistry opens the private resource store and recovers interrupted work
+// before migrating legacy generations or exposing managed paths.
 func NewRegistry(home string, client *download.Client) (*Registry, error) {
 	if client == nil {
 		return nil, fmt.Errorf("resources: bounded downloader is required")
@@ -86,48 +88,46 @@ func NewRegistry(home string, client *download.Client) (*Registry, error) {
 		return nil, fmt.Errorf("resources: create managed home: %w", err)
 	}
 	resolved, err := filepath.EvalSymlinks(absolute)
-	if err != nil {
-		return nil, fmt.Errorf("resources: resolve managed home: %w", err)
-	}
-	if resolved != absolute {
+	if err != nil || resolved != absolute {
 		return nil, fmt.Errorf("resources: managed home must not contain symlinks")
 	}
-	absolute = resolved
 	info, err := os.Lstat(absolute)
 	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 		return nil, fmt.Errorf("resources: managed home must be a real directory")
 	}
-	root := filepath.Join(absolute, generationDirName)
-	if err := os.MkdirAll(root, 0o700); err != nil {
-		return nil, fmt.Errorf("resources: create generation root: %w", err)
+	if err := os.Chmod(absolute, 0o700); err != nil {
+		return nil, fmt.Errorf("resources: secure managed home: %w", err)
 	}
-	rootInfo, err := os.Lstat(root)
-	if err != nil || rootInfo.Mode()&os.ModeSymlink != 0 || !rootInfo.IsDir() {
-		return nil, fmt.Errorf("resources: generation root must be a real directory")
+	registry := &Registry{
+		home: absolute, root: absolute, client: client, maxBytes: DefaultMaxBytes,
+		failures: make(map[string]string), pending: make(map[string]struct{}), pins: make(map[string]int),
 	}
-	if err := os.Chmod(root, 0o700); err != nil {
-		return nil, fmt.Errorf("resources: secure generation root: %w", err)
+	if err := registry.recoverTransaction(); err != nil {
+		return nil, err
 	}
-	registry := &Registry{home: absolute, root: root, client: client, maxBytes: DefaultMaxBytes, failures: make(map[string]string), pending: make(map[string]struct{}), pins: make(map[string]int)}
-	registry.active, err = registry.loadState()
+	if err := registry.removeOrphanTransactions(); err != nil {
+		return nil, err
+	}
+	active, err := loadStateFile(filepath.Join(absolute, stateFileName))
 	if err != nil {
 		return nil, err
 	}
+	if active.Version == 1 {
+		active, err = registry.migrateV1(active)
+		if err != nil {
+			return nil, err
+		}
+	}
+	registry.active = active
 	return registry, nil
 }
 
-// Home returns the committed Mihomo data home, or an empty string before the
-// first committed generation. Candidate integrations should use Plan.Home.
+// Home returns the stable managed resource root.
 func (r *Registry) Home() string {
 	if r == nil {
 		return ""
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.active.Generation == "" {
-		return ""
-	}
-	return filepath.Join(r.root, r.active.Generation)
+	return r.home
 }
 
 // SetMaxBytes sets the positive per-resource source size limit. Configure it
@@ -161,15 +161,13 @@ func (r *Registry) recordFailure(id string, err error) error {
 	return fmt.Errorf("resource %q: %w", id, err)
 }
 
-// Paths returns immutable managed files from the currently committed
-// generation. It never downloads, modifies, or substitutes resources.
+// Paths returns the validated stable files for the currently committed resource set.
 func (r *Registry) Paths(snapshot config.Snapshot) (map[string]string, error) {
 	_, paths, err := r.PathsWithHome(snapshot)
 	return paths, err
 }
 
-// PathsWithHome returns the exact Mihomo data home and its validated resource
-// files from one committed generation, protected against a mismatched manifest.
+// PathsWithHome resolves stable resource files and their Mihomo data directory.
 func (r *Registry) PathsWithHome(snapshot config.Snapshot) (string, map[string]string, error) {
 	if r == nil {
 		return "", nil, fmt.Errorf("resources: nil registry")
@@ -183,21 +181,17 @@ func (r *Registry) PathsWithHome(snapshot config.Snapshot) (string, map[string]s
 	if err != nil {
 		return "", nil, err
 	}
-	if current.Generation != r.active.Generation || current.CommitID != r.active.CommitID {
-		return "", nil, fmt.Errorf("resources: active generation changed outside registry")
+	if current.Version != r.active.Version || current.CommitID != r.active.CommitID {
+		return "", nil, fmt.Errorf("resources: active manifest changed outside registry")
 	}
 	paths, err := r.pathsLocked(snapshot)
 	if err != nil {
 		return "", nil, err
 	}
-	if r.active.Generation == "" {
-		return "", paths, nil
-	}
-	return filepath.Join(r.root, r.active.Generation), paths, nil
+	return r.home, paths, nil
 }
 
-// ActiveHome returns the validated committed Mihomo home, or an empty path
-// when no generation has been committed yet.
+// ActiveHome returns the stable managed resource root.
 func (r *Registry) ActiveHome() (string, error) {
 	if r == nil {
 		return "", fmt.Errorf("resources: nil registry")
@@ -208,76 +202,42 @@ func (r *Registry) ActiveHome() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if current.Generation != r.active.Generation || current.CommitID != r.active.CommitID {
-		return "", fmt.Errorf("resources: active generation changed outside registry")
+	if current.Version != r.active.Version || current.CommitID != r.active.CommitID {
+		return "", fmt.Errorf("resources: active manifest changed outside registry")
 	}
-	if current.Generation == "" {
-		return "", nil
-	}
-	directory := filepath.Join(r.root, current.Generation)
-	if err := verifyRealDirectory(directory, r.root); err != nil {
+	if err := ensureRoot(r.home); err != nil {
 		return "", err
 	}
-	return directory, nil
+	return r.home, nil
 }
 
-// AcquireGeneration keeps a managed home available while Mihomo may reference it.
-// Release the returned lease only after the process has stopped using the home;
-// release is idempotent, and an empty home gets a no-op lease.
+// AcquireGeneration remains a no-op lease for callers across the static-path cutover.
 func (r *Registry) AcquireGeneration(home string) (func(), error) {
 	if r == nil {
 		return nil, fmt.Errorf("resources: nil registry")
 	}
-	if home == "" {
+	if home == "" || filepath.Clean(home) == r.home {
 		return func() {}, nil
 	}
-	directory := filepath.Clean(home)
-	name := filepath.Base(directory)
-	if directory != filepath.Join(r.root, name) || !validGeneration(name) {
-		return nil, fmt.Errorf("resources: home is not a managed generation")
-	}
-	r.mu.Lock()
-	if err := verifyRealDirectory(r.root, r.home); err != nil {
-		r.mu.Unlock()
-		return nil, fmt.Errorf("resources: generation root is unsafe: %w", err)
-	}
-	if err := verifyRealDirectory(directory, r.root); err != nil {
-		r.mu.Unlock()
-		return nil, fmt.Errorf("resources: generation is unavailable: %w", err)
-	}
-	r.pins[name]++
-	r.mu.Unlock()
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			r.mu.Lock()
-			if r.pins[name] <= 1 {
-				delete(r.pins, name)
-			} else {
-				r.pins[name]--
-			}
-			r.mu.Unlock()
-		})
-	}, nil
+	return nil, fmt.Errorf("resources: home is not the managed resource root")
 }
 
 func (r *Registry) pathsLocked(snapshot config.Snapshot) (map[string]string, error) {
-	if r.active.Generation == "" {
+	if err := ensureRoot(r.home); err != nil {
+		return nil, err
+	}
+	if len(r.active.Resources) == 0 {
 		if hasEnabledResources(snapshot) {
-			return nil, fmt.Errorf("resources: no committed generation")
+			return nil, fmt.Errorf("resources: no committed resource files")
 		}
 		return map[string]string{}, nil
-	}
-	directory := filepath.Join(r.root, r.active.Generation)
-	if err := verifyRealDirectory(directory, r.root); err != nil {
-		return nil, err
 	}
 	paths := make(map[string]string)
 	for _, resource := range snapshot.Resources {
 		if !resource.Enabled {
 			continue
 		}
-		path := filepath.Join(directory, filename(resource))
+		path := filepath.Join(r.home, filename(resource))
 		data, err := readManaged(path, r.maxBytes)
 		if err != nil {
 			return nil, fmt.Errorf("resource %q has no safe managed file: %w", resource.ID, err)
@@ -289,8 +249,8 @@ func (r *Registry) pathsLocked(snapshot config.Snapshot) (map[string]string, err
 		if resource.SHA256 != "" && !strings.EqualFold(resource.SHA256, sum) {
 			return nil, fmt.Errorf("resource %q: %w", resource.ID, ErrPinMismatch)
 		}
-		cached := r.active.Resources[resource.ID]
-		if cached.SHA256 == "" || cached.SHA256 != sum || cached.SourceHash != digest([]byte(resource.URL)) || !resourceStateMatches(resource, cached) {
+		cached, ok := r.active.Resources[resource.ID]
+		if !ok || cached.SHA256 != sum || cached.SourceHash != digest([]byte(resource.URL)) || !resourceStateMatches(resource, cached) {
 			return nil, fmt.Errorf("resource %q managed bytes differ from committed state", resource.ID)
 		}
 		paths[resource.ID] = path
@@ -346,7 +306,7 @@ func (r *Registry) validateSnapshot(snapshot config.Snapshot) error {
 func loadStateFile(path string) (stateDocument, error) {
 	info, err := os.Lstat(path)
 	if os.IsNotExist(err) {
-		return stateDocument{Version: 1, Resources: make(map[string]resourceState)}, nil
+		return stateDocument{Version: 2, Resources: make(map[string]resourceState)}, nil
 	}
 	if err != nil {
 		return stateDocument{}, fmt.Errorf("resources: inspect metadata: %w", err)
@@ -369,37 +329,56 @@ func loadStateFile(path string) (stateDocument, error) {
 		return stateDocument{}, fmt.Errorf("resources: decode metadata: %w", err)
 	}
 	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
+	if decoder.Decode(&extra) != io.EOF {
 		return stateDocument{}, fmt.Errorf("resources: invalid trailing metadata")
 	}
-	if document.Version != 1 || document.Resources == nil {
-		return stateDocument{}, fmt.Errorf("resources: unsupported metadata version")
+	if err := validateStateDocument(document); err != nil {
+		return stateDocument{}, err
 	}
-	if document.Generation != "" && !validGeneration(document.Generation) {
-		return stateDocument{}, fmt.Errorf("resources: invalid active generation")
+	return document, nil
+}
+
+func validateStateDocument(document stateDocument) error {
+	if (document.Version != 1 && document.Version != 2) || document.Resources == nil {
+		return fmt.Errorf("resources: unsupported metadata version")
+	}
+	if document.Version == 1 && document.Generation != "" && !validGeneration(document.Generation) {
+		return fmt.Errorf("resources: invalid legacy generation")
+	}
+	if document.Version == 2 && document.Generation != "" {
+		return fmt.Errorf("resources: v2 metadata cannot reference a generation")
+	}
+	if document.Version == 2 && len(document.Resources) > 0 && document.CommitID == "" {
+		return fmt.Errorf("resources: committed metadata has no identity")
 	}
 	if document.CommitID != "" {
 		if len(document.CommitID) != 32 {
-			return stateDocument{}, fmt.Errorf("resources: invalid metadata commit identity")
+			return fmt.Errorf("resources: invalid metadata commit identity")
 		}
 		if _, err := hex.DecodeString(document.CommitID); err != nil {
-			return stateDocument{}, fmt.Errorf("resources: invalid metadata commit identity")
+			return fmt.Errorf("resources: invalid metadata commit identity")
 		}
 	}
 	for id, state := range document.Resources {
 		if !validID(id) || len(state.SHA256) != sha256.Size*2 || (state.SourceHash != "" && len(state.SourceHash) != sha256.Size*2) || len(state.ETag) > 4096 || len(state.LastModified) > 4096 {
-			return stateDocument{}, fmt.Errorf("resources: invalid metadata entry")
+			return fmt.Errorf("resources: invalid metadata entry")
 		}
 		if _, err := hex.DecodeString(state.SHA256); err != nil {
-			return stateDocument{}, fmt.Errorf("resources: invalid metadata hash")
+			return fmt.Errorf("resources: invalid metadata hash")
 		}
 		if state.SourceHash != "" {
 			if _, err := hex.DecodeString(state.SourceHash); err != nil {
-				return stateDocument{}, fmt.Errorf("resources: invalid source identity")
+				return fmt.Errorf("resources: invalid source identity")
 			}
 		}
+		if err := ValidateDeclaration(config.Resource{ID: id, Kind: state.Kind, Format: state.Format, RuleType: state.RuleType, Enabled: true}); err != nil {
+			return fmt.Errorf("resources: invalid metadata declaration: %w", err)
+		}
 	}
-	return document, nil
+	if _, err := manifestNames(document); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *Registry) loadState() (stateDocument, error) {
@@ -407,9 +386,13 @@ func (r *Registry) loadState() (stateDocument, error) {
 	if err != nil {
 		return stateDocument{}, err
 	}
-	if document.Generation != "" {
-		if err := verifyRealDirectory(filepath.Join(r.root, document.Generation), r.root); err != nil {
-			return stateDocument{}, fmt.Errorf("resources: committed generation is unsafe: %w", err)
+	if document.Version == 1 && document.Generation != "" {
+		legacyRoot := filepath.Join(r.home, legacyDirName)
+		if err := verifyRealDirectory(legacyRoot, r.home); err != nil {
+			return stateDocument{}, fmt.Errorf("resources: legacy generation root is unsafe: %w", err)
+		}
+		if err := verifyRealDirectory(filepath.Join(legacyRoot, document.Generation), legacyRoot); err != nil {
+			return stateDocument{}, fmt.Errorf("resources: legacy generation is unsafe: %w", err)
 		}
 	}
 	return document, nil

@@ -27,8 +27,7 @@ type ResourceStatus struct {
 	Destination string
 }
 
-// Status returns best-effort state for each configured resource. Only an
-// unreadable/unsafe active manifest or generation aborts the whole operation.
+// Status reports committed resource identity without exposing full source URLs.
 func (r *Registry) Status(snapshot config.Snapshot) ([]ResourceStatus, error) {
 	if r == nil {
 		return nil, fmt.Errorf("resources: nil registry")
@@ -39,15 +38,8 @@ func (r *Registry) Status(snapshot config.Snapshot) ([]ResourceStatus, error) {
 	if err != nil {
 		return nil, err
 	}
-	if current.Generation != "" {
-		if err := verifyRealDirectory(filepath.Join(r.root, current.Generation), r.root); err != nil {
-			return nil, fmt.Errorf("resources: active generation is unsafe: %w", err)
-		}
-	}
-	r.active = current
-	activeHome := ""
-	if current.Generation != "" {
-		activeHome = filepath.Join(r.root, current.Generation)
+	if current.Version != r.active.Version || current.CommitID != r.active.CommitID {
+		return nil, fmt.Errorf("resources: active manifest changed outside registry")
 	}
 	statuses := make([]ResourceStatus, 0, len(snapshot.Resources))
 	for _, resource := range snapshot.Resources {
@@ -66,8 +58,8 @@ func (r *Registry) Status(snapshot config.Snapshot) ([]ResourceStatus, error) {
 				status.LastSuccess = time.Unix(state.LastSuccessUnix, 0).UTC()
 			}
 		}
-		if resource.Enabled && activeHome != "" {
-			path := filepath.Join(activeHome, filename(resource))
+		if resource.Enabled {
+			path := filepath.Join(r.home, filename(resource))
 			status.Destination = path
 			data, readErr := readManaged(path, r.maxBytes)
 			if readErr == nil && Validate(resource, data) == nil {

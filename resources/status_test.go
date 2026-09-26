@@ -33,6 +33,9 @@ func TestStatusReportsValidAndUnavailableResourcesIndependently(t *testing.T) {
 	if _, err := plan.Commit(); err != nil {
 		t.Fatal(err)
 	}
+	if err := plan.Finalize(); err != nil {
+		t.Fatal(err)
+	}
 	missing := valid
 	missing.ID = "missing"
 	missing.URL = "https://resource.example/missing"
