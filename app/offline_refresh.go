@@ -251,11 +251,10 @@ func resourceResponseFor(err error, id string) (download.StatusError, bool) {
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
 		for _, failure := range joined.Unwrap() {
 			if strings.Contains(failure.Error(), `resource "`+id+`"`) {
-				if response, found := download.HTTPResponseFrom(failure); found {
-					return response, true
-				}
+				return download.HTTPResponseFrom(failure)
 			}
 		}
+		return download.StatusError{}, false
 	}
 	return download.HTTPResponseFrom(err)
 }

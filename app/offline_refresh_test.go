@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -193,6 +194,20 @@ func TestResourceBatchFailurePreservesEachHTTPResponse(t *testing.T) {
 		default:
 			t.Errorf("resource response was mismatched or discarded: %v / %+v", item, response)
 		}
+	}
+}
+
+func TestResourceResponseForKeepsBodiesWithTheirSource(t *testing.T) {
+	err := errors.Join(
+		fmt.Errorf("resource %q: %w", "pinned", resources.ErrPinMismatch),
+		fmt.Errorf("resource %q: %w", "remote", download.StatusError{Code: http.StatusForbidden, ResponseBody: "remote body"}),
+	)
+	if _, ok := resourceResponseFor(err, "pinned"); ok {
+		t.Fatal("response from another resource was attributed to a pin failure")
+	}
+	response, ok := resourceResponseFor(err, "remote")
+	if !ok || response.Code != http.StatusForbidden || response.ResponseBody != "remote body" {
+		t.Fatalf("source response was lost: %+v, %v", response, ok)
 	}
 }
 
