@@ -94,14 +94,15 @@ func (s *runtimeService) upsertIssue(issue core.ErrorSnapshot) bool {
 	return true
 }
 
-func (s *runtimeService) resolveIssue(kind, sourceID string) {
+func (s *runtimeService) resolveIssue(kind, sourceID string) bool {
 	for i := range s.snapshot.Errors {
 		if s.snapshot.Errors[i].Kind == kind && s.snapshot.Errors[i].SourceID == sourceID {
 			s.snapshot.Errors = slices.Delete(s.snapshot.Errors, i, i+1)
 			s.appendDiagnostic(safeDiagnostic(kind, sourceID, nil))
-			return
+			return true
 		}
 	}
+	return false
 }
 
 func (s *runtimeService) reconcileSubscriptionFailures(entries []subscriptions.Entry) {

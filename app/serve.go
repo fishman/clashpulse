@@ -215,8 +215,8 @@ func (s *runtimeService) run(ctx context.Context) error {
 	}()
 	go func() {
 		defer workers.Done()
-		s.backgroundErrors <- config.WatchWithErrors(serviceCtx, s.configDir, s.store, func(err error) {
-			offerLatest(s.configErrors, err)
+		s.backgroundErrors <- config.WatchWithResults(serviceCtx, s.configDir, s.store, func(err error) {
+			offerLatest(s.configResults, err)
 		})
 	}()
 	workRequests := make(chan serviceWorkRequest, serviceWorkQueueSize)
@@ -360,6 +360,12 @@ func (s *runtimeService) run(ctx context.Context) error {
 				return err
 			}
 			return fmt.Errorf("clashpulse: service stopped unexpectedly")
+		case err := <-s.configResults:
+			if err != nil {
+				s.reportError("config_reload", err)
+			} else if s.resolveIssue("config_reload", "") {
+				s.publish()
+			}
 		case err := <-s.configErrors:
 			s.reportError("config", err)
 		case <-s.notificationErrors:

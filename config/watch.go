@@ -41,6 +41,19 @@ func Watch(ctx context.Context, dir string, store *Store) error {
 // WatchWithErrors keeps the live store unchanged on invalid edits and reports
 // the complete-file validation failure without blocking the watcher.
 func WatchWithErrors(ctx context.Context, dir string, store *Store, onError func(error)) error {
+	var onResult func(error)
+	if onError != nil {
+		onResult = func(err error) {
+			if err != nil {
+				onError(err)
+			}
+		}
+	}
+	return WatchWithResults(ctx, dir, store, onResult)
+}
+
+// WatchWithResults reports each complete-file load in order; nil means valid.
+func WatchWithResults(ctx context.Context, dir string, store *Store, onResult func(error)) error {
 	if store == nil {
 		return nil
 	}
@@ -58,6 +71,9 @@ func WatchWithErrors(ctx context.Context, dir string, store *Store, onError func
 		return err
 	}
 	store.Replace(snap)
+	if onResult != nil {
+		onResult(nil)
+	}
 
 	workerCtx, cancelWorker := context.WithCancel(ctx)
 	defer cancelWorker()
@@ -65,7 +81,7 @@ func WatchWithErrors(ctx context.Context, dir string, store *Store, onError func
 	workerDone := make(chan struct{})
 	go func() {
 		defer close(workerDone)
-		watchReloadWorker(workerCtx, dir, store, reloadRequests, onError)
+		watchReloadWorker(workerCtx, dir, store, reloadRequests, onResult)
 	}()
 	defer func() { cancelWorker(); <-workerDone }()
 
@@ -134,20 +150,19 @@ func WatchWithErrors(ctx context.Context, dir string, store *Store, onError func
 	}
 }
 
-func watchReloadWorker(ctx context.Context, dir string, store *Store, reloadRequests <-chan struct{}, onError func(error)) {
+func watchReloadWorker(ctx context.Context, dir string, store *Store, reloadRequests <-chan struct{}, onResult func(error)) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-reloadRequests:
 			snap, err := loadSnapshotFn(dir)
-			if err != nil {
-				if onError != nil {
-					onError(err)
-				}
-				continue
+			if err == nil {
+				store.Replace(snap)
 			}
-			store.Replace(snap)
+			if onResult != nil {
+				onResult(err)
+			}
 		}
 	}
 }

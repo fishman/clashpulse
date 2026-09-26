@@ -122,3 +122,70 @@ func TestReserveLoopbackPortsDistinct(t *testing.T) {
 		t.Fatalf("ports overlap: controller %d proxy %d", controller, proxy)
 	}
 }
+
+func TestRunAtClearsConfigReloadIssueAfterNoopCorrection(t *testing.T) {
+	root := t.TempDir()
+	configDir, stateDir := filepath.Join(root, "config"), filepath.Join(root, "state")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	configFile := filepath.Join(configDir, "config.toml")
+	valid := []byte("[mihomo]\nbinary = \"system\"\n")
+	if err := config.Write(configFile, valid); err != nil {
+		t.Fatal(err)
+	}
+	endpoint := filepath.Join(root, "socket", "ipc.sock")
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- RunAt(ctx, configDir, stateDir, endpoint) }()
+	var client *ipc.Client
+	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
+		attempt, stop := context.WithTimeout(ctx, 100*time.Millisecond)
+		client, _ = ipc.Dial(attempt, endpoint)
+		stop()
+		if client != nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if client == nil {
+		cancel()
+		t.Fatalf("service did not start: %v", <-done)
+	}
+	defer client.Close()
+	defer func() {
+		cancel()
+		if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
+			t.Error(err)
+		}
+	}()
+	if err := config.Write(configFile, []byte("[mihomo]\nbinary = \"system\"\nbogus = true\n")); err != nil {
+		t.Fatal(err)
+	}
+	waitConfigReloadIssue(t, ctx, client, true)
+	if err := config.Write(configFile, valid); err != nil {
+		t.Fatal(err)
+	}
+	waitConfigReloadIssue(t, ctx, client, false)
+}
+
+func waitConfigReloadIssue(t *testing.T, ctx context.Context, client *ipc.Client, want bool) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		request, stop := context.WithTimeout(ctx, time.Second)
+		snapshot, err := client.Snapshot(request)
+		stop()
+		found := false
+		if err == nil {
+			for _, issue := range snapshot.Errors {
+				found = found || issue.Kind == "config_reload"
+			}
+			if found == want {
+				return
+			}
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	t.Fatalf("config reload issue presence = %t, want %t", !want, want)
+}

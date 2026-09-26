@@ -112,3 +112,41 @@ func TestWatchNoOpsOnSelfWrite(t *testing.T) {
 	case <-time.After(250 * time.Millisecond):
 	}
 }
+
+func TestWatchWithResultsReportsNoopRecoveryAfterInvalidEdit(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	valid := "[mihomo]\nbinary = \"system\"\n"
+	mustWrite(t, path, valid)
+	results := make(chan error, 4)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- WatchWithResults(ctx, dir, NewStore(Snapshot{}), func(err error) { results <- err }) }()
+	defer func() {
+		cancel()
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}()
+	if err := <-results; err != nil {
+		t.Fatalf("initial valid config result = %v", err)
+	}
+	mustWrite(t, path, valid+"bogus = true\n")
+	select {
+	case err := <-results:
+		if err == nil {
+			t.Fatal("invalid edit produced a success result")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("invalid edit produced no watcher result")
+	}
+	mustWrite(t, path, valid)
+	select {
+	case err := <-results:
+		if err != nil {
+			t.Fatalf("unchanged valid config did not report recovery: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("valid no-op edit produced no recovery result")
+	}
+}

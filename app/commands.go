@@ -411,6 +411,7 @@ func (s *runtimeService) applyChange(ctx context.Context, _ config.Change) error
 		}
 	}
 	s.lastAppliedSettings = change.After
+	s.resolveIssue("config", "")
 	if deletionErr != nil && s.configErrors != nil {
 		offerLatest(s.configErrors, deletionErr)
 	}

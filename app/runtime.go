@@ -57,6 +57,7 @@ type runtimeService struct {
 	resourceAttempts          map[string]time.Time
 	backgroundErrors          chan error
 	configErrors              chan error
+	configResults             chan error
 	notificationErrors        chan error
 	controller                *mihomo.Controller
 	controllerAddress, secret string
@@ -411,7 +412,7 @@ func (s *runtimeService) reportErrorScoped(kind, sourceID string, err error) {
 		message = "desktop notification unavailable"
 	}
 	failure := core.ErrorSnapshot{Kind: kind, SourceID: sourceID, Key: kind, Message: message}
-	if message == "operation failed" && (kind == "config" || kind == "reload_configuration" || kind == "update_configuration" || kind == "set_dns_routing" || kind == "delete_subscription" || strings.HasPrefix(kind, "put_")) {
+	if message == "operation failed" && (kind == "config" || kind == "config_reload" || kind == "reload_configuration" || kind == "update_configuration" || kind == "set_dns_routing" || kind == "delete_subscription" || strings.HasPrefix(kind, "put_")) {
 		failure.Message = "configuration change failed; previous settings remain active"
 	}
 	if strings.Contains(err.Error(), "restore prior runtime") || strings.Contains(err.Error(), "rollback failed") {
