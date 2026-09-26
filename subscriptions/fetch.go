@@ -18,6 +18,16 @@ import (
 // Refresh uses the latest app-owned entry when Options.Current is configured.
 // Without a resolver it uses the private record last written by Add or Update.
 func (s *Service) Refresh(ctx context.Context, id string) (Result, error) {
+	return s.refreshLatest(ctx, id, false)
+}
+
+// Download fetches and stores a shape-valid source profile without invoking Mihomo.
+// Activate renders and validates the stored source before applying it.
+func (s *Service) Download(ctx context.Context, id string) (Result, error) {
+	return s.refreshLatest(ctx, id, true)
+}
+
+func (s *Service) refreshLatest(ctx context.Context, id string, downloadOnly bool) (Result, error) {
 	if s.options.Current != nil {
 		current, ok := s.options.Current(id)
 		if !ok {
@@ -28,17 +38,17 @@ func (s *Service) Refresh(ctx context.Context, id string) (Result, error) {
 		}
 		s.cancelIfSubscriptionChanges(id, current)
 	}
-	return s.refresh(ctx, id, nil)
+	return s.refresh(ctx, id, nil, downloadOnly)
 }
 
-// RefreshWith installs the caller's latest config entry before fetching. A
-// subscription change never removes the prior good snapshot.
+// RefreshWith installs the latest app-owned subscription before refreshing.
 func (s *Service) RefreshWith(ctx context.Context, subscription config.Subscription) (Result, error) {
 	s.cancelIfSubscriptionChanges(subscription.ID, subscription)
-	return s.refresh(ctx, subscription.ID, &subscription)
+	return s.refresh(ctx, subscription.ID, &subscription, false)
 }
 
-func (s *Service) refresh(ctx context.Context, id string, supplied *config.Subscription) (Result, error) {
+func (s *Service) refresh(ctx context.Context, id string, supplied *config.Subscription, downloadOnly bool) (Result, error) {
+
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -120,8 +130,23 @@ func (s *Service) refresh(ctx context.Context, id string, supplied *config.Subsc
 	if contextErr := s.recordContextFailure(operationCtx, id, checkedAt); contextErr != nil {
 		return Result{}, contextErr
 	}
-	usage := parseUsage(response.SubscriptionUserInfo)
 	if response.StatusCode == http.StatusNotModified {
+		if response.ETag == "" {
+			response.ETag = record.ETag
+		}
+		if response.LastModified == "" {
+			response.LastModified = record.LastModified
+		}
+	}
+	usage := parseUsage(response.SubscriptionUserInfo)
+	if response.StatusCode == http.StatusNotModified && record.DownloadedOnly && !downloadOnly {
+		profile, err := s.store.Profile(id)
+		if err != nil {
+			return Result{}, ErrStore
+		}
+		response.Body = profile
+		response.StatusCode = http.StatusOK
+	} else if response.StatusCode == http.StatusNotModified {
 		if record.Hash == "" || record.CandidateHash == "" {
 			s.recordFailure(id, checkedAt, ErrNoSnapshot)
 			return Result{}, ErrNoSnapshot
@@ -136,9 +161,7 @@ func (s *Service) refresh(ctx context.Context, id string, supplied *config.Subsc
 	}
 	profile := response.Body
 	profileHash := hashBytes(profile)
-	if record.Hash != "" && profileHash == record.Hash {
-		// Equal bytes do not regenerate config or restart Mihomo. Recovery
-		// persists the cleared failure; healthy checks remain write-free.
+	if record.Hash != "" && profileHash == record.Hash && (downloadOnly || !record.DownloadedOnly) {
 		if err := s.touch(id, checkedAt, response.ETag, response.LastModified, usage); err != nil {
 			return Result{}, err
 		}
@@ -150,6 +173,27 @@ func (s *Service) refresh(ctx context.Context, id string, supplied *config.Subsc
 	if !validProfileYAML(profile) {
 		s.recordFailure(id, checkedAt, ErrInvalidProfile)
 		return Result{}, s.responseFailure(ErrInvalidProfile, response)
+	}
+	if downloadOnly {
+		if !s.sourceIsCurrent(record.Subscription) {
+			return Result{}, ErrSourceChanged
+		}
+		previous, err := s.store.promote(id, profile, profile, checkedAt, response.ETag, response.LastModified, usage, true)
+		if err != nil {
+			return Result{}, ErrStore
+		}
+		if !s.sourceIsCurrent(record.Subscription) {
+			if s.store.rollbackPromotion(id, previous, profileHash, profileHash) != nil {
+				return Result{}, errors.Join(ErrSourceChanged, ErrStore)
+			}
+			return Result{}, ErrSourceChanged
+		}
+		s.store.finalizePromotion(id)
+		if s.options.OnChange != nil {
+			s.options.OnChange()
+		}
+		s.signalWake()
+		return Result{ID: id, Changed: true, CheckedAt: checkedAt, Hash: profileHash, Usage: cloneUsage(usage)}, nil
 	}
 	candidate, err := s.options.Render(operationCtx, bytes.Clone(profile))
 	if err != nil {
@@ -180,7 +224,7 @@ func (s *Service) refresh(ctx context.Context, id string, supplied *config.Subsc
 	if !s.sourceIsCurrent(record.Subscription) {
 		return Result{}, s.responseFailure(ErrSourceChanged, response)
 	}
-	previous, err := s.store.promote(id, profile, candidate, checkedAt, response.ETag, response.LastModified, usage)
+	previous, err := s.store.promote(id, profile, candidate, checkedAt, response.ETag, response.LastModified, usage, false)
 	if err != nil {
 		return Result{}, s.responseFailure(ErrStore, response)
 	}

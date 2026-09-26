@@ -12,191 +12,143 @@ import (
 	"github.com/fishman/clashpulse/download"
 )
 
-func TestRunVersion(t *testing.T) {
-	var called int
-	stdout := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
-
-	code := runMain([]string{"version"}, stdout, stderr, func(context.Context) error {
-		called++
-		return errors.New("not initialized")
-	})
-
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0", code)
-	}
-	if called != 0 {
-		t.Fatalf("app.Run called %d times, want 0", called)
-	}
-	if got := stdout.String(); got != "clashpulse dev\n" {
-		t.Fatalf("stdout = %q, want %q", got, "clashpulse dev\n")
-	}
-	if got := stderr.String(); got != "" {
-		t.Fatalf("stderr = %q, want empty", got)
-	}
-}
-
-func TestRunVersionWithExtraArgsUsesAppRun(t *testing.T) {
-	var called int
-	stdout := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
-
-	code := runMain([]string{"version", "extra"}, stdout, stderr, func(context.Context) error {
-		called++
-		return errors.New("not initialized")
-	})
-
-	if code != 1 {
-		t.Fatalf("exit code = %d, want 1", code)
-	}
-	if called != 1 {
-		t.Fatalf("app.Run called %d times, want 1", called)
-	}
-	if got := stdout.String(); got != "" {
-		t.Fatalf("stdout = %q, want empty", got)
-	}
-	if got := stderr.String(); got != "not initialized\n" {
-		t.Fatalf("stderr = %q, want %q", got, "not initialized\n")
-	}
-}
-
-func TestRunWithoutArgsUsesAppRun(t *testing.T) {
-	var called int
-	stdout := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
-
-	code := runMain(nil, stdout, stderr, func(context.Context) error {
-		called++
-		return errors.New("not initialized")
-	})
-
-	if code != 1 {
-		t.Fatalf("exit code = %d, want 1", code)
-	}
-	if called != 1 {
-		t.Fatalf("app.Run called %d times, want 1", called)
-	}
-	if got := stdout.String(); got != "" {
-		t.Fatalf("stdout = %q, want empty", got)
-	}
-	if got := stderr.String(); got != "not initialized\n" {
-		t.Fatalf("stderr = %q, want %q", got, "not initialized\n")
-	}
-}
-
-func TestRunWithoutArgsStartsDesktopClient(t *testing.T) {
+func TestCLIUsesDesktopByDefault(t *testing.T) {
 	var desktopCalls, serviceCalls int
-	code := runMainContextWithDesktop(context.Background(), nil, new(bytes.Buffer), new(bytes.Buffer),
-		func(context.Context) error { serviceCalls++; return nil },
-		func(context.Context, func(context.Context) error) error { desktopCalls++; return nil })
-	if code != 0 || desktopCalls != 1 || serviceCalls != 0 {
-		t.Fatalf("exit %d, desktop calls %d, direct service calls %d", code, desktopCalls, serviceCalls)
+	actions := cliActions{
+		run: func(context.Context) error { serviceCalls++; return nil },
+		desktop: func(_ context.Context, run func(context.Context) error) error {
+			desktopCalls++
+			return run(context.Background())
+		},
+	}
+	if code := runCLI(context.Background(), []string{"clashpulse"}, new(bytes.Buffer), new(bytes.Buffer), actions); code != 0 || desktopCalls != 1 || serviceCalls != 1 {
+		t.Fatalf("root command: exit=%d desktop=%d service=%d", code, desktopCalls, serviceCalls)
 	}
 }
 
-func TestRefreshCommandDispatchesTypedSource(t *testing.T) {
-	var gotKind, gotID string
-	stdout := new(bytes.Buffer)
-	err := runRefreshCommand(context.Background(), []string{"resource", "geo"}, stdout, func(_ context.Context, kind, id string) error {
-		gotKind, gotID = kind, id
-		return nil
-	})
-	if err != nil || gotKind != "resource" || gotID != "geo" || stdout.String() != "refreshed resource geo\n" {
-		t.Fatalf("refresh dispatch = %q, %q, %q, %v", gotKind, gotID, stdout.String(), err)
+func TestCLIGuiAndTuiCommandsDispatch(t *testing.T) {
+	var guiCalls, tuiCalls int
+	actions := cliActions{
+		run:     func(context.Context) error { return nil },
+		desktop: func(context.Context, func(context.Context) error) error { guiCalls++; return nil },
+		tui:     func(context.Context) error { tuiCalls++; return nil },
 	}
-}
-
-func TestRefreshCommandRejectsUnknownOrExcessTarget(t *testing.T) {
-	for _, args := range [][]string{{"proxy", "alpha"}, {"subscription", "alpha", "extra"}} {
-		called := false
-		err := runRefreshCommand(context.Background(), args, new(bytes.Buffer), func(context.Context, string, string) error {
-			called = true
-			return nil
-		})
-		if err == nil || called {
-			t.Fatalf("refresh accepted %q or invoked a target: %v", args, err)
+	for _, command := range []string{"gui", "tui"} {
+		if code := runCLI(context.Background(), []string{"clashpulse", command}, new(bytes.Buffer), new(bytes.Buffer), actions); code != 0 {
+			t.Fatalf("%s exited %d", command, code)
 		}
 	}
+	if guiCalls != 1 || tuiCalls != 1 {
+		t.Fatalf("gui=%d tui=%d", guiCalls, tuiCalls)
+	}
 }
 
-func TestRefreshAndDownloadWithoutIDRefreshOneKind(t *testing.T) {
-	for _, command := range []string{"refresh", "download"} {
-		for _, kind := range []string{"subscription", "resource"} {
-			var gotKind, gotID string
-			stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
-			code := runMainContextWithRefresh(context.Background(), []string{command, kind}, stdout, stderr,
-				func(context.Context) error { t.Fatal("kind refresh started the service"); return nil },
-				func(context.Context, func(context.Context) error) error {
-					t.Fatal("kind refresh opened the desktop")
+func TestCLIVersionKeepsOutputAndSkipsApplication(t *testing.T) {
+	called := false
+	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+	actions := cliActions{run: func(context.Context) error { called = true; return nil }}
+	if code := runCLI(context.Background(), []string{"clashpulse", "version"}, stdout, stderr, actions); code != 0 || called || stdout.String() != "clashpulse dev\n" || stderr.Len() != 0 {
+		t.Fatalf("version: exit=%d called=%t stdout=%q stderr=%q", code, called, stdout.String(), stderr.String())
+	}
+}
+
+func TestCLIUnexpectedArgsFallBackToApplication(t *testing.T) {
+	for _, args := range [][]string{
+		{"clashpulse", "version", "extra"},
+		{"clashpulse", "unknown"},
+		{"clashpulse", "unknown", "extra"},
+		{"clashpulse", "gui", "extra"},
+		{"clashpulse", "tui", "extra"},
+	} {
+		t.Run(strings.Join(args[1:], " "), func(t *testing.T) {
+			called, desktopCalled := false, false
+			stderr := new(bytes.Buffer)
+			actions := cliActions{
+				run: func(context.Context) error {
+					called = true
+					return errors.New("application fallback")
+				},
+				desktop: func(context.Context, func(context.Context) error) error {
+					desktopCalled = true
 					return nil
 				},
-				func(_ context.Context, actualKind, id string) error { gotKind, gotID = actualKind, id; return nil })
-			if code != 0 || gotKind != kind || gotID != "" || stdout.String() != "refreshed all enabled "+kind+"s\n" || stderr.Len() != 0 {
-				t.Fatalf("%s %s = code %d, kind %q, id %q, stdout %q, stderr %q", command, kind, code, gotKind, gotID, stdout.String(), stderr.String())
+				tui: func(context.Context) error { return nil },
 			}
+			if code := runCLI(context.Background(), args, new(bytes.Buffer), stderr, actions); code != 1 || !called || desktopCalled || stderr.String() != "application fallback\n" {
+				t.Fatalf("exit=%d called=%t desktop=%t stderr=%q", code, called, desktopCalled, stderr.String())
+			}
+		})
+	}
+}
+
+func TestCLIRefreshDispatchesAllAndScopedOperations(t *testing.T) {
+	var got []string
+	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+	actions := cliActions{refresh: func(_ context.Context, kind, id string, show bool) error {
+		got = append(got, fmt.Sprintf("%s:%s:%t", kind, id, show))
+		return nil
+	}}
+	for _, test := range []struct {
+		args []string
+		want string
+		out  string
+	}{
+		{[]string{"clashpulse", "refresh"}, "::false", "refreshed all enabled sources\n"},
+		{[]string{"clashpulse", "refresh", "subscription", "xcvpn", "--show-response"}, "subscription:xcvpn:true", "refreshed subscription xcvpn\n"},
+		{[]string{"clashpulse", "refresh", "--show-response", "subscription", "xcvpn"}, "subscription:xcvpn:true", "refreshed subscription xcvpn\n"},
+		{[]string{"clashpulse", "refresh", "resource", "geo"}, "resource:geo:false", "refreshed resource geo\n"},
+	} {
+		stdout.Reset()
+		stderr.Reset()
+		if code := runCLI(context.Background(), test.args, stdout, stderr, actions); code != 0 || got[len(got)-1] != test.want || stdout.String() != test.out || stderr.Len() != 0 {
+			t.Fatalf("%q: exit=%d got=%q stdout=%q stderr=%q", test.args, code, got, stdout.String(), stderr.String())
 		}
 	}
 }
 
-func TestRefreshCommandRoutesWithoutStartingDesktop(t *testing.T) {
-	var kind, id string
-	var runnerCalls, desktopCalls int
+func TestCLIDownloadOnlyDispatchesSubscriptions(t *testing.T) {
+	var got []string
 	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
-	code := runMainContextWithRefresh(context.Background(), []string{"refresh", "subscription", "alpha"}, stdout, stderr,
-		func(context.Context) error { runnerCalls++; return nil },
-		func(context.Context, func(context.Context) error) error { desktopCalls++; return nil },
-		func(_ context.Context, gotKind, gotID string) error { kind, id = gotKind, gotID; return nil })
-	if code != 0 || kind != "subscription" || id != "alpha" || runnerCalls != 0 || desktopCalls != 0 || stdout.String() != "refreshed subscription alpha\n" || stderr.Len() != 0 {
-		t.Fatalf("refresh entrypoint = code %d, kind %q, id %q, runner %d, desktop %d, stdout %q, stderr %q", code, kind, id, runnerCalls, desktopCalls, stdout.String(), stderr.String())
-	}
-}
-
-func TestRefreshCommandPrintsOnlyScopedSanitizedFailure(t *testing.T) {
-	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
-	code := runMainContextWithRefresh(context.Background(), []string{"refresh", "subscription", "feed"}, stdout, stderr,
-		func(context.Context) error { return nil },
-		func(context.Context, func(context.Context) error) error { return nil },
-		func(context.Context, string, string) error {
-			return errors.New("clashpulse: refresh subscription feed: HTTP 406")
-		})
-	if code != 1 || stdout.Len() != 0 || stderr.String() != "clashpulse: refresh subscription feed: HTTP 406\n" {
-		t.Fatalf("refresh failure output = code %d, stdout %q, stderr %q", code, stdout.String(), stderr.String())
-	}
-}
-
-func TestRefreshAndDownloadWithoutIDRunAllEnabledSources(t *testing.T) {
-	for _, command := range []string{"refresh", "download"} {
-		var gotKind, gotID string
-		stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
-		code := runMainContextWithRefresh(context.Background(), []string{command}, stdout, stderr,
-			func(context.Context) error { t.Fatal("refresh-all started the service"); return nil },
-			func(context.Context, func(context.Context) error) error {
-				t.Fatal("refresh-all opened the desktop")
-				return nil
-			},
-			func(_ context.Context, kind, id string) error { gotKind, gotID = kind, id; return nil })
-		if code != 0 || gotKind != "" || gotID != "" || stdout.String() != "refreshed all enabled sources\n" || stderr.Len() != 0 {
-			t.Fatalf("%s without ID = code %d, kind %q, id %q, stdout %q, stderr %q", command, code, gotKind, gotID, stdout.String(), stderr.String())
+	actions := cliActions{download: func(_ context.Context, id string, show bool) error {
+		got = append(got, fmt.Sprintf("%s:%t", id, show))
+		return nil
+	}}
+	for _, test := range []struct {
+		args []string
+		want string
+		out  string
+	}{
+		{[]string{"clashpulse", "download"}, ":false", "downloaded all enabled subscriptions\n"},
+		{[]string{"clashpulse", "download", "subscription", "xcvpn", "--show-response"}, "xcvpn:true", "downloaded subscription xcvpn\n"},
+		{[]string{"clashpulse", "download", "--show-response", "subscription", "xcvpn"}, "xcvpn:true", "downloaded subscription xcvpn\n"},
+	} {
+		stdout.Reset()
+		stderr.Reset()
+		if code := runCLI(context.Background(), test.args, stdout, stderr, actions); code != 0 || got[len(got)-1] != test.want || stdout.String() != test.out || stderr.Len() != 0 {
+			t.Fatalf("%q: exit=%d got=%q stdout=%q stderr=%q", test.args, code, got, stdout.String(), stderr.String())
 		}
 	}
+	called := len(got)
+	if code := runCLI(context.Background(), []string{"clashpulse", "download", "resource", "geo"}, stdout, stderr, actions); code == 0 || len(got) != called {
+		t.Fatal("download accepted a resource target")
+	}
 }
 
-func TestShowResponseFlagPrintsOptInHTTPBody(t *testing.T) {
+func TestCLIShowResponsePrintsBoundedBodyOnError(t *testing.T) {
 	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
-	status := download.StatusError{Code: http.StatusOK, ResponseBody: "gateway denied"}
-	code := runMainContextWithRefreshOptions(context.Background(), []string{"refresh", "subscription", "feed", "--show-response"}, stdout, stderr,
-		func(context.Context) error { t.Fatal("response inspection started the service"); return nil },
-		func(context.Context, func(context.Context) error) error {
-			t.Fatal("response inspection opened the desktop")
-			return nil
-		},
-		func(_ context.Context, kind, id string, show bool) error {
-			if !show || kind != "subscription" || id != "feed" {
-				t.Fatalf("refresh options = %q, %q, show=%t", kind, id, show)
-			}
-			return fmt.Errorf("clashpulse: refresh subscription feed: invalid proxy profile: %w", status)
-		})
-	if code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "HTTP 200 OK") || !strings.Contains(stderr.String(), "gateway denied") {
-		t.Fatalf("show-response output = code %d, stdout %q, stderr %q", code, stdout.String(), stderr.String())
+	actions := cliActions{download: func(context.Context, string, bool) error {
+		return fmt.Errorf("clashpulse: download subscription xcvpn: invalid profile: %w", download.StatusError{Code: http.StatusOK, ResponseBody: "bad profile"})
+	}}
+	code := runCLI(context.Background(), []string{"clashpulse", "download", "subscription", "xcvpn", "--show-response"}, stdout, stderr, actions)
+	if code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "HTTP 200 OK") || !strings.Contains(stderr.String(), "bad profile") {
+		t.Fatalf("show-response: exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestCLIPropagatesActionError(t *testing.T) {
+	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+	actions := cliActions{refresh: func(context.Context, string, string, bool) error { return errors.New("refresh failed") }}
+	if code := runCLI(context.Background(), []string{"clashpulse", "refresh"}, stdout, stderr, actions); code != 1 || stderr.String() != "refresh failed\n" {
+		t.Fatalf("action error: exit=%d stderr=%q", code, stderr.String())
 	}
 }

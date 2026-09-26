@@ -14,6 +14,7 @@ require (
 	github.com/gdamore/tcell/v3 v3.4.2
 	github.com/gen2brain/beeep v0.11.2
 	github.com/mattn/go-runewidth v0.0.27
+	github.com/urfave/cli/v3 v3.13.0
 	golang.org/x/sys v0.47.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -31,7 +32,6 @@ require (
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/esiqveland/notify v0.13.3 // indirect
 	github.com/fyne-io/gl-js v0.2.1-0.20260315212741-029c47fd27e8 // indirect
 	github.com/fyne-io/glfw-js v0.4.0 // indirect
@@ -53,17 +53,17 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/nicksnyder/go-i18n/v2 v2.5.1 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rymdport/portal v0.4.2 // indirect
 	github.com/sergeymakinen/go-bmp v1.0.0 // indirect
 	github.com/sergeymakinen/go-ico v1.0.0-beta.0 // indirect
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
-	github.com/stretchr/testify v1.11.1 // indirect
+	github.com/stretchr/testify v1.12.1 // indirect
 	github.com/tadvi/systray v0.0.0-20190226123456-11a2b8fa57af // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yuin/goldmark v1.8.2 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/image v0.45.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect

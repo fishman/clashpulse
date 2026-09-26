@@ -54,21 +54,11 @@ func RefreshAtWithOptions(ctx context.Context, configDir, stateDir, kind, id str
 	if id != "" && !validDiagnosticID(id) {
 		return fmt.Errorf("clashpulse: invalid refresh source ID")
 	}
-	release, err := acquireOwnerLock(stateDir)
+	s, initial, release, err := openOfflineRuntime(ctx, configDir, stateDir, options)
 	if err != nil {
 		return err
 	}
 	defer release()
-	if err := privateDirectory(configDir); err != nil {
-		return fmt.Errorf("clashpulse: configuration unavailable")
-	}
-	if err := config.Seed(configDir); err != nil {
-		return fmt.Errorf("clashpulse: configuration unavailable")
-	}
-	initial, err := config.Load(configDir)
-	if err != nil {
-		return fmt.Errorf("clashpulse: configuration is invalid")
-	}
 	if id != "" {
 		switch kind {
 		case "subscription":
@@ -80,10 +70,6 @@ func RefreshAtWithOptions(ctx context.Context, configDir, stateDir, kind, id str
 				return fmt.Errorf("clashpulse: resource %s is not enabled", id)
 			}
 		}
-	}
-	s, err := newRuntimeServiceWithResponseCapture(configDir, stateDir, initial, options.ShowResponse)
-	if err != nil {
-		return fmt.Errorf("clashpulse: refresh state unavailable")
 	}
 	if err := ctx.Err(); err != nil {
 		return directRefreshFailure(kind, id, err)
@@ -104,6 +90,76 @@ func RefreshAtWithOptions(ctx context.Context, configDir, stateDir, kind, id str
 	default:
 		return fmt.Errorf("clashpulse: unsupported refresh target")
 	}
+}
+
+func DownloadWithOptions(ctx context.Context, id string, options RefreshOptions) error {
+	configHome, stateHome := xdg.ConfigHome(), xdg.StateHome()
+	if configHome == "" || stateHome == "" {
+		return fmt.Errorf("clashpulse: cannot resolve private configuration and state directories")
+	}
+	return DownloadAtWithOptions(ctx, filepath.Join(configHome, "clashpulse"), filepath.Join(stateHome, "clashpulse"), id, options)
+}
+
+func DownloadAtWithOptions(ctx context.Context, configDir, stateDir, id string, options RefreshOptions) error {
+	if id != "" && !validDiagnosticID(id) {
+		return fmt.Errorf("clashpulse: invalid subscription ID")
+	}
+	s, initial, release, err := openOfflineRuntime(ctx, configDir, stateDir, options)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if id != "" {
+		if !hasSubscription(initial, id) {
+			return fmt.Errorf("clashpulse: subscription %s is not configured", id)
+		}
+		return s.downloadSubscription(ctx, id)
+	}
+	var failures []error
+	for _, subscription := range s.subs.List() {
+		if subscription.Enabled {
+			if err := s.downloadSubscription(ctx, subscription.ID); err != nil {
+				failures = append(failures, err)
+			}
+		}
+	}
+	return errors.Join(failures...)
+}
+
+func openOfflineRuntime(ctx context.Context, configDir, stateDir string, options RefreshOptions) (*runtimeService, config.Snapshot, func(), error) {
+	if ctx == nil {
+		return nil, config.Snapshot{}, nil, fmt.Errorf("clashpulse: context is required")
+	}
+	release, err := acquireOwnerLock(stateDir)
+	if err != nil {
+		return nil, config.Snapshot{}, nil, err
+	}
+	fail := func(err error) (*runtimeService, config.Snapshot, func(), error) {
+		release()
+		return nil, config.Snapshot{}, nil, err
+	}
+	if err := privateDirectory(configDir); err != nil {
+		return fail(fmt.Errorf("clashpulse: configuration unavailable"))
+	}
+	if err := config.Seed(configDir); err != nil {
+		return fail(fmt.Errorf("clashpulse: configuration unavailable"))
+	}
+	initial, err := config.Load(configDir)
+	if err != nil {
+		return fail(fmt.Errorf("clashpulse: configuration is invalid"))
+	}
+	s, err := newRuntimeServiceWithResponseCapture(configDir, stateDir, initial, options.ShowResponse)
+	if err != nil {
+		return fail(fmt.Errorf("clashpulse: refresh state unavailable"))
+	}
+	return s, initial, release, nil
+}
+
+func (s *runtimeService) downloadSubscription(ctx context.Context, id string) error {
+	if _, err := s.subs.Download(ctx, id); err != nil {
+		return directOperationFailure("download", "subscription", id, err)
+	}
+	return nil
 }
 
 func (s *runtimeService) refreshSubscription(ctx context.Context, id string) error {
@@ -229,9 +285,13 @@ func (e refreshFailure) Error() string { return e.message }
 func (e refreshFailure) Unwrap() error { return e.status }
 
 func directRefreshFailure(kind, id string, err error) error {
+	return directOperationFailure("refresh", kind, id, err)
+}
+
+func directOperationFailure(operation, kind, id string, err error) error {
 	status, hasStatus := download.StatusErrorFrom(err)
 	response, hasResponse := download.HTTPResponseFrom(err)
-	message := safeDiagnostic("refresh_"+kind, id, err).Message
+	message := safeDiagnostic(operation+"_"+kind, id, err).Message
 	if hasStatus {
 		message = httpStatusMessage(status)
 	} else if hasResponse && response.Code >= 300 {
@@ -256,7 +316,7 @@ func directRefreshFailure(kind, id string, err error) error {
 	} else {
 		scope += "s"
 	}
-	fullMessage := fmt.Sprintf("clashpulse: refresh %s: %s", scope, message)
+	fullMessage := fmt.Sprintf("clashpulse: %s %s: %s", operation, scope, message)
 	if hasResponse {
 		return refreshFailure{message: fullMessage, status: response}
 	}

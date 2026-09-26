@@ -45,6 +45,7 @@ type privateRecord struct {
 	Usage                *Usage              `json:"usage,omitempty"`
 	Hash                 string              `json:"hash,omitempty"`
 	CandidateHash        string              `json:"candidate_hash,omitempty"`
+	DownloadedOnly       bool                `json:"downloaded_only,omitempty"`
 	AppliedHash          string              `json:"applied_hash,omitempty"`
 	AppliedProfileHash   string              `json:"applied_profile_hash,omitempty"`
 	AppliedCandidateHash string              `json:"applied_candidate_hash,omitempty"`
@@ -114,7 +115,7 @@ func NewStore(dir string) (*Store, error) {
 			return nil, ErrStore
 		}
 		normalized, normalizeErr := normalizeSubscription(record.Subscription, false)
-		if normalizeErr != nil || normalized != record.Subscription || !validOptionalHash(record.Hash) || !validOptionalHash(record.CandidateHash) || !validFailure(record.LastFailure) {
+		if normalizeErr != nil || normalized != record.Subscription || !validOptionalHash(record.Hash) || !validOptionalHash(record.CandidateHash) || !validFailure(record.LastFailure) || record.DownloadedOnly && (record.Hash == "" || record.CandidateHash != record.Hash) {
 			return nil, ErrStore
 		}
 		if record.Hash == "" {
@@ -442,7 +443,7 @@ func (s *Store) touchFailure(id string, checkedAt time.Time, failure string) boo
 	s.records[id] = record
 	return persisted
 }
-func (s *Store) promote(id string, profile, candidate []byte, checkedAt time.Time, etag, lastModified string, usage *Usage) (privateRecord, error) {
+func (s *Store) promote(id string, profile, candidate []byte, checkedAt time.Time, etag, lastModified string, usage *Usage, downloadedOnly bool) (privateRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	record, ok := s.records[id]
@@ -458,21 +459,12 @@ func (s *Store) promote(id string, profile, candidate []byte, checkedAt time.Tim
 	}
 	profilePath := filepath.Join(directory, profileFilename(profileHash))
 	candidatePath := filepath.Join(directory, candidateFilename(profileHash, candidateHash))
-	if config.Write(profilePath, profile) != nil {
+	if config.Write(profilePath, profile) != nil || config.Write(candidatePath, candidate) != nil {
 		return privateRecord{}, ErrStore
 	}
-	if config.Write(candidatePath, candidate) != nil {
-		return privateRecord{}, ErrStore
-	}
-	record.Hash = profileHash
-	record.CandidateHash = candidateHash
-	record.CheckedAt = checkedAt
-	record.LastSuccess = checkedAt
-	record.LastFailureAt = time.Time{}
-	record.LastFailure = ""
-	record.ETag = etag
-	record.LastModified = lastModified
-	record.Usage = cloneUsage(usage)
+	record.Hash, record.CandidateHash, record.DownloadedOnly = profileHash, candidateHash, downloadedOnly
+	record.CheckedAt, record.LastSuccess, record.LastFailureAt, record.LastFailure = checkedAt, checkedAt, time.Time{}, ""
+	record.ETag, record.LastModified, record.Usage = etag, lastModified, cloneUsage(usage)
 	if s.writeRecord(directory, record) != nil {
 		return privateRecord{}, ErrStore
 	}

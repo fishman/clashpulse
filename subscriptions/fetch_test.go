@@ -666,3 +666,125 @@ func TestRefreshUsageMetadataIsOptionalAndPrivate(t *testing.T) {
 		t.Fatalf("stale usage retained after new body: %+v", entries)
 	}
 }
+
+func TestRefreshValidatesPendingDownloadAndRetainsValidators(t *testing.T) {
+	profileA := []byte("proxies:\n  - name: alpha\n    type: direct\n")
+	profileB := []byte("proxies:\n  - name: beta\n    type: direct\n")
+	modifiedA := "Wed, 21 Oct 2015 07:28:00 GMT"
+	modifiedB := "Thu, 22 Oct 2015 07:28:00 GMT"
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if requests == 4 {
+			if r.Header.Get("If-None-Match") != `"a2"` || r.Header.Get("If-Modified-Since") != modifiedA {
+				t.Errorf("conditional headers = (%q, %q)", r.Header.Get("If-None-Match"), r.Header.Get("If-Modified-Since"))
+			}
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		body, etag, lastModified := profileA, `"a1"`, modifiedA
+		if requests == 2 {
+			body, etag, lastModified = profileB, `"b1"`, modifiedB
+		} else if requests == 3 {
+			etag = `"a2"`
+		}
+		w.Header().Set("ETag", etag)
+		w.Header().Set("Last-Modified", lastModified)
+		_, _ = w.Write(body)
+	}))
+	defer server.Close()
+
+	renders, validations := 0, 0
+	store, service := makeService(t, server,
+		func(_ context.Context, profile []byte) ([]byte, error) {
+			renders++
+			return append([]byte("generated:\n"), profile...), nil
+		},
+		func(context.Context, []byte) error { validations++; return nil })
+	if _, err := service.Add(config.Subscription{ID: "pending", URL: server.URL, AllowHTTP: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Refresh(context.Background(), "pending"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Activate(context.Background(), "pending"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Download(context.Background(), "pending"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Download(context.Background(), "pending"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Refresh(context.Background(), "pending"); err != nil {
+		t.Fatal(err)
+	}
+	record, ok := store.get("pending")
+	if !ok || record.DownloadedOnly || renders != 2 || validations != 2 {
+		t.Fatalf("refresh did not validate pending profile: record=%+v renders=%d validations=%d", record, renders, validations)
+	}
+	if record.ETag != `"a2"` || record.LastModified != modifiedA {
+		t.Fatalf("304 discarded cached validators: ETag=%q Last-Modified=%q", record.ETag, record.LastModified)
+	}
+}
+
+func TestDownloadStoresParsedSourceAndActivationAppliesIt(t *testing.T) {
+	profile := []byte("proxies:\n  - name: imported\n    type: direct\n")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(profile) }))
+	defer server.Close()
+	renders, validations, applies := 0, 0, 0
+	store, service := makeService(t, server,
+		func(context.Context, []byte) ([]byte, error) { renders++; return []byte("generated"), nil },
+		func(context.Context, []byte) error { validations++; return nil })
+	service.options.Apply = func(ctx context.Context, source []byte) error {
+		applies++
+		if !bytes.Equal(source, profile) {
+			t.Fatalf("activated source = %q", source)
+		}
+		candidate, err := service.options.Render(ctx, source)
+		if err != nil {
+			return err
+		}
+		return service.options.Validate(ctx, candidate)
+	}
+	if _, err := service.Add(config.Subscription{ID: "download", URL: server.URL, AllowHTTP: true}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.Download(context.Background(), "download")
+	if err != nil || !result.Changed || renders != 0 || validations != 0 || applies != 0 {
+		t.Fatalf("download result=%+v error=%v render=%d validate=%d apply=%d", result, err, renders, validations, applies)
+	}
+	record, ok := store.get("download")
+	if !ok || !record.DownloadedOnly {
+		t.Fatalf("download snapshot was not marked pending: %+v", record)
+	}
+	got, err := service.Profile("download")
+	if err != nil || !bytes.Equal(got, profile) {
+		t.Fatalf("downloaded source not persisted: %q, %v", got, err)
+	}
+	if err := service.Activate(context.Background(), "download"); err != nil || applies != 1 || renders != 1 || validations != 1 {
+		t.Fatalf("activation did not render/validate/apply: render=%d validate=%d apply=%d error=%v", renders, validations, applies, err)
+	}
+}
+
+func TestDownloadedProfilePendingStateSurvivesRestart(t *testing.T) {
+	profile := []byte("proxies:\n  - name: imported\n    type: direct\n")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(profile) }))
+	defer server.Close()
+	store, service := makeService(t, server, nil, nil)
+	if _, err := service.Add(config.Subscription{ID: "download", URL: server.URL, AllowHTTP: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Download(context.Background(), "download"); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := NewStore(store.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, ok := reopened.get("download")
+	got, profileErr := reopened.Profile("download")
+	if !ok || !record.DownloadedOnly || profileErr != nil || !bytes.Equal(got, profile) {
+		t.Fatalf("pending source lost after reopen: record=%+v profile=%q error=%v", record, got, profileErr)
+	}
+}

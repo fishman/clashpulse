@@ -195,3 +195,47 @@ func TestResourceBatchFailurePreservesEachHTTPResponse(t *testing.T) {
 		}
 	}
 }
+
+func TestDownloadAtStoresSubscriptionWithoutInspectingMihomo(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("proxies:\n  - name: downloaded\n    type: direct\n"))
+	}))
+	defer server.Close()
+	configDir, stateDir := t.TempDir(), t.TempDir()
+	if err := privateDirectory(configDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Seed(configDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte("[mihomo]\nbinary = \"bundled\"\n")); err != nil {
+		t.Fatal(err)
+	}
+	initial, err := config.Load(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name, source := "Feed", server.URL
+	enabled, allowHTTP := true, true
+	interval, timeout := time.Hour, 3*time.Second
+	if err := config.PatchSubscription(filepath.Join(configDir, "subscriptions.toml"), initial, "feed", config.SubscriptionEdit{
+		Name: &name, URL: &source, Enabled: &enabled, AllowHTTP: &allowHTTP, RefreshInterval: &interval, Timeout: &timeout,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := DownloadAtWithOptions(t.Context(), configDir, stateDir, "feed", RefreshOptions{}); err != nil {
+		t.Fatalf("download called Mihomo or failed: %v", err)
+	}
+	updated, err := config.Load(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := newRuntimeService(configDir, stateDir, updated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := service.subs.List()
+	if len(entries) != 1 || !entries[0].HasSnapshot || entries[0].Active {
+		t.Fatalf("download did not persist an inactive profile: %+v", entries)
+	}
+}
