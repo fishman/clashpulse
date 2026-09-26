@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -383,7 +384,7 @@ func (b *finalCancelBody) Read(p []byte) (int, error) {
 func (b *finalCancelBody) Close() error { return nil }
 
 func TestFetchCapturesBoundedPrintableErrorBodyOnlyWhenRequested(t *testing.T) {
-	body := strings.Repeat("gateway detail \x1b[31m", 200) + strings.Repeat("\xff", 1000)
+	body := strings.Repeat("gateway detail \u202e\x1b[31m", 200) + strings.Repeat("\xff", 1000)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = io.WriteString(w, body)
@@ -399,7 +400,7 @@ func TestFetchCapturesBoundedPrintableErrorBodyOnlyWhenRequested(t *testing.T) {
 	request.CaptureErrorBody = true
 	_, err = client.Fetch(context.Background(), request)
 	status, ok = StatusErrorFrom(err)
-	if !ok || !strings.Contains(status.ResponseBody, "gateway detail") || !strings.Contains(status.ResponseBody, "[response truncated]") || strings.ContainsAny(status.ResponseBody, "\x1b\x07") || len(status.ResponseBody) > maxErrorResponseBytes {
+	if !ok || !strings.Contains(status.ResponseBody, "gateway detail") || !strings.Contains(status.ResponseBody, "[response truncated]") || strings.ContainsAny(status.ResponseBody, "\x1b\x07") || strings.Contains(status.ResponseBody, "\u202e") || len(status.ResponseBody) > maxErrorResponseBytes {
 		t.Fatalf("opt-in response body was not bounded printable text: %+v, %v", status, err)
 	}
 }
@@ -414,4 +415,48 @@ func TestHTTPResponseFromAcceptsSuccessStatusForLaterFailure(t *testing.T) {
 	if _, ok := StatusErrorFrom(err); ok {
 		t.Fatal("successful response was classified as an HTTP error status")
 	}
+}
+
+func TestFetchCapturesPreviewWhenSuccessfulBodyExceedsProfileLimit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "profile prefix "+strings.Repeat("x", 512))
+	}))
+	defer server.Close()
+	client := NewClient(func(Route) (http.RoundTripper, error) { return http.DefaultTransport, nil })
+	_, err := client.Fetch(context.Background(), Request{URL: server.URL, Route: Direct, MaxBytes: 64, AllowHTTP: true, CaptureErrorBody: true})
+	response, ok := HTTPResponseFrom(err)
+	if err == nil || !strings.Contains(err.Error(), "download: body too large") || !ok || response.Code != http.StatusOK || !strings.Contains(response.ResponseBody, "profile prefix") || !strings.Contains(response.ResponseBody, "[response truncated]") {
+		t.Fatalf("oversize response preview = %+v, %v", response, err)
+	}
+}
+
+func TestCaptureErrorResponseStopsOnUnfinishedBody(t *testing.T) {
+	body := &blockingResponseBody{closed: make(chan struct{})}
+	fallback := time.AfterFunc(3*time.Second, func() { _ = body.Close() })
+	defer fallback.Stop()
+	started := time.Now()
+	got := captureErrorResponse(body)
+	if time.Since(started) >= 2*time.Second || !strings.Contains(got, "partial diagnostic") {
+		t.Fatalf("response body capture did not time out safely: %q after %v", got, time.Since(started))
+	}
+}
+
+type blockingResponseBody struct {
+	closed chan struct{}
+	once   sync.Once
+	read   bool
+}
+
+func (b *blockingResponseBody) Read(p []byte) (int, error) {
+	if !b.read {
+		b.read = true
+		return copy(p, "partial diagnostic"), nil
+	}
+	<-b.closed
+	return 0, io.EOF
+}
+
+func (b *blockingResponseBody) Close() error {
+	b.once.Do(func() { close(b.closed) })
+	return nil
 }

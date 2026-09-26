@@ -105,12 +105,15 @@ func (s *Service) refresh(ctx context.Context, id string, supplied *config.Subsc
 		if contextErr := s.recordContextFailure(operationCtx, id, checkedAt); contextErr != nil {
 			return Result{}, contextErr
 		}
-		status, ok := download.StatusErrorFrom(err)
-		if ok {
+		responseStatus, hasResponse := download.HTTPResponseFrom(err)
+		if status, ok := download.StatusErrorFrom(err); ok {
 			s.recordFailure(id, checkedAt, status)
 			return Result{}, fmt.Errorf("%w: %w", ErrFetch, status)
 		}
 		s.recordFailure(id, checkedAt, ErrFetch)
+		if hasResponse {
+			return Result{}, errors.Join(ErrFetch, responseStatus)
+		}
 		return Result{}, ErrFetch
 	}
 	checkedAt := time.Now()

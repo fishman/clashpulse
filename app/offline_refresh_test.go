@@ -12,6 +12,7 @@ import (
 
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/download"
+	"github.com/fishman/clashpulse/resources"
 )
 
 func TestRefreshAtRefusesConcurrentDesktopOwner(t *testing.T) {
@@ -151,5 +152,46 @@ func TestRefreshAtShowResponseIncludesHTTP200ProfileOnFailure(t *testing.T) {
 	response, ok := download.HTTPResponseFrom(err)
 	if err == nil || !ok || response.Code != http.StatusOK || response.ResponseBody != "not a proxy profile\n" {
 		t.Fatalf("successful HTTP profile response was lost from validation failure: %+v, %v", response, err)
+	}
+}
+
+func TestResourceBatchFailurePreservesEachHTTPResponse(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/geo-a" {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte("deny a"))
+			return
+		}
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte("deny b"))
+	}))
+	defer server.Close()
+	client := download.NewClient(func(download.Route) (http.RoundTripper, error) { return server.Client().Transport, nil })
+	client.SetCaptureErrorBody(true)
+	registry, err := resources.NewRegistry(t.TempDir(), client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := config.Snapshot{Resources: []config.Resource{
+		{ID: "geo-a", Kind: config.ResourceRuleSet, Format: config.FormatYAML, RuleType: config.RuleDomain, URL: server.URL + "/geo-a", Enabled: true},
+		{ID: "geo-b", Kind: config.ResourceRuleSet, Format: config.FormatYAML, RuleType: config.RuleDomain, URL: server.URL + "/geo-b", Enabled: true},
+	}}
+	_, cause := registry.StageDue(t.Context(), snapshot, download.Direct, []string{"geo-a", "geo-b"})
+	if cause == nil {
+		t.Fatal("resource batch unexpectedly succeeded")
+	}
+	failure := (&runtimeService{registry: registry}).resourceRefreshFailure(snapshot, []string{"geo-a", "geo-b"}, cause)
+	joined, ok := failure.(interface{ Unwrap() []error })
+	if !ok || len(joined.Unwrap()) != 2 {
+		t.Fatalf("resource failures lost source identities: %v", failure)
+	}
+	for _, item := range joined.Unwrap() {
+		response, ok := download.HTTPResponseFrom(item)
+		switch {
+		case strings.Contains(item.Error(), "geo-a") && ok && response.Code == http.StatusForbidden && response.ResponseBody == "deny a":
+		case strings.Contains(item.Error(), "geo-b") && ok && response.Code == http.StatusTooManyRequests && response.ResponseBody == "deny b":
+		default:
+			t.Errorf("resource response was mismatched or discarded: %v / %+v", item, response)
+		}
 	}
 }

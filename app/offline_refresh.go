@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/download"
@@ -171,20 +172,15 @@ func (s *runtimeService) resourceRefreshFailure(snapshot config.Snapshot, ids []
 			message := "resource update failed"
 			if httpStatus, ok := download.ParseStatus(status.LastFailure); ok {
 				message = httpStatusMessage(httpStatus)
-				if len(ids) == 1 {
-					if captured, found := download.StatusErrorFrom(cause); found && captured.Code == httpStatus.Code {
-						failures = append(failures, refreshFailure{message: fmt.Sprintf("clashpulse: refresh resource %s: %s", id, message), status: captured})
-						continue
-					}
-				}
 			} else if status.LastFailure == resources.ErrPinMismatch.Error() {
 				message = "SHA-256 pin mismatch"
 			}
-			if len(ids) == 1 {
-				if response, found := download.HTTPResponseFrom(cause); found && !response.Valid() {
-					failures = append(failures, refreshFailure{message: fmt.Sprintf("clashpulse: refresh resource %s: %s", id, message), status: response})
-					continue
+			if response, found := resourceResponseFor(cause, id); found {
+				if response.Valid() && message == "resource update failed" {
+					message = httpStatusMessage(response)
 				}
+				failures = append(failures, refreshFailure{message: fmt.Sprintf("clashpulse: refresh resource %s: %s", id, message), status: response})
+				continue
 			}
 			failures = append(failures, fmt.Errorf("clashpulse: refresh resource %s: %s", id, message))
 		}
@@ -193,6 +189,19 @@ func (s *runtimeService) resourceRefreshFailure(snapshot config.Snapshot, ids []
 		}
 	}
 	return directRefreshFailure("resource", ids[0], cause)
+}
+
+func resourceResponseFor(err error, id string) (download.StatusError, bool) {
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, failure := range joined.Unwrap() {
+			if strings.Contains(failure.Error(), `resource "`+id+`"`) {
+				if response, found := download.HTTPResponseFrom(failure); found {
+					return response, true
+				}
+			}
+		}
+	}
+	return download.HTTPResponseFrom(err)
 }
 
 func httpStatusMessage(status download.StatusError) string {
@@ -225,6 +234,8 @@ func directRefreshFailure(kind, id string, err error) error {
 	message := safeDiagnostic("refresh_"+kind, id, err).Message
 	if hasStatus {
 		message = httpStatusMessage(status)
+	} else if hasResponse && response.Code >= 300 {
+		message = httpStatusMessage(response)
 	} else {
 		switch {
 		case errors.Is(err, subscriptions.ErrNotFound):

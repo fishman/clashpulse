@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 )
@@ -17,6 +18,8 @@ import (
 const maxRedirects = 5
 
 const maxErrorResponseBytes = 4096
+
+var errBodyTooLarge = errors.New("download: body too large")
 
 type Route string
 
@@ -176,6 +179,10 @@ func (c *Client) Fetch(ctx context.Context, req Request) (Response, error) {
 		body, err := readBody(ctx, response.Body, req.MaxBytes)
 		response.Body.Close()
 		if err != nil {
+			if (req.CaptureErrorBody || c.captureErrorBody) && errors.Is(err, errBodyTooLarge) {
+				status := StatusError{Code: response.StatusCode, ResponseBody: printableResponseBody(body, true)}
+				return Response{}, errors.Join(err, status)
+			}
 			return Response{}, err
 		}
 		diagnosticBody := ""
@@ -348,9 +355,14 @@ func readBody(ctx context.Context, body io.Reader, maxBytes int64) ([]byte, erro
 			return nil, err
 		}
 		if n > 0 {
+			remaining := maxBytes - size
 			size += int64(n)
 			if size > maxBytes {
-				return nil, errors.New("download: body too large")
+				if remaining > 0 {
+					keep := min(int64(n), remaining)
+					buf.Write(chunk[:int(keep)])
+				}
+				return buf.Bytes(), errBodyTooLarge
 			}
 			buf.Write(chunk[:n])
 		}
@@ -358,21 +370,30 @@ func readBody(ctx context.Context, body io.Reader, maxBytes int64) ([]byte, erro
 			if errors.Is(err, io.EOF) {
 				return buf.Bytes(), nil
 			}
-			return nil, fmt.Errorf("download: read body: %w", err)
+			return buf.Bytes(), fmt.Errorf("download: read body: %w", err)
 		}
 	}
 }
 
 func captureErrorResponse(body io.Reader) string {
+	var timer *time.Timer
+	if closer, ok := body.(io.Closer); ok {
+		timer = time.AfterFunc(time.Second, func() { _ = closer.Close() })
+	}
 	data, _ := io.ReadAll(io.LimitReader(body, maxErrorResponseBytes+1))
-	truncated := len(data) > maxErrorResponseBytes
-	if truncated {
+	timedOut := timer != nil && !timer.Stop()
+	return printableResponseBody(data, len(data) > maxErrorResponseBytes || timedOut)
+}
+
+func printableResponseBody(data []byte, truncated bool) string {
+	if len(data) > maxErrorResponseBytes {
 		data = data[:maxErrorResponseBytes]
+		truncated = true
 	}
 	text := strings.ToValidUTF8(string(data), "\uFFFD")
 	var output strings.Builder
 	for _, char := range text {
-		if char == '\n' || char == '\t' || !unicode.IsControl(char) {
+		if char == '\n' || char == '\t' || unicode.IsPrint(char) {
 			output.WriteRune(char)
 		}
 	}

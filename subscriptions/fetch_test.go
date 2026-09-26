@@ -70,6 +70,24 @@ func TestRefreshReportsSafeHTTPStatus(t *testing.T) {
 	}
 }
 
+func TestRefreshPreservesOptedInNonRedirectHTTPResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusMultipleChoices)
+		_, _ = w.Write([]byte("choose another endpoint"))
+	}))
+	defer server.Close()
+	_, service := makeService(t, server, nil, nil)
+	service.options.CaptureErrorBody = true
+	if _, err := service.Add(config.Subscription{ID: "multi", URL: server.URL, AllowHTTP: true}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := service.Refresh(context.Background(), "multi")
+	response, ok := download.HTTPResponseFrom(err)
+	if !errors.Is(err, ErrFetch) || !ok || response.Code != http.StatusMultipleChoices || response.ResponseBody != "choose another endpoint" {
+		t.Fatalf("HTTP 300 response lost from subscription failure: %+v, %v", response, err)
+	}
+}
+
 func TestRefresh304ClearsPriorFailureAndPublishesRecovery(t *testing.T) {
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
