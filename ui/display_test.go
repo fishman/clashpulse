@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 
 	"github.com/fishman/clashpulse/core"
@@ -91,6 +92,22 @@ func TestLastSwitchSummaryShowsDecisionEvidence(t *testing.T) {
 		if !strings.Contains(got, piece) {
 			t.Fatalf("switch evidence missing %q: %q", piece, got)
 		}
+	}
+}
+
+func TestLocalActiveSourceGUIStatus(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	view := newDesktopUI(t.Context(), "", app.NewWindow("ClashPulse"))
+	state := core.Snapshot{ActiveSource: "local", Subscriptions: []core.SubscriptionSnapshot{{ID: "prior", Name: "private-path.yaml", Active: true}}}
+	view.postSnapshot(state)
+	fyne.DoAndWait(func() {})
+	status := view.connection.Text
+	if !strings.Contains(status, "local profile") || strings.Contains(status, "private-path.yaml") {
+		t.Fatalf("unsafe GUI status: %q", status)
+	}
+	if title := profileTrayTitle(state); !strings.Contains(title, "local profile") || strings.Contains(title, "private-path.yaml") {
+		t.Fatalf("unsafe tray title: %q", title)
 	}
 }
 

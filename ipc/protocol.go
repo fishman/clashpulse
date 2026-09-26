@@ -12,7 +12,7 @@ import (
 
 const (
 	// ProtocolVersion is negotiated in the first frame on every connection.
-	ProtocolVersion uint16 = 3
+	ProtocolVersion uint16 = 4
 	// MaxFrameSize bounds both incoming and outgoing JSON frames.
 	MaxFrameSize = 1 << 20
 )
@@ -303,6 +303,11 @@ func (c Command) validate() error {
 }
 
 func validateSnapshot(snapshot core.Snapshot) error {
+	switch snapshot.ActiveSource {
+	case "", "none", "local", "subscription":
+	default:
+		return errors.New("ipc: invalid active source")
+	}
 	itemLimit := (MaxFrameSize - 1024) / 256
 	items := 0
 	addItems := func(count int) bool {

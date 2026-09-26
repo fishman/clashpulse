@@ -43,6 +43,12 @@ func selectedProfileLatency(snapshot core.Snapshot) (int64, bool) {
 }
 
 func profileTrayTitle(snapshot core.Snapshot) string {
+	if snapshot.ActiveSource == "local" {
+		return "Active local profile"
+	}
+	if snapshot.ActiveSource == "none" {
+		return "No active profile"
+	}
 	for _, subscription := range snapshot.Subscriptions {
 		if !subscription.Active {
 			continue

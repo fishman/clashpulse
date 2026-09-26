@@ -119,6 +119,7 @@ type DiagnosticSnapshot struct {
 
 type Snapshot struct {
 	Revision      uint64
+	ActiveSource  string
 	Groups        []GroupSnapshot
 	Proxies       []ProxySnapshot
 	Subscriptions []SubscriptionSnapshot

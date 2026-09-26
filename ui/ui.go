@@ -277,8 +277,12 @@ func (d *desktopUI) postSnapshot(snapshot core.Snapshot) {
 		previous := d.current
 		first := !d.hasSnapshot
 		d.connected = true
-		if d.connection.Text != "Connected" {
-			d.connection.SetText("Connected")
+		status := "Connected"
+		if immutable.ActiveSource == "local" {
+			status = "Connected - local profile"
+		}
+		if d.connection.Text != status {
+			d.connection.SetText(status)
 		}
 		counts := []string{count(immutable.Groups), count(immutable.Subscriptions), count(immutable.Resources), count(immutable.Filters), count(immutable.Jobs), count(immutable.Errors)}
 		for i, value := range counts {

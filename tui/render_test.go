@@ -173,6 +173,14 @@ func TestRenderStatusIdentifiesConnectionAndActiveProfile(t *testing.T) {
 	}
 }
 
+func TestLocalActiveSourceStatusDoesNotShowOldSubscription(t *testing.T) {
+	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{ActiveSource: "local", Subscriptions: []core.SubscriptionSnapshot{{ID: "prior", Name: "private-path.yaml", Active: true}}}})
+	status := mockRender(t, model, 80, 12)[11]
+	if !strings.Contains(status, "local profile") || strings.Contains(status, "private-path.yaml") {
+		t.Fatalf("unsafe local status: %q", status)
+	}
+}
+
 func TestRenderLogKeepsBottomStatus(t *testing.T) {
 	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Diagnostics: []core.DiagnosticSnapshot{
 		{At: 100, Severity: "error", Kind: "subscription", SourceID: "feed", Message: "HTTP 406"},

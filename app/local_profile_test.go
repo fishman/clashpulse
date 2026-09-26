@@ -312,7 +312,7 @@ func TestLocalProfileSurvivesSourceRemoval(t *testing.T) {
 	state = waitAppSnapshot(t, ctx, client, func(state core.Snapshot) bool {
 		return state.Revision > previousRevision && len(state.Groups) == 1 && state.Groups[0].Selected == opaqueID("node-b") && len(state.Jobs) == 0
 	})
-	if len(state.Groups) != 1 {
+	if len(state.Groups) != 1 || state.ActiveSource != "local" {
 		t.Fatal("local profile lost after source removal")
 	}
 	cancel()

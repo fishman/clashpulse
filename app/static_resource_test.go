@@ -331,6 +331,15 @@ func TestStaticSystemProxyApplyFailureReportsSafeStage(t *testing.T) {
 		t.Fatal("failed System Proxy Apply did not restore prior settings")
 	}
 }
+func TestLocalActiveSourceDoesNotMarkSavedSubscriptionRunning(t *testing.T) {
+	h := newStaticRuntime(t)
+	h.activate(t)
+	h.service.localProfile = []byte("proxies:\n  - name: node-a\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a]\n")
+	state := h.service.stateSnapshot()
+	if state.ActiveSource != "local" || len(state.Subscriptions) != 1 || state.Subscriptions[0].Active {
+		t.Fatalf("local source was shown as active subscription: %+v", state.Subscriptions)
+	}
+}
 
 func localStaticRuntime(t *testing.T) *staticRuntime {
 	t.Helper()
@@ -396,6 +405,9 @@ func TestLocalProfileRollbackAfterSubscriptionFailure(t *testing.T) {
 	if err == nil || h.service.controller == nil || h.service.generatedPath != localPath || !bytes.Equal(localBytes, h.service.localProfile) {
 		t.Fatalf("failed subscription activation lost local source: %v", err)
 	}
+	if source := h.service.stateSnapshot().ActiveSource; source != "local" {
+		t.Fatalf("failed activation source = %q", source)
+	}
 	if body, err := os.ReadFile(localPath); err != nil || !bytes.Equal(body, generated) {
 		t.Fatalf("failed activation changed local config: %q, %v", body, err)
 	}
@@ -404,6 +416,9 @@ func TestLocalProfileRollbackAfterSubscriptionFailure(t *testing.T) {
 	}
 	if h.service.localProfile != nil || h.service.generatedPath != "" {
 		t.Fatal("subscription activation retained local source")
+	}
+	if source := h.service.stateSnapshot().ActiveSource; source != "subscription" {
+		t.Fatalf("committed activation source = %q", source)
 	}
 	if _, err := os.Stat(localPath); !os.IsNotExist(err) {
 		t.Fatalf("local config survived subscription cutover: %v", err)

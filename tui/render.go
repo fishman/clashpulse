@@ -142,13 +142,17 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 	}
 	if height >= 6 {
 		profile := "profile not reported"
-		for _, subscription := range model.snapshot.Snapshot.Subscriptions {
-			if subscription.Active {
-				profile = "profile " + subscription.Name
-				if subscription.Name == "" {
-					profile = "profile " + subscription.ID
+		if model.snapshot.Snapshot.ActiveSource == "local" {
+			profile = "local profile"
+		} else if model.snapshot.Snapshot.ActiveSource != "none" {
+			for _, subscription := range model.snapshot.Snapshot.Subscriptions {
+				if subscription.Active {
+					profile = "profile " + subscription.Name
+					if subscription.Name == "" {
+						profile = "profile " + subscription.ID
+					}
+					break
 				}
-				break
 			}
 		}
 		left := []chrome.Segment{

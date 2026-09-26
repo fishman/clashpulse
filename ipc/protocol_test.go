@@ -172,6 +172,19 @@ func TestBinarySelectionIntentRejectsURLsAndRelativePaths(t *testing.T) {
 		}
 	}
 }
+
+func TestSnapshotRejectsSourcePath(t *testing.T) {
+	for _, source := range []string{"", "none", "local", "subscription"} {
+		if err := validateSnapshot(core.Snapshot{ActiveSource: source}); err != nil {
+			t.Fatalf("source %q rejected: %v", source, err)
+		}
+	}
+	for _, source := range []string{"/tmp/password=private.yaml", "https://secret.invalid/profile", "password=private", "local\nprivate"} {
+		if err := validateSnapshot(core.Snapshot{ActiveSource: source}); err == nil || strings.Contains(err.Error(), source) {
+			t.Fatalf("unsafe source %q accepted or reflected: %v", source, err)
+		}
+	}
+}
 func TestReadFrameRejectsOversizedLengthBeforeBody(t *testing.T) {
 	var header [4]byte
 	binary.BigEndian.PutUint32(header[:], MaxFrameSize+1)

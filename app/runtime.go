@@ -301,6 +301,14 @@ func (s *runtimeService) syncSubscriptions(snapshot config.Snapshot) error {
 
 func (s *runtimeService) stateSnapshot() core.Snapshot {
 	state := core.CloneSnapshot(s.snapshot)
+	state.ActiveSource = "none"
+	if s.controller != nil {
+		if s.localProfile != nil {
+			state.ActiveSource = "local"
+		} else {
+			state.ActiveSource = "subscription"
+		}
+	}
 	settings := s.store.Snapshot()
 	state.Monitor = core.MonitorSnapshot{
 		Enabled: settings.Monitor.Enabled, TestURL: settings.Monitor.TestURL,
@@ -336,7 +344,7 @@ func (s *runtimeService) stateSnapshot() core.Snapshot {
 	for _, entry := range s.subs.List() {
 		sub := core.SubscriptionSnapshot{
 			ID: entry.ID, Name: entry.Name, SourceHost: entry.SourceHost,
-			Enabled: entry.Enabled, Active: entry.Active, PendingActivation: entry.PendingActivation, LastCheck: unixSeconds(entry.CheckedAt),
+			Enabled: entry.Enabled, Active: entry.Active && s.localProfile == nil, PendingActivation: entry.PendingActivation, LastCheck: unixSeconds(entry.CheckedAt),
 			LastSuccess: unixSeconds(entry.LastSuccess), NextDue: unixSeconds(entry.NextDue), LastFailure: publicFailureLabel("subscription", entry.LastFailure),
 		}
 		sub.Route = entry.Route
