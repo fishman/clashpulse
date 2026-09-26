@@ -102,8 +102,8 @@ func (s *runtimeService) discardServiceIntent(jobID string) {
 func (s *runtimeService) prepareResourceRefresh(ctx context.Context, ids []string) (*preparedResourceRefresh, error) {
 	defer s.resourceDirty.Store(true)
 	intent := s.store.Snapshot()
-	_, profile, err := s.subs.ActiveProfile()
-	if errors.Is(err, subscriptions.ErrNoSnapshot) {
+	profile, err := s.profileForRuntime()
+	if s.localProfile == nil && errors.Is(err, subscriptions.ErrNoSnapshot) {
 		return s.prepareResourceCache(ctx, intent, ids)
 	}
 	if err != nil {

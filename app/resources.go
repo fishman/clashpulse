@@ -6,8 +6,10 @@ import (
 )
 
 func (s *runtimeService) resourceDeadlines(now time.Time) (time.Time, []string) {
-	if _, err := s.subs.ActiveID(); err != nil {
-		return time.Time{}, nil
+	if s.localProfile == nil {
+		if _, err := s.subs.ActiveID(); err != nil {
+			return time.Time{}, nil
+		}
 	}
 	intent := s.store.Snapshot()
 	if len(intent.Resources) == 0 {

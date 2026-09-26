@@ -13,6 +13,7 @@ import (
 
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/subscriptions"
 )
 
@@ -262,5 +263,60 @@ func TestLocalProfileExitsBeforeReadiness(t *testing.T) {
 	public, ok := core.PublicActivation(err)
 	if called || !ok || public.Stage != core.ActivationControllerReadiness && public.Stage != core.ActivationProcessStart {
 		t.Fatalf("early exit called readiness or lost safe stage: %v, called=%t", err, called)
+	}
+}
+
+func TestLocalProfileSurvivesSourceRemoval(t *testing.T) {
+	configDir, stateDir, endpoint, path := localOwnerFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ready, done := make(chan struct{}, 1), make(chan error, 1)
+	go func() {
+		done <- RunFileAt(ctx, configDir, stateDir, endpoint, path, func() error { ready <- struct{}{}; return nil })
+	}()
+	select {
+	case <-ready:
+	case err := <-done:
+		t.Fatalf("initial start: %v", err)
+	case <-time.After(6 * time.Second):
+		t.Fatal("not ready")
+	}
+	request, stop := context.WithTimeout(ctx, time.Second)
+	client, err := ipc.Dial(request, endpoint)
+	stop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	state := waitAppSnapshot(t, ctx, client, func(state core.Snapshot) bool { return len(state.Groups) == 1 })
+	selectionRevision := state.Revision
+	request, stop = context.WithTimeout(ctx, time.Second)
+	_, err = client.Send(request, ipc.Command{Kind: ipc.CommandSelectGroup, GroupID: opaqueID("select-main"), ChoiceID: opaqueID("node-b")})
+	stop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state = waitAppSnapshot(t, ctx, client, func(snapshot core.Snapshot) bool {
+		return snapshot.Revision > selectionRevision && len(snapshot.Groups) == 1 && snapshot.Groups[0].Selected == opaqueID("node-b")
+	})
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	previousRevision := state.Revision
+	request, stop = context.WithTimeout(ctx, time.Second)
+	_, err = client.Send(request, ipc.Command{Kind: ipc.CommandRestart})
+	stop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state = waitAppSnapshot(t, ctx, client, func(state core.Snapshot) bool {
+		return state.Revision > previousRevision && len(state.Groups) == 1 && state.Groups[0].Selected == opaqueID("node-b") && len(state.Jobs) == 0
+	})
+	if len(state.Groups) != 1 {
+		t.Fatal("local profile lost after source removal")
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 }

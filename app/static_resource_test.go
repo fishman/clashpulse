@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -328,6 +329,121 @@ func TestStaticSystemProxyApplyFailureReportsSafeStage(t *testing.T) {
 	}
 	if !equalJSONMap(before, readJSONFile(t, h.proxyState)) {
 		t.Fatal("failed System Proxy Apply did not restore prior settings")
+	}
+}
+
+func localStaticRuntime(t *testing.T) *staticRuntime {
+	t.Helper()
+	h := newStaticRuntime(t)
+	h.service.localProfile = []byte("proxies:\n  - name: local-only\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [local-only]\n")
+	file, err := os.CreateTemp(h.stateDir, "generated-local-*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.service.generatedPath = file.Name()
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.service.start(h.ctx); err != nil {
+		t.Fatalf("start local profile: %v", err)
+	}
+	return h
+}
+
+func TestLocalProfileResourceRefresh(t *testing.T) {
+	h := localStaticRuntime(t)
+	before, err := os.ReadFile(h.service.configPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.setUpdatedSources(t)
+	prepared, err := h.service.prepareResourceRefresh(h.ctx, []string{"list-a", "list-b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.service.applyPreparedResourceRefresh(h.ctx, prepared); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(h.service.configPath())
+	if err != nil || !bytes.Equal(before, after) || h.service.controller == nil || h.service.localProfile == nil {
+		t.Fatalf("local resource refresh lost runtime: %v", err)
+	}
+	for id, path := range h.resourceFiles {
+		body, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(body, h.updatedBodies[id]) {
+			t.Fatalf("updated %s = %q, %v", id, body, err)
+		}
+	}
+	if due, _ := h.service.resourceDeadlines(time.Now()); due.IsZero() {
+		t.Fatal("local source disabled resource schedule")
+	}
+}
+
+func TestLocalProfileRollbackAfterSubscriptionFailure(t *testing.T) {
+	h := localStaticRuntime(t)
+	localPath, localBytes := h.service.generatedPath, bytes.Clone(h.service.localProfile)
+	generated, err := os.ReadFile(localPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.service.subs.RefreshWith(h.ctx, h.subscription); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(h.failStart, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err = h.service.execute(h.ctx, ipc.Command{Kind: ipc.CommandActivateSubscription, SubscriptionID: h.subscription.ID})
+	if err == nil || h.service.controller == nil || h.service.generatedPath != localPath || !bytes.Equal(localBytes, h.service.localProfile) {
+		t.Fatalf("failed subscription activation lost local source: %v", err)
+	}
+	if body, err := os.ReadFile(localPath); err != nil || !bytes.Equal(body, generated) {
+		t.Fatalf("failed activation changed local config: %q, %v", body, err)
+	}
+	if err := h.service.execute(h.ctx, ipc.Command{Kind: ipc.CommandActivateSubscription, SubscriptionID: h.subscription.ID}); err != nil {
+		t.Fatalf("valid subscription activation: %v", err)
+	}
+	if h.service.localProfile != nil || h.service.generatedPath != "" {
+		t.Fatal("subscription activation retained local source")
+	}
+	if _, err := os.Stat(localPath); !os.IsNotExist(err) {
+		t.Fatalf("local config survived subscription cutover: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(h.stateDir, "generated.yaml")); err != nil {
+		t.Fatalf("durable config missing: %v", err)
+	}
+}
+
+func TestLocalResourceActivationRollbackRestoresDurableConfig(t *testing.T) {
+	h := localStaticRuntime(t)
+	h.setUpdatedSources(t)
+	intent := h.service.store.Snapshot()
+	plan, err := h.service.registry.StageDue(h.ctx, intent, download.Direct, []string{"list-a", "list-b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile := []byte("proxies:\n  - name: node-a\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a]\n")
+	if err := plan.Validate(func(home string, paths map[string]string) error {
+		_, err := h.service.validatedCandidate(h.ctx, profile, intent, home, paths, h.service.cap)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.service.applyResourcePlan(h.ctx, plan, profile, h.service.cap, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(h.stateDir, "generated.yaml")); err != nil {
+		t.Fatalf("candidate durable config missing: %v", err)
+	}
+	backup := h.service.activationBackup
+	h.service.activationBackup = nil
+	if err := h.service.restoreResourceRuntime(h.ctx, backup, errors.New("proxy selection failed"), true); err == nil {
+		t.Fatal("rollback lost original failure")
+	}
+	if _, err := os.Stat(filepath.Join(h.stateDir, "generated.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("rollback retained candidate durable config: %v", err)
+	}
+	if h.service.controller == nil || h.service.localProfile == nil || h.service.generatedPath == "" {
+		t.Fatal("rollback did not restore local runtime")
 	}
 }
 

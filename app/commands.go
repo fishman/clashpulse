@@ -78,6 +78,13 @@ func (s *runtimeService) execute(ctx context.Context, cmd ipc.Command) error {
 	case ipc.CommandActivateSubscription:
 		err := s.subs.Activate(ctx, cmd.SubscriptionID)
 		s.activationBackup = nil
+		if s.localProfile != nil && (err == nil || errors.Is(err, subscriptions.ErrActivationCleanupPending)) {
+			localPath := s.generatedPath
+			s.localProfile, s.generatedPath = nil, ""
+			if removeErr := os.Remove(localPath); removeErr != nil && !os.IsNotExist(removeErr) {
+				return core.WrapActivation(core.ActivationStateCommit, removeErr)
+			}
+		}
 		if errors.Is(err, subscriptions.ErrActivationCleanupPending) {
 			s.subScheduler.WakeResources()
 		}

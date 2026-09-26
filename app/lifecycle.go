@@ -149,13 +149,17 @@ func (s *runtimeService) validateWithHome(ctx context.Context, candidate []byte,
 }
 
 type runtimeBackup struct {
-	generated    []byte
-	cap          mihomo.Capability
-	home         string
-	running      bool
-	proxyActive  bool
-	selected     map[string]string
-	resourcePlan *resources.Plan
+	generated      []byte
+	cap            mihomo.Capability
+	home           string
+	running        bool
+	proxyActive    bool
+	selected       map[string]string
+	resourcePlan   *resources.Plan
+	localProfile   []byte
+	generatedPath  string
+	durableConfig  []byte
+	durableExisted bool
 }
 
 func (s *runtimeService) applyGenerated(ctx context.Context, profile []byte) error {
@@ -196,9 +200,48 @@ func (s *runtimeService) applyGenerated(ctx context.Context, profile []byte) err
 	return nil
 }
 
+func (s *runtimeService) captureLocalActivation(backup *runtimeBackup) error {
+	if s.localProfile == nil {
+		return nil
+	}
+	backup.localProfile = bytes.Clone(s.localProfile)
+	backup.generatedPath = s.generatedPath
+	data, err := os.ReadFile(filepath.Join(s.stateDir, "generated.yaml"))
+	if err != nil && !os.IsNotExist(err) {
+		return core.WrapActivation(core.ActivationStateCommit, err)
+	}
+	backup.durableConfig, backup.durableExisted = data, err == nil
+	return nil
+}
+
+func (s *runtimeService) restoreDurable(backup *runtimeBackup) error {
+	if backup.generatedPath == "" {
+		return nil
+	}
+	path := filepath.Join(s.stateDir, "generated.yaml")
+	if backup.durableExisted {
+		return config.Write(path, backup.durableConfig)
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func (s *runtimeService) activationCandidatePath() string {
+	if s.localProfile != nil {
+		return filepath.Join(s.stateDir, "generated.yaml")
+	}
+	return s.configPath()
+}
+
 func (s *runtimeService) applyActivationCandidate(ctx context.Context, candidate []byte, capability mihomo.Capability, home string) error {
 	s.activationBackup = &runtimeBackup{generated: bytes.Clone(s.generated), cap: s.cap, home: s.resourceHome, running: s.controller != nil, proxyActive: s.proxyActive, selected: selectedGroups(s.groups)}
-	if err := s.applyCandidate(ctx, candidate, capability, home); err != nil {
+	if err := s.captureLocalActivation(s.activationBackup); err != nil {
+		s.activationBackup = nil
+		return err
+	}
+	if err := s.applyCandidateAt(ctx, candidate, capability, home, s.activationCandidatePath(), s.activationBackup); err != nil {
 		s.activationBackup = nil
 		return err
 	}
@@ -207,6 +250,12 @@ func (s *runtimeService) applyActivationCandidate(ctx context.Context, candidate
 
 func (s *runtimeService) applyResourcePlan(ctx context.Context, plan *resources.Plan, profile []byte, capability mihomo.Capability, activation bool) error {
 	backup := &runtimeBackup{generated: bytes.Clone(s.generated), cap: s.cap, home: s.resourceHome, running: s.controller != nil, proxyActive: s.proxyActive, selected: selectedGroups(s.groups), resourcePlan: plan}
+	if activation {
+		if err := s.captureLocalActivation(backup); err != nil {
+			_ = plan.Abort()
+			return err
+		}
+	}
 	defer s.resourceDirty.Store(true)
 	if err := ctx.Err(); err != nil {
 		_ = plan.Abort()
@@ -264,7 +313,11 @@ func (s *runtimeService) applyResourcePlan(ctx context.Context, plan *resources.
 		var candidate []byte
 		candidate, err = s.renderWithHome(ctx, profile, intent, home, paths, capability)
 		if err == nil {
-			err = s.applyCandidate(ctx, candidate, capability, home)
+			if activation {
+				err = s.applyCandidateAt(ctx, candidate, capability, home, s.activationCandidatePath(), backup)
+			} else {
+				err = s.applyCandidate(ctx, candidate, capability, home)
+			}
 		}
 		if err == nil && backup.running {
 			err = s.restoreSelections(ctx, backup.selected)
@@ -302,6 +355,9 @@ func (s *runtimeService) restoreResourceRuntime(ctx context.Context, backup *run
 	}
 	if err := s.process.Stop(cleanup); err != nil {
 		return rollbackFailed(fmt.Errorf("clashpulse: wait for stopped Mihomo: %w", err))
+	}
+	if err := s.restoreDurable(backup); err != nil {
+		return rollbackFailed(fmt.Errorf("clashpulse: restore prior generated configuration: %w", err))
 	}
 	if committed {
 		if err := backup.resourcePlan.Rollback(); err != nil {
@@ -359,6 +415,16 @@ func (s *runtimeService) restoreActivation(ctx context.Context, previousProfile 
 	if backup == nil {
 		return fmt.Errorf("clashpulse: no prior runtime was captured")
 	}
+	if backup.generatedPath != "" && backup.resourcePlan == nil {
+		defer func() {
+			if result != nil {
+				return
+			}
+			if err := s.restoreDurable(backup); err != nil {
+				result = core.WrapActivation(core.ActivationRollback, errors.Join(result, err))
+			}
+		}()
+	}
 	if backup.resourcePlan != nil {
 		s.resourceDirty.Store(true)
 		return s.restoreResourceRuntime(ctx, backup, nil, true)
@@ -401,10 +467,24 @@ func (s *runtimeService) restoreActivation(ctx context.Context, previousProfile 
 }
 
 func (s *runtimeService) applyCandidate(ctx context.Context, candidate []byte, capability mihomo.Capability, home string) error {
+	return s.applyCandidateAt(ctx, candidate, capability, home, s.configPath(), nil)
+}
+
+func (s *runtimeService) applyCandidateAt(ctx context.Context, candidate []byte, capability mihomo.Capability, home, activePath string, backup *runtimeBackup) (result error) {
+	oldPath := s.configPath()
+	if backup != nil && activePath != oldPath {
+		defer func() {
+			if result != nil {
+				if err := s.restoreDurable(backup); err != nil {
+					result = core.WrapActivation(core.ActivationRollback, errors.Join(result, err))
+				}
+			}
+		}()
+	}
 	if err := s.validateWithHome(ctx, candidate, capability, home); err != nil {
 		return err
 	}
-	if !s.forceRestart && bytes.Equal(candidate, s.generated) && s.controller != nil && capability == s.cap && home == s.resourceHome {
+	if !s.forceRestart && activePath == oldPath && bytes.Equal(candidate, s.generated) && s.controller != nil && capability == s.cap && home == s.resourceHome {
 		s.snapshot.Binary.LastCompatibilityFailure = ""
 		return nil
 	}
@@ -421,25 +501,26 @@ func (s *runtimeService) applyCandidate(ctx context.Context, candidate []byte, c
 			return core.WrapActivation(core.ActivationRollback, err)
 		}
 	}
-	activePath := s.configPath()
 	if err := config.Write(activePath, candidate); err != nil {
 		if wasRunning {
-			s.restorePrevious(ctx, oldConfig, oldCap, oldHome, wasProxy, oldSelected)
+			s.restorePrevious(ctx, oldConfig, oldCap, oldHome, oldPath, wasProxy, oldSelected)
 		}
 		return core.WrapActivation(core.ActivationStateCommit, err)
 	}
 	if err := s.startProcess(ctx, capability, home, activePath); err != nil {
 		if wasRunning {
-			s.restorePrevious(ctx, oldConfig, oldCap, oldHome, wasProxy, oldSelected)
+			s.restorePrevious(ctx, oldConfig, oldCap, oldHome, oldPath, wasProxy, oldSelected)
 		} else if len(oldConfig) > 0 {
-			_ = config.Write(activePath, oldConfig)
+			if activePath == oldPath {
+				_ = config.Write(activePath, oldConfig)
+			}
 		}
 		return err
 	}
 	if wasRunning {
 		if err := s.restoreSelections(ctx, oldSelected); err != nil {
 			_ = s.stopMonitorAndProcess(ctx)
-			s.restorePrevious(ctx, oldConfig, oldCap, oldHome, wasProxy, oldSelected)
+			s.restorePrevious(ctx, oldConfig, oldCap, oldHome, oldPath, wasProxy, oldSelected)
 			return core.WrapActivation(core.ActivationControllerReadiness, err)
 		}
 	}
@@ -456,9 +537,11 @@ func (s *runtimeService) applyCandidate(ctx context.Context, candidate []byte, c
 			}
 			_ = s.stopMonitorAndProcess(ctx)
 			if wasRunning {
-				s.restorePrevious(ctx, oldConfig, oldCap, oldHome, wasProxy, oldSelected)
+				s.restorePrevious(ctx, oldConfig, oldCap, oldHome, oldPath, wasProxy, oldSelected)
 			} else if len(oldConfig) > 0 {
-				_ = config.Write(activePath, oldConfig)
+				if activePath == oldPath {
+					_ = config.Write(activePath, oldConfig)
+				}
 			}
 			return core.WrapActivation(core.ActivationSystemProxy, err)
 		}
@@ -469,11 +552,10 @@ func (s *runtimeService) applyCandidate(ctx context.Context, candidate []byte, c
 	return nil
 }
 
-func (s *runtimeService) restorePrevious(ctx context.Context, candidate []byte, capability mihomo.Capability, home string, enableProxy bool, selected map[string]string) {
+func (s *runtimeService) restorePrevious(ctx context.Context, candidate []byte, capability mihomo.Capability, home, path string, enableProxy bool, selected map[string]string) {
 	if len(candidate) == 0 || capability.Path == "" {
 		return
 	}
-	path := s.configPath()
 	if err := config.Write(path, candidate); err != nil {
 		s.reportError("rollback", err)
 		return
