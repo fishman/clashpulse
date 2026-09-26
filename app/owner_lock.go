@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 )
 
-var errStateInUse = errors.New("clashpulse: private state is in use; close the desktop service before refreshing")
+var errStateInUse = errors.New("clashpulse: private state is in use; stop the existing owner first")
 
 func acquireOwnerLock(stateDir string) (func(), error) {
 	if err := privateDirectory(stateDir); err != nil {

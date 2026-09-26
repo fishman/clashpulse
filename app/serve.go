@@ -212,7 +212,7 @@ func (s *runtimeService) runServiceWork(ctx context.Context, requests <-chan ser
 	}
 }
 
-func (s *runtimeService) run(ctx context.Context) error {
+func (s *runtimeService) run(ctx context.Context, startup func(context.Context) error) (result error) {
 	serviceCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	defer s.server.Close()
@@ -257,7 +257,11 @@ func (s *runtimeService) run(ctx context.Context) error {
 	}()
 	workRecords := make(map[uint64]*serviceWorkRecord)
 	var workID uint64
-	defer s.shutdown()
+	defer func() {
+		if err := s.shutdown(); err != nil {
+			result = errors.Join(result, core.WrapActivation(core.ActivationRollback, err))
+		}
+	}()
 	defer func() {
 		cancel()
 		for _, record := range workRecords {
@@ -376,6 +380,11 @@ func (s *runtimeService) run(ctx context.Context) error {
 			s.runIntent(serviceCtx, cmd)
 		}
 	}
+	if startup != nil {
+		if err := startup(serviceCtx); err != nil {
+			return err
+		}
+	}
 	for {
 		select {
 		case <-serviceCtx.Done():
@@ -423,6 +432,9 @@ func (s *runtimeService) run(ctx context.Context) error {
 			}
 			_ = s.stopMonitorAndProcess(cleanup)
 			stop()
+			if s.localProfile != nil {
+				return core.WrapActivation(core.ActivationProcessStart, fmt.Errorf("Mihomo child exited unexpectedly"))
+			}
 			s.reportError("mihomo", fmt.Errorf("mihomo child exited unexpectedly"))
 		case batch := <-s.batches:
 			s.acceptBatch(serviceCtx, batch)

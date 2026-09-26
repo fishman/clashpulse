@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/notmutt/lib/xdg"
 )
 
@@ -15,6 +16,14 @@ func Run(ctx context.Context) error {
 		return fmt.Errorf("clashpulse: cannot resolve private configuration and state directories")
 	}
 	return RunAt(ctx, filepath.Join(configHome, "clashpulse"), filepath.Join(stateHome, "clashpulse"), "")
+}
+
+func RunFile(ctx context.Context, path string, ready func() error) error {
+	configHome, stateHome := xdg.ConfigHome(), xdg.StateHome()
+	if configHome == "" || stateHome == "" {
+		return core.WrapActivation(core.ActivationStateCommit, fmt.Errorf("missing private home"))
+	}
+	return RunFileAt(ctx, filepath.Join(configHome, "clashpulse"), filepath.Join(stateHome, "clashpulse"), "", path, ready)
 }
 
 func privateDirectory(path string) error {

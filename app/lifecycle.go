@@ -312,7 +312,7 @@ func (s *runtimeService) restoreResourceRuntime(ctx context.Context, backup *run
 		cleanupErr = errors.Join(cleanupErr, fmt.Errorf("clashpulse: remove staged resources: %w", err))
 	}
 	if backup.running {
-		path := filepath.Join(s.stateDir, "generated.yaml")
+		path := s.configPath()
 		if err := config.Write(path, backup.generated); err != nil {
 			return rollbackFailed(fmt.Errorf("clashpulse: restore generated configuration: %w", err))
 		}
@@ -338,12 +338,12 @@ func (s *runtimeService) restoreResourceRuntime(ctx context.Context, backup *run
 		}
 		s.publish()
 	} else if len(backup.generated) > 0 {
-		if err := config.Write(filepath.Join(s.stateDir, "generated.yaml"), backup.generated); err != nil {
+		if err := config.Write(s.configPath(), backup.generated); err != nil {
 			return rollbackFailed(fmt.Errorf("clashpulse: restore generated configuration: %w", err))
 		}
 		s.generated, s.cap, s.resourceHome = backup.generated, backup.cap, backup.home
 	} else {
-		if err := os.Remove(filepath.Join(s.stateDir, "generated.yaml")); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(s.configPath()); err != nil && !os.IsNotExist(err) {
 			return rollbackFailed(err)
 		}
 		s.generated, s.cap, s.resourceHome = nil, mihomo.Capability{}, ""
@@ -368,12 +368,12 @@ func (s *runtimeService) restoreActivation(ctx context.Context, previousProfile 
 			return err
 		}
 		if len(previousProfile) == 0 {
-			if err := os.Remove(filepath.Join(s.stateDir, "generated.yaml")); err != nil && !os.IsNotExist(err) {
+			if err := os.Remove(s.configPath()); err != nil && !os.IsNotExist(err) {
 				return err
 			}
 			s.generated, s.cap, s.resourceHome = nil, mihomo.Capability{}, ""
 		} else {
-			if err := config.Write(filepath.Join(s.stateDir, "generated.yaml"), backup.generated); err != nil {
+			if err := config.Write(s.configPath(), backup.generated); err != nil {
 				return err
 			}
 			s.generated, s.cap, s.resourceHome = backup.generated, backup.cap, backup.home
@@ -421,7 +421,7 @@ func (s *runtimeService) applyCandidate(ctx context.Context, candidate []byte, c
 			return core.WrapActivation(core.ActivationRollback, err)
 		}
 	}
-	activePath := filepath.Join(s.stateDir, "generated.yaml")
+	activePath := s.configPath()
 	if err := config.Write(activePath, candidate); err != nil {
 		if wasRunning {
 			s.restorePrevious(ctx, oldConfig, oldCap, oldHome, wasProxy, oldSelected)
@@ -473,7 +473,7 @@ func (s *runtimeService) restorePrevious(ctx context.Context, candidate []byte, 
 	if len(candidate) == 0 || capability.Path == "" {
 		return
 	}
-	path := filepath.Join(s.stateDir, "generated.yaml")
+	path := s.configPath()
 	if err := config.Write(path, candidate); err != nil {
 		s.reportError("rollback", err)
 		return
@@ -615,15 +615,30 @@ func (s *runtimeService) stop(ctx context.Context) error {
 	return s.stopMonitorAndProcess(ctx)
 }
 
-func (s *runtimeService) start(ctx context.Context) error {
+func (s *runtimeService) configPath() string {
+	if s.generatedPath != "" {
+		return s.generatedPath
+	}
+	return filepath.Join(s.stateDir, "generated.yaml")
+}
+
+func (s *runtimeService) profileForRuntime() ([]byte, error) {
+	if s.localProfile != nil {
+		return s.localProfile, nil
+	}
 	_, profile, err := s.subs.ActiveProfile()
+	return profile, err
+}
+
+func (s *runtimeService) start(ctx context.Context) error {
+	profile, err := s.profileForRuntime()
 	if err != nil {
 		return err
 	}
 	intent := s.store.Snapshot()
 	capability, err := s.selectedCapability(ctx)
 	if err != nil {
-		return err
+		return core.WrapActivation(core.ActivationBinary, err)
 	}
 	if home, paths, err := s.registry.PathsWithHome(intent); err == nil {
 		candidate, err := s.renderWithHome(ctx, profile, intent, home, paths, capability)

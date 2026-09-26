@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -68,6 +69,8 @@ type runtimeService struct {
 	proxyActive               bool
 	generated                 []byte
 	resourceHome              string
+	localProfile              []byte
+	generatedPath             string
 	forceRestart              bool
 	activationBackup          *runtimeBackup
 	groups                    map[string]mihomo.Group
@@ -88,6 +91,18 @@ type runtimeService struct {
 
 // RunAt hosts the single lifecycle owner; both desktop and terminal clients use IPC.
 func RunAt(ctx context.Context, configDir, stateDir, endpoint string) error {
+	return runAt(ctx, configDir, stateDir, endpoint, nil, nil)
+}
+
+func RunFileAt(ctx context.Context, configDir, stateDir, endpoint, path string, ready func() error) error {
+	profile, err := readLocalProfile(ctx, path)
+	if err != nil {
+		return err
+	}
+	return runAt(ctx, configDir, stateDir, endpoint, profile, ready)
+}
+
+func runAt(ctx context.Context, configDir, stateDir, endpoint string, profile []byte, ready func() error) error {
 	if ctx == nil {
 		return fmt.Errorf("clashpulse: context is required")
 	}
@@ -96,6 +111,9 @@ func RunAt(ctx context.Context, configDir, stateDir, endpoint string) error {
 		return err
 	}
 	defer releaseOwner()
+	if err := sweepLocalGenerated(stateDir); err != nil {
+		return core.WrapActivation(core.ActivationStateCommit, err)
+	}
 	if err := privateDirectory(configDir); err != nil {
 		return fmt.Errorf("clashpulse: config directory: %w", err)
 	}
@@ -110,6 +128,19 @@ func RunAt(ctx context.Context, configDir, stateDir, endpoint string) error {
 	if err != nil {
 		return err
 	}
+	if profile != nil {
+		file, err := os.CreateTemp(stateDir, "generated-local-*.yaml")
+		if err != nil {
+			return core.WrapActivation(core.ActivationStateCommit, err)
+		}
+		s.generatedPath = file.Name()
+		if err := file.Close(); err != nil {
+			_ = os.Remove(s.generatedPath)
+			return core.WrapActivation(core.ActivationStateCommit, err)
+		}
+		s.localProfile = profile
+		defer os.Remove(s.generatedPath)
+	}
 	s.subScheduler = subscriptions.NewScheduler(s.subs, 2)
 	s.subScheduler.ConfigureResources(s.nextResourceDue, s.enqueueResourceRefresh)
 	s.server, err = ipc.NewServer(ipc.ServerOptions{Endpoint: endpoint, Handler: func(_ context.Context, cmd ipc.Command) error {
@@ -118,7 +149,36 @@ func RunAt(ctx context.Context, configDir, stateDir, endpoint string) error {
 	if err != nil {
 		return err
 	}
-	return s.run(ctx)
+	if profile != nil {
+		return s.run(ctx, func(runCtx context.Context) error {
+			if err := s.start(runCtx); err != nil {
+				return err
+			}
+			if ready != nil {
+				if err := ready(); err != nil {
+					return core.WrapActivation(core.ActivationStateCommit, err)
+				}
+			}
+			return nil
+		})
+	}
+	return s.run(ctx, nil)
+}
+
+func sweepLocalGenerated(stateDir string) error {
+	entries, err := os.ReadDir(stateDir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if strings.HasPrefix(name, "generated-local-") && strings.HasSuffix(name, ".yaml") && !entry.IsDir() {
+			if err := os.Remove(filepath.Join(stateDir, name)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func reserveLoopbackPorts() (int, int, error) {
@@ -482,7 +542,7 @@ func compatibilityFailure(err error) string {
 	return ""
 }
 
-func (s *runtimeService) shutdown() {
+func (s *runtimeService) shutdown() error {
 	if s.stopMonitor != nil {
 		s.stopMonitor()
 		<-s.monitorDone
@@ -490,6 +550,7 @@ func (s *runtimeService) shutdown() {
 	}
 	cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = s.proxy.Restore(cleanup)
-	_ = s.process.Stop(cleanup)
+	proxyErr := s.proxy.Restore(cleanup)
+	processErr := s.process.Stop(cleanup)
+	return errors.Join(proxyErr, processErr)
 }
