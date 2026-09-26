@@ -104,8 +104,8 @@ func (s *Service) refresh(ctx context.Context, id string, supplied *config.Subsc
 		if contextErr := s.recordContextFailure(operationCtx, id, checkedAt); contextErr != nil {
 			return Result{}, contextErr
 		}
-		var status download.StatusError
-		if errors.As(err, &status) && status.Valid() {
+		status, ok := download.StatusErrorFrom(err)
+		if ok {
 			s.recordFailure(id, checkedAt, status)
 			return Result{}, fmt.Errorf("%w: %w", ErrFetch, status)
 		}

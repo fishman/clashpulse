@@ -41,7 +41,7 @@ func runMainContextWithRefresh(ctx context.Context, args []string, stdout, stder
 		return 0
 	}
 	var err error
-	if len(args) > 0 && args[0] == "refresh" {
+	if len(args) > 0 && (args[0] == "refresh" || args[0] == "download") {
 		err = runRefreshCommand(ctx, args[1:], stdout, refresh)
 	} else if len(args) == 0 {
 		err = desktop(ctx, runner)
@@ -65,13 +65,29 @@ func runMainContextWithRefresh(ctx context.Context, args []string, stdout, stder
 }
 
 func runRefreshCommand(ctx context.Context, args []string, stdout io.Writer, refresh func(context.Context, string, string) error) error {
-	if len(args) != 2 || (args[0] != "subscription" && args[0] != "resource") || refresh == nil {
-		return fmt.Errorf("usage: clashpulse refresh <subscription|resource> <id>")
+	if refresh == nil {
+		return fmt.Errorf("usage: clashpulse <refresh|download> [subscription|resource [id]]")
 	}
-	if err := refresh(ctx, args[0], args[1]); err != nil {
+	kind, id := "", ""
+	if len(args) > 0 {
+		kind = args[0]
+		if kind != "subscription" && kind != "resource" || len(args) > 2 {
+			return fmt.Errorf("usage: clashpulse <refresh|download> [subscription|resource [id]]")
+		}
+		if len(args) == 2 {
+			id = args[1]
+		}
+	}
+	if err := refresh(ctx, kind, id); err != nil {
 		return err
 	}
-	_, err := fmt.Fprintf(stdout, "refreshed %s %s\n", args[0], args[1])
+	result := "all enabled sources"
+	if kind != "" && id == "" {
+		result = "all enabled " + kind + "s"
+	} else if id != "" {
+		result = kind + " " + id
+	}
+	_, err := fmt.Fprintf(stdout, "refreshed %s\n", result)
 	return err
 }
 

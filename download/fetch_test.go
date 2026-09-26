@@ -100,6 +100,18 @@ func TestHTTPStatusErrorIsSafe(t *testing.T) {
 	}
 }
 
+func TestStatusErrorFromFindsWrappedPointerAndValue(t *testing.T) {
+	for _, err := range []error{
+		StatusError{Code: http.StatusForbidden},
+		fmt.Errorf("wrapped: %w", &StatusError{Code: http.StatusTooManyRequests}),
+	} {
+		status, ok := StatusErrorFrom(err)
+		if !ok || !status.Valid() || status.Code < 400 {
+			t.Fatalf("HTTP status extraction failed for %T: %#v, %v", err, status, ok)
+		}
+	}
+}
+
 func TestParseStatusRejectsInjectedMessage(t *testing.T) {
 	status, ok := ParseStatus("HTTP 406")
 	if !ok || status.Code != 406 || status.Error() != "HTTP 406" {

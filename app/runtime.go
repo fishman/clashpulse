@@ -440,8 +440,7 @@ func (s *runtimeService) reportErrorScoped(kind, sourceID string, err error) {
 	if kind == "refresh_subscription" && sourceID != "" {
 		failure.Key = "subscription"
 		failure.Message = "subscription update failed"
-		var status download.StatusError
-		if errors.As(err, &status) && status.Valid() {
+		if status, ok := download.StatusErrorFrom(err); ok {
 			failure.Message = "subscription " + status.Error()
 		}
 	}

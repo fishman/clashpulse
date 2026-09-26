@@ -76,6 +76,7 @@ func newRuntimeService(configDir, stateDir string, initial config.Snapshot) (*ru
 	}
 	s.resourceDirty.Store(true)
 	s.snapshot = s.stateSnapshot()
+	s.reconcileSubscriptionFailures(s.subs.List())
 	s.lastPublished = core.CloneSnapshot(s.snapshot)
 	s.lastAppliedSettings = s.store.Snapshot()
 	return s, nil

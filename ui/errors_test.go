@@ -25,6 +25,22 @@ func TestOverviewDisplaysConfigurationErrorDetails(t *testing.T) {
 	}
 }
 
+func TestOverviewDistinguishesIssuesBySource(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	view := newDesktopUI(context.Background(), "", app.NewWindow("ClashPulse"))
+	view.postSnapshot(core.Snapshot{Errors: []core.ErrorSnapshot{
+		{Kind: "refresh_subscription", Key: "subscription", SourceID: "feed-a", Message: "HTTP 406"},
+		{Kind: "refresh_subscription", Key: "subscription", SourceID: "feed-b", Message: "HTTP 429"},
+	}})
+	fyne.DoAndWait(func() {})
+	for _, detail := range []string{"feed-a", "HTTP 406", "feed-b", "HTTP 429"} {
+		if !strings.Contains(view.errorSummary.Text, detail) {
+			t.Fatalf("source-specific issue detail %q absent from %q", detail, view.errorSummary.Text)
+		}
+	}
+}
+
 func TestActivityDialogShowsSanitizedSnapshot(t *testing.T) {
 	app := test.NewApp()
 	defer app.Quit()

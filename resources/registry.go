@@ -150,7 +150,9 @@ func (r *Registry) clearFailure(id string) {
 
 func (r *Registry) recordFailure(id string, err error) error {
 	message := "resource refresh or validation failed"
-	if errors.Is(err, ErrPinMismatch) {
+	if status, ok := download.StatusErrorFrom(err); ok {
+		message = status.Error()
+	} else if errors.Is(err, ErrPinMismatch) {
 		message = ErrPinMismatch.Error()
 	}
 	r.mu.Lock()

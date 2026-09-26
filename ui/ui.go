@@ -353,6 +353,13 @@ func serviceErrors(issues []core.ErrorSnapshot) string {
 		if location == "" {
 			location = "Service"
 		}
+		if issue.SourceID != "" {
+			scope := issue.SourceID
+			if issue.Kind != "" {
+				scope = issue.Kind + "/" + scope
+			}
+			location += " [" + scope + "]"
+		}
 		lines = append(lines, location+": "+issue.Message)
 	}
 	return strings.Join(lines, "\n")

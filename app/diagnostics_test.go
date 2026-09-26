@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -79,5 +80,15 @@ func TestScheduledResourceRefreshResolvesActiveIssue(t *testing.T) {
 	service.completeScheduledResourceRefresh()
 	if len(service.snapshot.Errors) != 0 || len(service.snapshot.Diagnostics) != 1 || service.snapshot.Diagnostics[0].Message != "recovered" {
 		t.Fatalf("scheduled success did not resolve resource issue: %+v", service.snapshot)
+	}
+}
+
+func TestUnresolvedIssuesSurviveDiagnosticHistoryLimit(t *testing.T) {
+	service := &runtimeService{}
+	for i := range core.MaxDiagnostics + 1 {
+		service.upsertIssue(core.ErrorSnapshot{Kind: "refresh_subscription", SourceID: fmt.Sprintf("feed-%03d", i), Message: "HTTP 406"})
+	}
+	if len(service.snapshot.Errors) != core.MaxDiagnostics+1 || service.snapshot.Errors[0].SourceID != "feed-000" {
+		t.Fatalf("old unresolved issue was evicted: count=%d first=%+v", len(service.snapshot.Errors), service.snapshot.Errors[0])
 	}
 }

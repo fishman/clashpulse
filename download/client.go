@@ -46,6 +46,19 @@ type StatusError struct{ Code int }
 func (e StatusError) Error() string { return fmt.Sprintf("HTTP %d", e.Code) }
 func (e StatusError) Valid() bool   { return e.Code >= 400 && e.Code <= 599 }
 
+// StatusErrorFrom extracts a valid status from wrapped value or pointer errors.
+func StatusErrorFrom(err error) (StatusError, bool) {
+	var status StatusError
+	if errors.As(err, &status) && status.Valid() {
+		return status, true
+	}
+	var pointer *StatusError
+	if errors.As(err, &pointer) && pointer != nil && pointer.Valid() {
+		return *pointer, true
+	}
+	return StatusError{}, false
+}
+
 // ParseStatus accepts only bounded numeric error statuses, not arbitrary server text.
 func ParseStatus(message string) (StatusError, bool) {
 	if len(message) != len("HTTP 406") || !strings.HasPrefix(message, "HTTP ") {

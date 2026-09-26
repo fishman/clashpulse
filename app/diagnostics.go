@@ -29,10 +29,11 @@ func safeDiagnostic(kind, sourceID string, err error) diagnosticEvent {
 		return event
 	}
 	event.Severity, event.Message = "error", "operation failed"
-	var status download.StatusError
-	switch {
-	case errors.As(err, &status) && status.Valid():
+	if status, ok := download.StatusErrorFrom(err); ok {
 		event.Message = status.Error()
+		return event
+	}
+	switch {
 	case errors.Is(err, subscriptions.ErrFetch):
 		event.Message = "fetch failed"
 	case errors.Is(err, subscriptions.ErrInvalidProfile):
@@ -90,9 +91,6 @@ func (s *runtimeService) upsertIssue(issue core.ErrorSnapshot) bool {
 		}
 	}
 	s.snapshot.Errors = append(s.snapshot.Errors, issue)
-	if len(s.snapshot.Errors) > core.MaxDiagnostics {
-		s.snapshot.Errors = s.snapshot.Errors[len(s.snapshot.Errors)-core.MaxDiagnostics:]
-	}
 	return true
 }
 

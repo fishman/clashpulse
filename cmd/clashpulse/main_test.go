@@ -101,8 +101,8 @@ func TestRefreshCommandDispatchesTypedSource(t *testing.T) {
 	}
 }
 
-func TestRefreshCommandRejectsUnknownOrIncompleteTarget(t *testing.T) {
-	for _, args := range [][]string{{"subscription"}, {"proxy", "alpha"}} {
+func TestRefreshCommandRejectsUnknownOrExcessTarget(t *testing.T) {
+	for _, args := range [][]string{{"proxy", "alpha"}, {"subscription", "alpha", "extra"}} {
 		called := false
 		err := runRefreshCommand(context.Background(), args, new(bytes.Buffer), func(context.Context, string, string) error {
 			called = true
@@ -110,6 +110,25 @@ func TestRefreshCommandRejectsUnknownOrIncompleteTarget(t *testing.T) {
 		})
 		if err == nil || called {
 			t.Fatalf("refresh accepted %q or invoked a target: %v", args, err)
+		}
+	}
+}
+
+func TestRefreshAndDownloadWithoutIDRefreshOneKind(t *testing.T) {
+	for _, command := range []string{"refresh", "download"} {
+		for _, kind := range []string{"subscription", "resource"} {
+			var gotKind, gotID string
+			stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+			code := runMainContextWithRefresh(context.Background(), []string{command, kind}, stdout, stderr,
+				func(context.Context) error { t.Fatal("kind refresh started the service"); return nil },
+				func(context.Context, func(context.Context) error) error {
+					t.Fatal("kind refresh opened the desktop")
+					return nil
+				},
+				func(_ context.Context, actualKind, id string) error { gotKind, gotID = actualKind, id; return nil })
+			if code != 0 || gotKind != kind || gotID != "" || stdout.String() != "refreshed all enabled "+kind+"s\n" || stderr.Len() != 0 {
+				t.Fatalf("%s %s = code %d, kind %q, id %q, stdout %q, stderr %q", command, kind, code, gotKind, gotID, stdout.String(), stderr.String())
+			}
 		}
 	}
 }
@@ -137,5 +156,22 @@ func TestRefreshCommandPrintsOnlyScopedSanitizedFailure(t *testing.T) {
 		})
 	if code != 1 || stdout.Len() != 0 || stderr.String() != "clashpulse: refresh subscription feed: HTTP 406\n" {
 		t.Fatalf("refresh failure output = code %d, stdout %q, stderr %q", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestRefreshAndDownloadWithoutIDRunAllEnabledSources(t *testing.T) {
+	for _, command := range []string{"refresh", "download"} {
+		var gotKind, gotID string
+		stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+		code := runMainContextWithRefresh(context.Background(), []string{command}, stdout, stderr,
+			func(context.Context) error { t.Fatal("refresh-all started the service"); return nil },
+			func(context.Context, func(context.Context) error) error {
+				t.Fatal("refresh-all opened the desktop")
+				return nil
+			},
+			func(_ context.Context, kind, id string) error { gotKind, gotID = kind, id; return nil })
+		if code != 0 || gotKind != "" || gotID != "" || stdout.String() != "refreshed all enabled sources\n" || stderr.Len() != 0 {
+			t.Fatalf("%s without ID = code %d, kind %q, id %q, stdout %q, stderr %q", command, code, gotKind, gotID, stdout.String(), stderr.String())
+		}
 	}
 }

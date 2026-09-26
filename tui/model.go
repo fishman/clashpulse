@@ -1534,8 +1534,12 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 			rows = append(rows, Row{ID: "job:" + id, Title: fallback(job.Kind, "Operation"), Detail: fallback(job.State, "pending")})
 		}
 		for _, issue := range snapshot.Errors {
-			id := issue.File + ":" + issue.Key
-			rows = append(rows, Row{ID: "error:" + id, Title: fallback(issue.Key, issue.File), Detail: issue.Message})
+			id := strings.Join([]string{issue.Kind, issue.SourceID, issue.File, issue.Key}, "\x00")
+			title := fallback(issue.Key, issue.File)
+			if issue.SourceID != "" {
+				title += " [" + issue.SourceID + "]"
+			}
+			rows = append(rows, Row{ID: "error:" + id, Title: title, Detail: issue.Message})
 		}
 		return rows
 	case TabProxies:

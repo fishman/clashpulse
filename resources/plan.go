@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -193,6 +194,7 @@ type preparedResource struct {
 
 func prepareResources(ctx context.Context, registry *Registry, snapshot config.Snapshot, route download.Route, maxBytes int64, base stateDocument, previousDirectory string, due map[string]struct{}) (map[string]preparedResource, error) {
 	prepared := make(map[string]preparedResource, len(snapshot.Resources))
+	var failures []error
 	for _, resource := range snapshot.Resources {
 		if !resource.Enabled {
 			continue
@@ -210,14 +212,17 @@ func prepareResources(ctx context.Context, registry *Registry, snapshot config.S
 		}
 		body, etag, lastModified, err := stagedBody(ctx, registry, resource, route, maxBytes, base, previousDirectory)
 		if err != nil {
-			return nil, registry.recordFailure(resource.ID, err)
+			failures = append(failures, registry.recordFailure(resource.ID, err))
+			continue
 		}
 		if err := Validate(resource, body); err != nil {
-			return nil, registry.recordFailure(resource.ID, err)
+			failures = append(failures, registry.recordFailure(resource.ID, err))
+			continue
 		}
 		sum := digest(body)
 		if resource.SHA256 != "" && !strings.EqualFold(resource.SHA256, sum) {
-			return nil, registry.recordFailure(resource.ID, ErrPinMismatch)
+			failures = append(failures, registry.recordFailure(resource.ID, ErrPinMismatch))
+			continue
 		}
 		checkedAt := time.Now().UTC().Unix()
 		state := resourceState{
@@ -238,6 +243,9 @@ func prepareResources(ctx context.Context, registry *Registry, snapshot config.S
 		}
 		registry.clearFailure(resource.ID)
 		prepared[resource.ID] = item
+	}
+	if len(failures) > 0 {
+		return nil, errors.Join(failures...)
 	}
 	return prepared, nil
 }

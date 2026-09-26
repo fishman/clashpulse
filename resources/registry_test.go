@@ -101,6 +101,35 @@ func TestPinnedResourceMismatchRetainsPreviousGeneration(t *testing.T) {
 	}
 }
 
+func TestStageDueAttemptsEveryResourceBeforeReturningFailure(t *testing.T) {
+	var paths []string
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		if r.URL.Path == "/bad" {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_, _ = w.Write([]byte("payload:\n  - +.example.com\n"))
+	}))
+	defer server.Close()
+	client := download.NewClient(func(download.Route) (http.RoundTripper, error) { return server.Client().Transport, nil })
+	registry, err := NewRegistry(t.TempDir(), client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := config.Snapshot{Resources: []config.Resource{
+		{ID: "bad", Kind: config.ResourceRuleSet, Format: config.FormatYAML, RuleType: config.RuleDomain, URL: server.URL + "/bad", Enabled: true},
+		{ID: "good", Kind: config.ResourceRuleSet, Format: config.FormatYAML, RuleType: config.RuleDomain, URL: server.URL + "/good", Enabled: true},
+	}}
+	_, err = registry.StageDue(context.Background(), snapshot, download.Direct, []string{"bad", "good"})
+	if err == nil || !strings.Contains(err.Error(), "HTTP 429") || len(paths) != 2 || paths[0] != "/bad" || paths[1] != "/good" {
+		t.Fatalf("resource batch paths=%v error=%v", paths, err)
+	}
+	if home, err := registry.ActiveHome(); err != nil || home != "" {
+		t.Fatalf("failed resource batch promoted generation %q: %v", home, err)
+	}
+}
+
 func TestChangedSourceDoesNotValidatePreviousGeneration(t *testing.T) {
 	knownGood := []byte("payload:\n  - +.example.com\n")
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
