@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=ClashPulse
+Comment=Desktop Mihomo proxy manager
+Comment[zh_CN]=桌面 Mihomo 代理管理器
+Exec=clashpulse
+Icon=clashpulse
+Terminal=false
+Categories=Network;
+Keywords=proxy;mihomo;clash;rule-set;
+StartupNotify=true
+StartupWMClass=io.github.fishman.clashpulse

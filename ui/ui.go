@@ -50,6 +50,7 @@ func Run(ctx context.Context, endpoint string) error {
 	tray, hasTray := a.(desktop.App)
 	if hasTray {
 		desktopUI.tray = tray
+		primeTrayTitle(a)
 		tray.SetSystemTrayMenu(desktopUI.trayMenu(core.Snapshot{}))
 		desktopUI.traySignature = trayStateSignature(core.Snapshot{}, false)
 		tray.SetSystemTrayIcon(icon)
@@ -405,7 +406,9 @@ func (d *desktopUI) postDisconnected() {
 		}
 		d.connected = false
 		d.connection.SetText(localize.T("Disconnected"))
-		d.updateTray(core.Snapshot{})
+		// The last snapshot keeps the tray sections populated; trayMenu disables
+		// what a disconnected UI cannot serve.
+		d.updateTray(d.current)
 	})
 }
 

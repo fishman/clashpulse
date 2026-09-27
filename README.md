@@ -15,6 +15,8 @@ go build -o clashpulse ./cmd/clashpulse
 
 The source build reports `clashpulse dev`. macOS needs Xcode Command Line Tools; Windows needs MinGW/GCC and `go build -o clashpulse.exe ./cmd/clashpulse`. See [desktop build requirements](docs/dependencies.md) for target details.
 
+`make install` copies the binary, the icon, and the desktop entry into `~/.local` (`PREFIX=/usr/local` and similar override the prefix). The desktop entry is Linux-only.
+
 ## Run
 
 ```sh
@@ -22,6 +24,8 @@ The source build reports `clashpulse dev`. macOS needs Xcode Command Line Tools;
 ```
 
 The GUI needs a graphical desktop session (X11 or Wayland on Linux). Its tray uses StatusNotifier; GNOME may need the [AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/) to show it.
+
+There is one ClashPulse service and one ClashPulse window per machine. If a service already runs (started by the GUI, `clashpulse tui`, or `clashpulse activate`), `./clashpulse` opens its window against that service rather than starting a second one; if a window already runs, `./clashpulse` reports it and exits instead of opening another. The window is an IPC client, so closing it leaves a service it did not start running. Terminal clients are unaffected: any number of `clashpulse tui` sessions may attach.
 
 In the GUI, add an HTTPS subscription, refresh it to fetch and validate the candidate profile, then activate it. Open a second terminal for `./clashpulse tui`; the TUI connects to the running desktop service and does not start one itself. On Windows use `.\clashpulse.exe` and `.\clashpulse.exe tui`.
 

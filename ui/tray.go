@@ -2,14 +2,34 @@ package ui
 
 import (
 	"fmt"
+	"runtime"
 	"sort"
 	"strings"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/systray"
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/localize"
 )
+
+// primeTrayTitle sets the StatusNotifier title before Fyne starts the tray.
+// Fyne applies the title from a goroutine that races item registration, and
+// systray falls back to "systray_<pid>" as the item id when the title is still
+// empty, so a panel can name the icon after a pid. Priming with the value Fyne
+// will use makes the id the same on every launch.
+func primeTrayTitle(a fyne.App) {
+	switch runtime.GOOS {
+	case "linux", "openbsd", "freebsd", "netbsd":
+	default:
+		return
+	}
+	title := a.Metadata().Name
+	if title == "" {
+		title = a.UniqueID()
+	}
+	systray.SetTitle(title)
+}
 
 // Profile latency is the median of last successful selected-proxy measurements
 // across select and Mihomo URLTest groups. The UI makes no network requests.
@@ -106,14 +126,15 @@ type trayProxyChoice struct {
 	rank    int
 }
 
+// trayMenu always lists every section. A disconnected or stopped service keeps
+// the structure and disables what it cannot serve, so the menu never reshapes
+// under the pointer.
 func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
-	if !d.connected {
-		status := fyne.NewMenuItem(localize.T("Disconnected - state unavailable"), nil)
-		status.Disabled = true
-		return fyne.NewMenu("ClashPulse", status, fyne.NewMenuItemSeparator(), fyne.NewMenuItem(localize.T("Show ClashPulse"), d.window.Show), fyne.NewMenuItem(localize.T("Quit"), d.quit))
-	}
 	status := fyne.NewMenuItem(profileTrayTitle(snapshot), nil)
 	status.Disabled = true
+	if !d.connected {
+		status.Label = localize.T("Disconnected - state unavailable")
+	}
 	profiles := make([]*fyne.MenuItem, 0, len(snapshot.Subscriptions))
 	for _, subscription := range snapshot.Subscriptions {
 		id := subscription.ID
@@ -123,7 +144,7 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 		}
 		item := fyne.NewMenuItem(label, func() { d.enqueue(ipc.Command{Kind: ipc.CommandActivateSubscription, SubscriptionID: id}) })
 		item.Checked = subscription.Active
-		item.Disabled = !subscription.Enabled || subscription.HashPrefix == ""
+		item.Disabled = !d.connected || !subscription.Enabled || subscription.HashPrefix == ""
 		profiles = append(profiles, item)
 	}
 	if len(profiles) == 0 {
@@ -156,6 +177,7 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 			measurement := trayProxyMeasurementOf(snapshot, groupID, id)
 			item := fyne.NewMenuItem(fmt.Sprintf(localize.T("%s - %s"), name, measurement.text), func() { d.enqueue(ipc.Command{Kind: ipc.CommandSelectGroup, GroupID: groupID, ChoiceID: id}) })
 			item.Checked = id == group.Selected
+			item.Disabled = !d.connected
 			ordered = append(ordered, trayProxyChoice{item: item, rank: measurement.rank, latency: measurement.latency})
 		}
 		// SliceStable keeps the profile's own order between equal measurements.
@@ -202,6 +224,7 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 		d.enqueue(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{SystemProxyEnabled: &enabled}})
 	})
 	systemProxy.Checked = snapshot.SystemProxy.Enabled
+	systemProxy.Disabled = !d.connected
 	if snapshot.SystemProxy.Enabled && !snapshot.SystemProxy.Active {
 		systemProxy.Label = localize.T("System Proxy (requested, inactive)")
 	} else if !snapshot.SystemProxy.Enabled && snapshot.SystemProxy.Active {

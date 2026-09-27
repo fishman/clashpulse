@@ -1,5 +1,12 @@
+PREFIX ?= $(HOME)/.local
+
 build:
 	go build -o clashpulse ./cmd/clashpulse
+
+install: build
+	install -Dm755 clashpulse $(PREFIX)/bin/clashpulse
+	install -Dm644 ui/clashpulse.svg $(PREFIX)/share/icons/hicolor/scalable/apps/clashpulse.svg
+	install -Dm644 clashpulse.desktop $(PREFIX)/share/applications/clashpulse.desktop
 
 test:
 	go test -tags ci ./...
@@ -13,4 +20,4 @@ run: build
 tui: build
 	./clashpulse tui
 
-.PHONY: build test vet run tui
+.PHONY: build install test vet run tui

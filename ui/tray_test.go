@@ -80,17 +80,9 @@ func TestTrayServiceToggleStartsAndStops(t *testing.T) {
 	a := test.NewApp()
 	defer a.Quit()
 	d := &desktopUI{connected: true, window: a.NewWindow("ClashPulse"), actions: make(chan ipc.Command, 2)}
-	itemFor := func(state core.Snapshot, label string) *fyne.MenuItem {
-		for _, item := range d.trayMenu(state).Items {
-			if item.Label == label {
-				return item
-			}
-		}
-		return nil
-	}
 	stopped := core.Snapshot{}
 	items := d.trayMenu(stopped).Items
-	service, systemProxy := itemFor(stopped, "Service"), itemFor(stopped, "System Proxy")
+	service, systemProxy := itemAt(items, "Service"), itemAt(items, "System Proxy")
 	if service == nil || service.Checked || service.Disabled || systemProxy == nil {
 		t.Fatalf("stopped service toggle = %+v", service)
 	}
@@ -106,7 +98,7 @@ func TestTrayServiceToggleStartsAndStops(t *testing.T) {
 	if trayStateSignature(running, true) == before {
 		t.Fatal("service state did not refresh tray menu")
 	}
-	service = itemFor(running, "Service")
+	service = itemAt(d.trayMenu(running).Items, "Service")
 	if service == nil || !service.Checked {
 		t.Fatalf("running service toggle = %+v", service)
 	}
@@ -114,6 +106,51 @@ func TestTrayServiceToggleStartsAndStops(t *testing.T) {
 	if command := <-d.actions; command.Kind != ipc.CommandStop {
 		t.Fatalf("running service toggle sent %+v", command)
 	}
+}
+
+func TestTrayKeepsEverySectionWhileDisconnected(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	d := &desktopUI{connected: false, window: app.NewWindow("ClashPulse"), quit: func() {}, actions: make(chan ipc.Command, 2)}
+	state := core.Snapshot{
+		ServiceRunning: true,
+		Subscriptions:  []core.SubscriptionSnapshot{{ID: "primary", SourceHost: "provider.example", Enabled: true, Active: true, HashPrefix: "abcdef"}},
+		Groups:         []core.GroupSnapshot{{ID: "main", Type: "Selector", Selected: "alpha", Proxies: []string{"alpha"}}},
+		Proxies:        []core.ProxySnapshot{{GroupID: "main", ID: "alpha", Outcome: "success"}},
+	}
+	items := d.trayMenu(state).Items
+	for _, label := range []string{"Profiles", "Proxies", "Service", "System Proxy"} {
+		if item := itemAt(items, label); item == nil {
+			t.Fatalf("disconnected tray dropped the %s section", label)
+		}
+	}
+	if !strings.Contains(items[0].Label, "Disconnected") {
+		t.Fatalf("disconnected tray reported live state: %q", items[0].Label)
+	}
+	for _, section := range []string{"Profiles", "Proxies"} {
+		for _, item := range itemAt(items, section).ChildMenu.Items {
+			if item.Action != nil && !item.Disabled {
+				t.Fatalf("%s kept an action while disconnected: %q", section, item.Label)
+			}
+		}
+	}
+	// Service stays selectable so a disconnected window can ask for it back;
+	// the request is only dropped by the connection check.
+	if item := itemAt(items, "Service"); item.Disabled {
+		t.Fatal("disconnected tray disabled the service toggle")
+	}
+	if item := itemAt(items, "System Proxy"); !item.Disabled {
+		t.Fatal("disconnected tray kept the system proxy toggle live")
+	}
+}
+
+func itemAt(items []*fyne.MenuItem, label string) *fyne.MenuItem {
+	for _, item := range items {
+		if item.Label == label {
+			return item
+		}
+	}
+	return nil
 }
 
 func indexOf(items []*fyne.MenuItem, label string) int {
