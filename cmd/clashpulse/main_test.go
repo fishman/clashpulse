@@ -6,15 +6,41 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/fishman/clashpulse/download"
 	"time"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/download"
+	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/localize"
 )
+
+func TestServiceRunningDetectsExistingOwner(t *testing.T) {
+	endpoint := filepath.Join(t.TempDir(), "private", "ipc.sock")
+	if serviceRunning(context.Background(), endpoint) {
+		t.Fatal("idle endpoint reported as owned")
+	}
+	server, err := ipc.NewServer(ipc.ServerOptions{Endpoint: endpoint, Handler: func(context.Context, ipc.Command) error { return nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() { served <- server.Serve(ctx) }()
+	t.Cleanup(func() { cancel(); _ = server.Close() })
+	select {
+	case <-server.Ready():
+	case err := <-served:
+		t.Fatalf("owner did not become ready: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("owner did not become ready")
+	}
+	if !serviceRunning(context.Background(), endpoint) {
+		t.Fatal("running owner went undetected, a second service would start")
+	}
+}
 
 func TestCLIUsesDesktopByDefault(t *testing.T) {
 	var desktopCalls, serviceCalls int
