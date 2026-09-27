@@ -1,6 +1,8 @@
 # ClashPulse
 
-The GUI starts without a proxy profile. Mihomo is a separate executable: put `mihomo` on `PATH`, or choose an absolute executable path in Settings. No Mihomo binary is bundled.
+English | [简体中文](README.zh-CN.md)
+
+ClashPulse is a lightweight cross-platform Go desktop client for [Mihomo](https://github.com/MetaCubeX/mihomo): one binary, low idle CPU, no polling or busy loops; strict typed TOML across four shallow files that reload once validation passes after a hand edit; and continuous node latency measurement that switches only when a better node is proven better, with every threshold under user control. It is not a Clash Verge Rev feature clone or a general-purpose proxy panel.
 
 ## Build
 
@@ -22,6 +24,8 @@ The source build reports `clashpulse dev`. macOS needs Xcode Command Line Tools;
 ```sh
 ./clashpulse
 ```
+
+The GUI starts without a proxy profile. Mihomo is a separate executable: put `mihomo` on `PATH`, or choose an absolute executable path in Settings. No Mihomo binary is bundled.
 
 The GUI needs a graphical desktop session (X11 or Wayland on Linux). Its tray uses StatusNotifier; GNOME may need the [AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/) to show it.
 
@@ -46,7 +50,6 @@ Close the desktop before direct commands; they take the same private-state lock 
 ```sh
 ./clashpulse download subscription [id]
 ./clashpulse refresh
-./clashpulse refresh subscription [id]
 ./clashpulse refresh resource [id]
 ```
 
