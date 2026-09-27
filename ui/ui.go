@@ -16,11 +16,12 @@ import (
 
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
+	"github.com/fishman/clashpulse/localize"
 )
 
 const applicationID = "io.github.fishman.clashpulse"
 
-var viewNames = []string{"Overview", "Proxies", "Subscriptions", "Filter Lists", "Data Resources", "Settings"}
+var viewIDs = []string{"Overview", "Proxies", "Subscriptions", "Filter Lists", "Data Resources", "Settings"}
 
 // Run launches the Fyne desktop interface and connects it to the local service.
 // IPC requests and event processing run in background goroutines; the window
@@ -119,11 +120,15 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 		endpoint:   endpoint,
 		actions:    make(chan ipc.Command, 32),
 		views:      make(map[string]fyne.CanvasObject),
-		connection: widget.NewLabel("Connecting to local service..."),
+		connection: widget.NewLabel(localize.T("Connecting to local service...")),
 	}
 	d.overviewCountValues = make([]*widget.Label, 0, 6)
 	countCells := make([]fyne.CanvasObject, 0, 6)
-	for _, label := range []string{"Proxy groups", "Subscriptions", "Data resources", "Filter lists", "Jobs", "Reported issues"} {
+	viewNames := make([]string, len(viewIDs))
+	for i, name := range viewIDs {
+		viewNames[i] = localize.T("gui.view." + name)
+	}
+	for _, label := range []string{localize.T("Proxy groups"), localize.T("Subscriptions"), localize.T("Data resources"), localize.T("Filter lists"), localize.T("Jobs"), localize.T("Reported issues")} {
 		value := widget.NewLabel("0")
 		d.overviewCountValues = append(d.overviewCountValues, value)
 		countCells = append(countCells, container.NewVBox(widget.NewLabelWithStyle(label, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), value))
@@ -138,13 +143,13 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 		d.overrideLabels[i].Hide()
 		rows[i] = d.overrideLabels[i]
 	}
-	d.overrideLabels[0].SetText("No managed overrides")
+	d.overrideLabels[0].SetText(localize.T("No managed overrides"))
 	d.overrideLabels[0].Show()
 	d.overridesRows = container.NewVBox(rows...)
-	d.overridesSection = container.NewVBox(widget.NewLabelWithStyle("Generated config changes", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), d.overridesRows)
-	d.switchSummary = widget.NewLabel("No automatic switches recorded")
+	d.overridesSection = container.NewVBox(widget.NewLabelWithStyle(localize.T("Generated config changes"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), d.overridesRows)
+	d.switchSummary = widget.NewLabel(localize.T("No automatic switches recorded"))
 	d.switchSummary.Wrapping = fyne.TextWrapWord
-	d.errorSummary = widget.NewLabel("No service errors")
+	d.errorSummary = widget.NewLabel(localize.T("No service errors"))
 	d.errorSummary.Wrapping = fyne.TextWrapWord
 	d.proxyPage = newProxyPage(d.enqueue)
 	d.subPage = newSubscriptionPage(d.enqueue, w)
@@ -159,12 +164,18 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 	d.views["Filter Lists"] = d.filterPage.view
 	d.views["Data Resources"] = d.resourcePage.view
 	d.views["Settings"] = d.settingsPage.view
-
-	d.viewSelect = widget.NewSelect(viewNames, d.showView)
+	d.viewSelect = widget.NewSelect(viewNames, func(label string) {
+		for i, name := range viewNames {
+			if label == name {
+				d.showView(viewIDs[i])
+				return
+			}
+		}
+	})
 	d.viewSelect.Selected = viewNames[0]
-	d.viewSelect.PlaceHolder = "Choose a view"
+	d.viewSelect.PlaceHolder = localize.T("Choose a view")
 	d.viewSelect.Refresh()
-	d.viewStack = container.NewStack(d.views[viewNames[0]])
+	d.viewStack = container.NewStack(d.views[viewIDs[0]])
 	header := container.NewBorder(nil, nil, nil, d.connection, d.viewSelect)
 	w.SetContent(container.NewBorder(header, nil, nil, nil, d.viewStack))
 	d.installKeys()
@@ -187,15 +198,15 @@ func (d *desktopUI) installKeys() {
 }
 
 func (d *desktopUI) overviewView() fyne.CanvasObject {
-	title := widget.NewLabelWithStyle("Service overview", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	title := widget.NewLabelWithStyle(localize.T("Service overview"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	controls := container.NewGridWithColumns(2,
-		widget.NewButton("Start service", func() { d.enqueue(ipc.Command{Kind: ipc.CommandStart}) }),
-		widget.NewButton("Stop service", func() { d.enqueue(ipc.Command{Kind: ipc.CommandStop}) }),
-		widget.NewButton("Restart service", func() { d.enqueue(ipc.Command{Kind: ipc.CommandRestart}) }),
-		widget.NewButton("Reload configuration", func() { d.enqueue(ipc.Command{Kind: ipc.CommandReloadConfiguration}) }),
-		widget.NewButton("View activity", d.openActivity),
+		widget.NewButton(localize.T("Start service"), func() { d.enqueue(ipc.Command{Kind: ipc.CommandStart}) }),
+		widget.NewButton(localize.T("Stop service"), func() { d.enqueue(ipc.Command{Kind: ipc.CommandStop}) }),
+		widget.NewButton(localize.T("Restart service"), func() { d.enqueue(ipc.Command{Kind: ipc.CommandRestart}) }),
+		widget.NewButton(localize.T("Reload configuration"), func() { d.enqueue(ipc.Command{Kind: ipc.CommandReloadConfiguration}) }),
+		widget.NewButton(localize.T("View activity"), d.openActivity),
 	)
-	return container.NewVScroll(container.NewVBox(title, d.overviewCounts, widget.NewLabelWithStyle("Mihomo binary", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), d.binarySummary, d.switchSummary, d.errorSummary, controls))
+	return container.NewVScroll(container.NewVBox(title, d.overviewCounts, widget.NewLabelWithStyle(localize.T("Mihomo binary"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), d.binarySummary, d.switchSummary, d.errorSummary, controls))
 }
 
 func (d *desktopUI) showView(name string) {
@@ -203,8 +214,9 @@ func (d *desktopUI) showView(name string) {
 	if !ok {
 		return
 	}
-	if d.viewSelect.Selected != name {
-		d.viewSelect.Selected = name
+	label := localize.T("gui.view." + name)
+	if d.viewSelect.Selected != label {
+		d.viewSelect.Selected = label
 		d.viewSelect.Refresh()
 	}
 	d.viewStack.Objects = []fyne.CanvasObject{view}
@@ -213,13 +225,13 @@ func (d *desktopUI) showView(name string) {
 
 func (d *desktopUI) enqueue(command ipc.Command) {
 	if !d.connected {
-		d.connection.SetText("Disconnected")
+		d.connection.SetText(localize.T("Disconnected"))
 		return
 	}
 	select {
 	case d.actions <- command:
 	default:
-		d.connection.SetText("Action queue is busy")
+		d.connection.SetText(localize.T("Action queue is busy"))
 	}
 }
 
@@ -289,10 +301,10 @@ func (d *desktopUI) runIPCSession() {
 				if d.ctx.Err() != nil {
 					return
 				}
-				d.postStatus("Action could not be queued")
+				d.postStatus(localize.T("Action could not be queued"))
 				continue
 			}
-			d.postStatus("Action queued")
+			d.postStatus(localize.T("Action queued"))
 		}
 	}
 }
@@ -309,7 +321,7 @@ func (d *desktopUI) updateOverrides(changes []core.ConfigOverrideSnapshot) {
 		count++
 	}
 	if count == 0 {
-		d.overrideLabels[0].SetText("No managed overrides")
+		d.overrideLabels[0].SetText(localize.T("No managed overrides"))
 		d.overrideLabels[0].Show()
 		count = 1
 	}
@@ -330,9 +342,9 @@ func (d *desktopUI) postSnapshot(snapshot core.Snapshot) {
 		previous := d.current
 		first := !d.hasSnapshot
 		d.connected = true
-		status := "Connected"
+		status := localize.T("Connected")
 		if immutable.ActiveSource == "local" {
-			status = "Connected - local profile"
+			status = localize.T("Connected - local profile")
 		}
 		if d.connection.Text != status {
 			d.connection.SetText(status)
@@ -392,7 +404,7 @@ func (d *desktopUI) postDisconnected() {
 			return
 		}
 		d.connected = false
-		d.connection.SetText("Disconnected")
+		d.connection.SetText(localize.T("Disconnected"))
 		d.updateTray(core.Snapshot{})
 	})
 }
@@ -408,13 +420,13 @@ func (d *desktopUI) postStatus(status string) {
 
 func serviceErrors(issues []core.ErrorSnapshot) string {
 	if len(issues) == 0 {
-		return "No service errors"
+		return localize.T("No service errors")
 	}
 	lines := make([]string, 0, len(issues))
 	for _, issue := range issues {
 		location := strings.TrimSpace(strings.Join([]string{issue.File, issue.Key}, " "))
 		if location == "" {
-			location = "Service"
+			location = localize.T("Service")
 		}
 		if issue.SourceID != "" {
 			scope := issue.SourceID
@@ -431,13 +443,13 @@ func serviceErrors(issues []core.ErrorSnapshot) string {
 func binaryFieldValues(binary core.BinarySnapshot) [4]string {
 	desired := binary.Desired
 	if desired == "" {
-		desired = "unspecified"
+		desired = localize.T("unspecified")
 	}
 	observed := binary.ObservedVersion
 	if observed == "" {
-		observed = "unknown"
+		observed = localize.T("unknown")
 	}
-	capabilities := "none verified"
+	capabilities := localize.T("none verified")
 	if len(binary.Capabilities) > 0 {
 		capabilities = strings.Join(binary.Capabilities, ", ")
 	}
@@ -448,7 +460,7 @@ func newBinaryForm() (*widget.Form, [4]*widget.Label) {
 	var values [4]*widget.Label
 	initial := binaryFieldValues(core.BinarySnapshot{})
 	items := make([]*widget.FormItem, 0, len(values))
-	for i, label := range []string{"Desired", "Observed", "Capabilities", "Compatibility"} {
+	for i, label := range []string{localize.T("Desired"), localize.T("Observed"), localize.T("Capabilities"), localize.T("Compatibility")} {
 		value := widget.NewLabel(initial[i])
 		value.Wrapping = fyne.TextWrapWord
 		values[i] = value

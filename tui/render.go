@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/fishman/clashpulse/localize"
 	"github.com/fishman/notmutt/lib/tui/chrome"
 	"github.com/fishman/notmutt/lib/tui/modal"
 	"github.com/fishman/notmutt/lib/tui/theme"
@@ -101,7 +103,7 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 	indexes, layout, sizes := fitTable(columns, width)
 	headings := make([]string, len(indexes))
 	for i, index := range indexes {
-		headings[i] = columns[index].heading
+		headings[i] = localize.T(columns[index].heading)
 	}
 	setLine(cache.current, 1, layout.Line(headings, sizes), roleMuted)
 	rows := model.Rows()
@@ -139,7 +141,7 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 		setLine(cache.current, 2+i, layout.Line(cells[:len(indexes)], sizes), role)
 	}
 	if len(rows) == 0 && contentHeight > 0 {
-		setLine(cache.current, 2, " No items are currently reported by the service.", roleMuted)
+		setLine(cache.current, 2, " "+localize.T("No items are currently reported by the service."), roleMuted)
 	}
 	// Only the Overview fallback keeps a line above the status bar: a narrow
 	// terminal drops the Details column, and the override reason has nowhere
@@ -154,22 +156,22 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 		drawLog(cache.current, width, height, model)
 	}
 	if height >= 6 {
-		profile := "profile not reported"
+		profile := localize.T("profile not reported")
 		if model.snapshot.Snapshot.ActiveSource == "local" {
-			profile = "local profile"
+			profile = localize.T("local profile")
 		} else if model.snapshot.Snapshot.ActiveSource != "none" {
 			for _, subscription := range model.snapshot.Snapshot.Subscriptions {
 				if subscription.Active {
-					profile = "profile " + subscription.Name
+					profile = fmt.Sprintf(localize.T("profile %s"), subscription.Name)
 					if subscription.Name == "" {
-						profile = "profile " + subscription.ID
+						profile = fmt.Sprintf(localize.T("profile %s"), subscription.ID)
 					}
 					break
 				}
 			}
 		}
 		left := []chrome.Segment{
-			{Runs: []chrome.Run{{Text: "IPC connected", Style: "connection"}}, Priority: 10},
+			{Runs: []chrome.Run{{Text: localize.T("IPC connected"), Style: "connection"}}, Priority: 10},
 			{Runs: []chrome.Run{{Text: profile, Style: "profile"}}, Priority: 9},
 			{Runs: []chrome.Run{{Text: model.Progress(), Style: "progress"}}, Priority: 2},
 		}
@@ -177,19 +179,19 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 			for i := len(model.snapshot.Snapshot.Diagnostics) - 1; i >= 0; i-- {
 				diagnostic := model.snapshot.Snapshot.Diagnostics[i]
 				if diagnostic.Severity == "error" && diagnostic.Message != "" {
-					left = append(left, chrome.Segment{Runs: []chrome.Run{{Text: "latest error: " + diagnostic.Message, Style: "error"}}, Priority: 1})
+					left = append(left, chrome.Segment{Runs: []chrome.Run{{Text: localize.T("latest error: ") + localize.T(diagnostic.Message), Style: "error"}}, Priority: 1})
 					break
 				}
 			}
 		}
 		var pending []chrome.Segment
 		if model.Pending > 0 {
-			pending = append(pending, chrome.Segment{Runs: []chrome.Run{{Text: "sending " + itoa(model.Pending), Style: "status"}}, Priority: 3})
+			pending = append(pending, chrome.Segment{Runs: []chrome.Run{{Text: localize.T("sending ") + itoa(model.Pending), Style: "status"}}, Priority: 3})
 		}
 		setRuns(cache.current, height-1, chrome.Status(width, "status", left, pending))
 		if model.Notice != "" {
 			style := "status"
-			if strings.HasPrefix(model.Notice, "Command failed:") || strings.HasPrefix(model.Notice, "Managed source command failed") {
+			if strings.HasPrefix(model.Notice, localize.T("Command failed: ")) || strings.HasPrefix(model.Notice, localize.T("Managed source command failed.")) {
 				style = "error"
 			}
 			setRuns(cache.current, height-3, chrome.Status(width, "status", []chrome.Segment{{Runs: []chrome.Run{{Text: model.Notice, Style: style}}, Priority: 10}}, nil))
@@ -228,13 +230,13 @@ func render(screen tcell.Screen, model Model, cache *renderCache) {
 
 func drawLog(lines []renderLine, width, height int, model Model) {
 	diagnostics := model.snapshot.Snapshot.Diagnostics
-	setLine(lines, 1, "Session log ("+itoa(len(diagnostics))+")", roleAccent)
+	setLine(lines, 1, localize.T("Session log")+" ("+itoa(len(diagnostics))+")", roleAccent)
 	if height < 3 {
 		return
 	}
 	rows := max(1, height-5)
 	if len(diagnostics) == 0 {
-		setLine(lines, 2, "No session diagnostics.", roleMuted)
+		setLine(lines, 2, localize.T("No session diagnostics."), roleMuted)
 		return
 	}
 	if rows == 1 {
@@ -244,7 +246,7 @@ func drawLog(lines []renderLine, width, height int, model Model) {
 		if diagnostic.Severity == "error" {
 			role = roleError
 		}
-		setLine(lines, 2, diagnostic.Severity+": "+diagnostic.Message, role)
+		setLine(lines, 2, localize.Code("diagnostic.severity", diagnostic.Severity)+": "+localize.T(diagnostic.Message), role)
 		return
 	}
 	perEntry := 1
@@ -264,12 +266,12 @@ func drawLog(lines []renderLine, width, height int, model Model) {
 			role = roleError
 		}
 		if perEntry == 1 {
-			setLine(lines, y, timeLabel(diagnostic.At)+" "+diagnostic.Severity+" "+diagnostic.Kind+" "+diagnostic.SourceID+" "+diagnostic.Message, role)
+			setLine(lines, y, timeLabel(diagnostic.At)+" "+localize.Code("diagnostic.severity", diagnostic.Severity)+" "+localize.Code("operation", diagnostic.Kind)+" "+diagnostic.SourceID+" "+localize.T(diagnostic.Message), role)
 			y++
 			continue
 		}
-		setLine(lines, y, time.Unix(diagnostic.At, 0).UTC().Format("15:04:05Z")+" "+diagnostic.Severity, role)
-		setLine(lines, y+1, diagnostic.Kind+" "+diagnostic.SourceID+" "+diagnostic.Message, role)
+		setLine(lines, y, time.Unix(diagnostic.At, 0).UTC().Format("15:04:05Z")+" "+localize.Code("diagnostic.severity", diagnostic.Severity), role)
+		setLine(lines, y+1, localize.Code("operation", diagnostic.Kind)+" "+diagnostic.SourceID+" "+localize.T(diagnostic.Message), role)
 		y += 2
 	}
 }
@@ -278,9 +280,9 @@ func drawHelp(lines []renderLine, height int, model Model) {
 	for y := 1; y < height-3; y++ {
 		setLine(lines, y, "", roleBase)
 	}
-	title := "Keyboard help"
+	title := localize.T("Keyboard help")
 	for _, binding := range model.keymap.Help(Tab("help")) {
-		if strings.HasSuffix(binding, "close help") {
+		if strings.HasSuffix(binding, localize.T("close help")) {
 			title += " (" + binding + ")"
 			break
 		}
@@ -300,9 +302,10 @@ func drawModal(lines []renderLine, width, height int, item *Modal) {
 	}
 	var body []renderLine
 	if item.Form != nil {
-		title := strings.ReplaceAll(string(item.Kind), "_", " ") + " settings"
-		if item.Kind == ModalMonitorSetting {
-			title = "Monitor policy"
+		titleID := "tui.modal.title." + string(item.Kind)
+		title := localize.T(titleID)
+		if title == titleID {
+			title = strings.ReplaceAll(string(item.Kind), "_", " ") + " settings"
 		}
 		body = append(body, renderLine{text: title, role: roleAccent})
 		for _, row := range item.Form.Rows(max(1, width-4), max(1, height-7)) {
@@ -315,21 +318,21 @@ func drawModal(lines []renderLine, width, height int, item *Modal) {
 	} else {
 		message := modalPrompt(item.Kind)
 		if item.Kind == ModalDeleteSubscription || item.Kind == ModalDeleteDNS {
-			message = "Remove " + item.Input + "?"
+			message = fmt.Sprintf(localize.T("Remove %s?"), item.Input)
 		}
 		body = append(body, renderLine{text: message, role: roleAccent})
 		if item.Kind == ModalDeleteSubscription || item.Kind == ModalDeleteDNS {
-			body = append(body, renderLine{text: "Enter remove  Esc cancel", role: roleModal})
+			body = append(body, renderLine{text: localize.T("Enter remove  Esc cancel"), role: roleModal})
 		} else {
 			wrapped, _, _ := modal.Wrap(item.Input, len(item.Input), max(1, width-10), max(1, height-8))
 			for i, line := range wrapped {
 				prefix := "       "
 				if i == 0 {
-					prefix = "Input: "
+					prefix = localize.T("Input: ")
 				}
 				body = append(body, renderLine{text: prefix + line, role: roleModal})
 			}
-			body = append(body, renderLine{text: "Enter apply  Esc cancel", role: roleMuted})
+			body = append(body, renderLine{text: localize.T("Enter apply  Esc cancel"), role: roleMuted})
 		}
 	}
 	box, ok := modal.Bottom(width, height, len(body), 3)

@@ -1,0 +1,926 @@
+["tui.tab.overview"]
+other = "概览"
+
+["tui.tab.proxies"]
+other = "代理"
+
+["tui.tab.subscriptions"]
+other = "订阅"
+
+["tui.tab.filters"]
+other = "过滤列表"
+
+["tui.tab.resources"]
+other = "数据资源"
+
+["tui.tab.settings"]
+other = "设置"
+
+["tui.modal.title.binary"]
+other = "Mihomo 内核设置"
+
+["tui.modal.title.delete_subscription"]
+other = "删除订阅"
+
+["tui.modal.title.subscription"]
+other = "订阅设置"
+
+["tui.modal.title.resource"]
+other = "资源设置"
+
+["tui.modal.title.filter"]
+other = "过滤器设置"
+
+["tui.modal.title.monitor_setting"]
+other = "监控策略"
+
+["tui.modal.title.dns_listen"]
+other = "DNS 监听设置"
+
+["tui.modal.title.dns_resolver"]
+other = "DNS 解析器组设置"
+
+["tui.modal.title.dns_route"]
+other = "DNS 路由设置"
+
+["tui.modal.title.delete_dns"]
+other = "删除 DNS 策略"
+
+["tui.modal.prompt.binary"]
+other = "system、bundled 或绝对可执行文件路径"
+
+["tui.modal.prompt.delete_subscription"]
+other = "确认删除订阅"
+
+["tui.modal.prompt.delete_dns"]
+other = "确认移除 DNS 策略"
+
+["tui.modal.prompt.dns_listen"]
+other = "DNS 监听地址"
+
+["tui.modal.notice.binary"]
+other = "输入 system、bundled 或绝对可执行文件路径。"
+
+["tui.modal.notice.delete_subscription"]
+other = "确认删除订阅。"
+
+["tui.modal.notice.subscription"]
+other = "输入订阅信息。"
+
+["tui.modal.notice.resource"]
+other = "输入资源信息。"
+
+["tui.modal.notice.filter"]
+other = "输入过滤器信息。"
+
+["tui.modal.notice.monitor_setting"]
+other = "编辑监控设置。"
+
+["tui.modal.notice.dns_listen"]
+other = "输入 DNS 监听地址。"
+
+["tui.modal.notice.dns_resolver"]
+other = "输入 DNS 解析器组信息。"
+
+["tui.modal.notice.dns_route"]
+other = "输入 DNS 路由信息。"
+
+["tui.modal.notice.delete_dns"]
+other = "确认移除 DNS 策略。"
+
+["Type"]
+other = "类型"
+
+["Source"]
+other = "来源"
+
+["Validated"]
+other = "已验证"
+
+["Next"]
+other = "下次运行"
+
+["State"]
+other = "状态"
+
+["Last check"]
+other = "上次检查"
+
+["Usage"]
+other = "用量"
+
+["Group"]
+other = "组"
+
+["Proxy"]
+other = "代理节点"
+
+["Selected"]
+other = "已选择"
+
+["Latency"]
+other = "延迟"
+
+["Outcome"]
+other = "结果"
+
+["Automation"]
+other = "自动化"
+
+["Setting"]
+other = "设置项"
+
+["Value"]
+other = "值"
+
+["Action"]
+other = "操作"
+
+["App-owned fields in effective config"]
+other = "生效配置中的应用托管字段"
+
+["Last automatic switch"]
+other = "最近一次自动切换"
+
+["Operation"]
+other = "操作"
+
+["pending"]
+other = "等待中"
+
+["active"]
+other = "生效中"
+
+["update ready"]
+other = "更新已就绪"
+
+["last success "]
+other = "上次成功 "
+
+["hash "]
+other = "哈希 "
+
+["applied "]
+other = "已应用 "
+
+["needs attention"]
+other = "需要关注"
+
+["%d up %d down"]
+other = "上传 %d，下载 %d"
+
+["total %d bytes"]
+other = "总计 %d 字节"
+
+["expires "]
+other = "到期 "
+
+["format "]
+other = "格式 "
+
+["target "]
+other = "目标 "
+
+["validated"]
+other = "已验证"
+
+["provider "]
+other = "提供方 "
+
+["success "]
+other = "成功 "
+
+["next "]
+other = "下次 "
+
+["Desired %s; observed %s; capabilities %s"]
+other = "期望 %s；实际 %s；已验证能力 %s"
+
+["; compatibility issue reported"]
+other = "；已报告兼容性问题"
+
+["No test URL is configured."]
+other = "未配置测试 URL。"
+
+["configured"]
+other = "已配置"
+
+["Test URL configured."]
+other = "测试 URL 已配置。"
+
+[" Plain HTTP can be intercepted."]
+other = "明文 HTTP 流量可能被拦截。"
+
+["System proxy requested %s; currently active %s."]
+other = "系统代理请求状态：%s；当前启用状态：%s。"
+
+["requested %s; active %s"]
+other = "请求状态：%s；启用状态：%s"
+
+["true"]
+other = "是"
+
+["false"]
+other = "否"
+
+["Monitor test URL"]
+other = "监控测试 URL"
+
+["Monitor timeout"]
+other = "监控超时"
+
+["Monitor concurrency"]
+other = "监控并发数"
+
+["Monitor threshold"]
+other = "监控延迟阈值"
+
+["Minimum improvement"]
+other = "最小改善幅度"
+
+["Monitor cooldown"]
+other = "监控冷却时间"
+
+["Monitor jitter"]
+other = "监控抖动"
+
+["seconds"]
+other = "秒"
+
+["ms"]
+other = "毫秒"
+
+["; high alert above threshold"]
+other = "；超过阈值时触发高级告警"
+
+["DNSCrypt %s; %d endpoint(s)"]
+other = "DNSCrypt：%s；%d 个端点"
+
+["DNS resolver set %s"]
+other = "DNS 解析器组 %s"
+
+["DNS route %s %s"]
+other = "DNS 路由 %s %s"
+
+["resolver %s"]
+other = "解析器 %s"
+
+["desired "]
+other = "期望 "
+
+["observed "]
+other = "实际 "
+
+["capabilities "]
+other = "已验证能力 "
+
+["%s | %d ms"]
+other = "%s | %d 毫秒"
+
+["enabled"]
+other = "已启用"
+
+["disabled"]
+other = "已停用"
+
+["yes"]
+other = "是"
+
+["no"]
+other = "否"
+
+
+["selected "]
+other = "已选择 "
+
+["automation on"]
+other = "自动化已开启"
+
+["automation off"]
+other = "自动化已关闭"
+
+
+["profile not reported"]
+other = "未报告配置"
+
+["local profile"]
+other = "本地配置"
+
+["profile %s"]
+other = "配置：%s"
+
+["IPC connected"]
+other = "IPC 已连接"
+
+["latest error: "]
+other = "最近错误："
+
+["sending "]
+other = "正在发送 "
+
+["Command failed: "]
+other = "命令失败："
+
+["Managed source command failed."]
+other = "托管来源操作失败。"
+
+["Jobs:"]
+other = "任务："
+
+["Jobs: idle"]
+other = "任务：空闲"
+
+["operation"]
+other = "操作"
+
+["No items are currently reported by the service."]
+other = "服务当前未报告任何项目。"
+
+["Session log"]
+other = "会话日志"
+
+["No session diagnostics."]
+other = "没有会话诊断信息。"
+
+["Keyboard help"]
+other = "键盘帮助"
+
+["close help"]
+other = "关闭帮助"
+
+["Remove %s?"]
+other = "移除 %s？"
+
+["Enter remove  Esc cancel"]
+other = "Enter 确认移除  Esc 取消"
+
+["Enter apply  Esc cancel"]
+other = "Enter 应用  Esc 取消"
+
+["Input: "]
+other = "输入："
+
+
+["Unsupported dialog"]
+other = "不支持的对话框"
+
+["Unsupported settings dialog."]
+other = "不支持的设置对话框。"
+
+
+
+["Mihomo manages this group; manual probes are unavailable."]
+other = "Mihomo 托管此组，无法手动测速。"
+
+["Mihomo manages this group; automation is unavailable."]
+other = "Mihomo 托管此组，无法更改自动化设置。"
+
+["Mihomo selects members of this group."]
+other = "此组的节点由 Mihomo 选择。"
+
+["Select a group before requesting a probe."]
+other = "请先选择组，再请求测速。"
+
+["Select a group before changing automation."]
+other = "请先选择组，再更改自动化设置。"
+
+["Focused group "]
+other = "当前聚焦组 "
+
+["Confirm subscription deletion."]
+other = "请确认删除订阅。"
+
+["Sending intent to the application..."]
+other = "正在向应用发送操作请求……"
+
+["Intent queued; operation progress appears in Jobs."]
+other = "操作请求已排队；进度显示在“任务”中。"
+
+["Application did not queue the intent."]
+other = "应用未将操作请求加入队列。"
+
+["Command queue is full; wait for a pending command to finish."]
+other = "命令队列已满，请等待待处理命令完成。"
+
+["Select system, bundled, or an absolute executable path."]
+other = "请选择 system、bundled 或绝对可执行文件路径。"
+
+
+["A source URL is required."]
+other = "必须提供来源 URL。"
+
+["A stable subscription ID is required."]
+other = "必须提供稳定的订阅 ID。"
+
+["Alert threshold milliseconds"]
+other = "告警阈值（毫秒）"
+
+["tui.monitor.range.alert_threshold"]
+other = "告警阈值必须介于 1 至 60000 毫秒之间。"
+
+["Allow HTTP"]
+other = "允许 HTTP"
+
+["Allow invalid TLS"]
+other = "允许无效 TLS 证书"
+
+["Choose a suffix, GeoSite, or resource matcher."]
+other = "请选择 suffix、GeoSite 或 resource 匹配器。"
+
+["Choose a supported resource format."]
+other = "请选择受支持的资源格式。"
+
+["Choose a supported resource kind."]
+other = "请选择受支持的资源类型。"
+
+["Choose direct, system_proxy, or mihomo_proxy."]
+other = "请选择 direct、system_proxy 或 mihomo_proxy。"
+
+["Choose domain, ipcidr, or classical."]
+other = "请选择 domain、ipcidr 或 classical。"
+
+["ClashPulse IPC connection closed while the TUI was running"]
+other = "TUI 运行期间 ClashPulse IPC 连接已关闭"
+
+["Concurrency"]
+other = "并发数"
+
+["Confirm DNS policy removal."]
+other = "请确认移除 DNS 策略。"
+
+["tui.monitor.range.bad_samples"]
+other = "连续异常样本数必须介于 1 至 5 之间。"
+
+["tui.monitor.range.cooldown"]
+other = "冷却时间必须介于 0 至 4294967295 秒之间。"
+
+["Cooldown seconds"]
+other = "冷却时间（秒）"
+
+["DNS endpoints must be 1-256 bytes and cannot contain credentials."]
+other = "DNS 端点长度必须为 1 至 256 字节，且不能包含凭据。"
+
+["DNS listener must be 1-128 bytes without line breaks."]
+other = "DNS 监听地址长度必须为 1 至 128 字节，且不能包含换行符。"
+
+["DNS policy already has 1024 routes."]
+other = "DNS 策略已有 1024 条路由。"
+
+["DNS policy already has 256 resolver sets."]
+other = "DNS 策略已有 256 个解析器组。"
+
+["DNS policy entry is no longer available."]
+other = "DNS 策略条目已不可用。"
+
+["DNS policy reached its command limit."]
+other = "DNS 策略已达到命令数量上限。"
+
+["DNS resolver form unavailable."]
+other = "DNS 解析器表单不可用。"
+
+["DNS resolver set is no longer available."]
+other = "DNS 解析器组已不可用。"
+
+["DNS route form unavailable."]
+other = "DNS 路由表单不可用。"
+
+["DNS route is no longer available."]
+other = "DNS 路由已不可用。"
+
+["DNS route matcher already exists."]
+other = "DNS 路由匹配器已存在。"
+
+["DNSCrypt"]
+other = "DNSCrypt"
+
+["DNSCrypt must be enabled or disabled."]
+other = "DNSCrypt 必须启用或停用。"
+
+["Display name must be at most 128 bytes."]
+other = "显示名称长度不能超过 128 字节。"
+
+["Edit fields, then Ctrl+S to save."]
+other = "编辑字段，然后按 Ctrl+S 保存。"
+
+["Edit fields, then Ctrl+S to save; private URLs stay hidden. Use - to clear an optional rule type or SHA-256 pin."]
+other = "编辑字段，然后按 Ctrl+S 保存；私有 URL 保持隐藏。使用 - 清除可选规则类型或 SHA-256 校验值。"
+
+["Edit fields, then Ctrl+S to save; private fields stay hidden."]
+other = "编辑字段，然后按 Ctrl+S 保存；私有字段保持隐藏。"
+
+["Edit monitor settings; the test URL stays hidden unless changed."]
+other = "编辑监控设置；仅在修改时显示测试 URL。"
+
+["Edit the DNS listener; backend validates address and routing conflicts."]
+other = "编辑 DNS 监听器；地址和路由冲突由后端验证。"
+
+["Enabled must be true or false."]
+other = "Enabled 只能为 true 或 false。"
+
+["Endpoints accept 1-16 comma-separated values; credentials are not allowed."]
+other = "端点接受 1 至 16 个以逗号分隔的值；不允许包含凭据。"
+
+["Enter a valid resource ID."]
+other = "请输入有效的资源 ID。"
+
+["Enter a valid stable ID."]
+other = "请输入有效的稳定 ID。"
+
+["Enter a whole number within the setting's range."]
+other = "请输入符合该设置范围的整数。"
+
+["Enter between 1 and 16 DNS endpoints."]
+other = "请输入 1 至 16 个 DNS 端点。"
+
+["Enter required fields, then Ctrl+S to save."]
+other = "请输入必填字段，然后按 Ctrl+S 保存。"
+
+["Enter required fields, then Ctrl+S to save; private source stays hidden."]
+other = "请输入必填字段，然后按 Ctrl+S 保存；私有来源保持隐藏。"
+
+["Field is too long."]
+other = "字段过长。"
+
+["Filter format must be yaml, text, or mrs."]
+other = "过滤器格式必须为 yaml、text 或 mrs。"
+
+["Filter is no longer available."]
+other = "过滤器已不可用。"
+
+["ID"]
+other = "ID"
+
+["Interval must be between 60 and 2592000 seconds."]
+other = "间隔必须介于 60 至 2592000 秒之间。"
+
+["Interval seconds"]
+other = "间隔（秒）"
+
+["Jitter milliseconds"]
+other = "抖动（毫秒）"
+
+["tui.monitor.range.jitter"]
+other = "抖动必须介于 0 至 4294967295 毫秒之间。"
+
+["Kind, format, source URL, and positive interval are required."]
+other = "类型、格式、来源 URL 和正数间隔均为必填项。"
+
+["Managed form unavailable."]
+other = "托管表单不可用。"
+
+["Matcher"]
+other = "匹配器"
+
+["Matcher must be suffix, geosite, or resource."]
+other = "匹配器必须为 suffix、geosite 或 resource。"
+
+["Matcher value must be 1-%d bytes."]
+other = "匹配值长度必须为 1 至 %d 字节。"
+
+["Minimum improvement milliseconds"]
+other = "最小改善幅度（毫秒）"
+
+["tui.monitor.range.improvement"]
+other = "最小改善幅度必须介于 1 至 4294967295 毫秒之间。"
+
+["tui.monitor.range.concurrency"]
+other = "监控并发数必须介于 1 至 64 之间。"
+
+["Monitor enabled must be true or false."]
+other = "监控启用状态只能为 true 或 false。"
+
+["tui.monitor.range.interval"]
+other = "监控间隔必须介于 1 至 86400 秒之间。"
+
+["Monitor setting is out of range."]
+other = "监控设置超出范围。"
+
+["Monitor settings form unavailable."]
+other = "监控设置表单不可用。"
+
+["Monitor test URL must be 1-2048 bytes without line breaks."]
+other = "监控测试 URL 长度必须为 1 至 2048 字节，且不能包含换行符。"
+
+["Monitor test URL must use HTTP or HTTPS without credentials or fragment."]
+other = "监控测试 URL 必须使用 HTTP 或 HTTPS，且不能包含凭据或片段。"
+
+["tui.monitor.range.threshold"]
+other = "监控阈值必须介于 1 至 4294967295 毫秒之间。"
+
+["tui.monitor.range.timeout"]
+other = "监控超时必须介于 1 至 86400000 毫秒之间。"
+
+["Refresh interval must be between 60 and 2592000 seconds."]
+other = "刷新间隔必须介于 60 至 2592000 秒之间。"
+
+["Refresh seconds"]
+other = "刷新间隔（秒）"
+
+["Resolver ID already exists."]
+other = "解析器 ID 已存在。"
+
+["Resolver ID must be a stable ID (max 64 characters)."]
+other = "解析器 ID 必须为稳定 ID（最多 64 个字符）。"
+
+["Resolver set ID"]
+other = "解析器组 ID"
+
+["Resolver set must be a stable ID."]
+other = "解析器组必须使用稳定 ID。"
+
+["Resource ID, format, and target are required."]
+other = "资源 ID、格式和目标均为必填项。"
+
+["Resource is no longer available."]
+other = "资源已不可用。"
+
+["Resource kind, format, and rule type are incompatible."]
+other = "资源类型、格式和规则类型不兼容。"
+
+["Resource matcher must be a stable resource ID."]
+other = "资源匹配器必须使用稳定资源 ID。"
+
+["SHA-256 must be 64 hexadecimal characters."]
+other = "SHA-256 必须为 64 个十六进制字符。"
+
+["SHA-256 must be hexadecimal."]
+other = "SHA-256 必须为十六进制值。"
+
+["SHA-256 pin"]
+other = "SHA-256 校验值"
+
+["Selected field does not accept this input."]
+other = "所选字段不接受此输入。"
+
+["Source must be HTTPS without credentials or an absolute local path."]
+other = "来源必须是无凭据的 HTTPS URL 或绝对本地路径。"
+
+["Subscription is no longer available."]
+other = "订阅已不可用。"
+
+["Subscription settings unavailable."]
+other = "订阅设置不可用。"
+
+["Target is required and cannot contain commas or control characters."]
+other = "目标为必填项，且不能包含逗号或控制字符。"
+
+["Test URL"]
+other = "测试 URL"
+
+["This configuration form is unavailable."]
+other = "此配置表单不可用。"
+
+["Threshold milliseconds"]
+other = "阈值（毫秒）"
+
+["Timeout milliseconds"]
+other = "超时（毫秒）"
+
+["Timeout must be between 1 and 300 seconds."]
+other = "超时必须介于 1 至 300 秒之间。"
+
+["Timeout seconds"]
+other = "超时（秒）"
+
+["Unsupported monitor setting."]
+other = "不支持的监控设置。"
+
+["User-Agent must be printable ASCII at most 256 bytes."]
+other = "User-Agent 必须为最多 256 字节的可打印 ASCII 字符。"
+
+["cannot connect to the ClashPulse IPC service at %q: %w (start the application service first)"]
+other = "无法连接到 ClashPulse IPC 服务 %q：%w（请先启动应用服务）"
+
+["cannot read initial snapshot from the ClashPulse IPC service: %w"]
+other = "无法读取 ClashPulse IPC 服务的初始快照：%w"
+
+["create terminal screen: %w"]
+other = "创建终端屏幕失败：%w"
+
+["initialize terminal screen: %w"]
+other = "初始化终端屏幕失败：%w"
+
+["load TUI keybindings: %w"]
+other = "加载 TUI 键绑定失败：%w"
+
+["terminal event stream closed"]
+other = "终端事件流已关闭。"
+
+["activate"]
+other = "激活"
+
+["activate subscription"]
+other = "激活订阅"
+
+["add DNS resolver set"]
+other = "添加 DNS 解析器组"
+
+["add DNS route"]
+other = "添加 DNS 路由"
+
+["apply"]
+other = "应用"
+
+["cancel"]
+other = "取消"
+
+["cancel form"]
+other = "取消表单"
+
+["close log"]
+other = "关闭日志"
+
+["close modal"]
+other = "关闭对话框"
+
+["delete character"]
+other = "删除字符"
+
+["delete subscription"]
+other = "删除订阅"
+
+["disable monitor"]
+other = "停用监控"
+
+["disable system proxy"]
+other = "停用系统代理"
+
+["edit field"]
+other = "编辑字段"
+
+["edit filter"]
+other = "编辑过滤器"
+
+["edit resource"]
+other = "编辑资源"
+
+["edit selected DNS entry"]
+other = "编辑选中的 DNS 条目"
+
+["edit subscription"]
+other = "编辑订阅"
+
+["enable monitor"]
+other = "启用监控"
+
+["enable system proxy"]
+other = "启用系统代理"
+
+["enqueue start"]
+other = "将启动操作加入队列"
+
+["enqueue stop"]
+other = "将停止操作加入队列"
+
+["first binding"]
+other = "第一条键绑定"
+
+["last binding"]
+other = "最后一条键绑定"
+
+["move down"]
+other = "向下移动"
+
+["move up"]
+other = "向上移动"
+
+["new filter"]
+other = "新建过滤器"
+
+["new resource"]
+other = "新建资源"
+
+["new subscription"]
+other = "新建订阅"
+
+["newer diagnostic"]
+other = "较新的诊断信息"
+
+["newer page"]
+other = "较新的一页"
+
+["newest diagnostic"]
+other = "最新的诊断信息"
+
+["next binding"]
+other = "下一条键绑定"
+
+["next choice or character"]
+other = "下一个选项或字符"
+
+["next field"]
+other = "下一个字段"
+
+["next page"]
+other = "下一页"
+
+["next tab"]
+other = "下一个标签页"
+
+["older diagnostic"]
+other = "较早的诊断信息"
+
+["older page"]
+other = "较早的一页"
+
+["oldest diagnostic"]
+other = "最早的诊断信息"
+
+["previous binding"]
+other = "上一条键绑定"
+
+["previous choice or character"]
+other = "上一个选项或字符"
+
+["previous field"]
+other = "上一个字段"
+
+["previous page"]
+other = "上一页"
+
+["previous tab"]
+other = "上一个标签页"
+
+["probe focused group"]
+other = "对焦点组测速"
+
+["quit"]
+other = "退出"
+
+["refresh filter"]
+other = "刷新过滤器"
+
+["refresh resource"]
+other = "刷新资源"
+
+["refresh subscription"]
+other = "刷新订阅"
+
+["reload configuration"]
+other = "重新加载配置"
+
+["remove selected DNS entry"]
+other = "移除选中的 DNS 条目"
+
+["save form"]
+other = "保存表单"
+
+["select Mihomo binary"]
+other = "选择 Mihomo 内核"
+
+["set DNS listener"]
+other = "设置 DNS 监听器"
+
+["set alert threshold in milliseconds"]
+other = "设置告警阈值（毫秒）"
+
+["set consecutive bad samples"]
+other = "设置连续异常样本数"
+
+["set minimum improvement in milliseconds"]
+other = "设置最小改善幅度（毫秒）"
+
+["set monitor concurrency"]
+other = "设置监控并发数"
+
+["set monitor cooldown in seconds"]
+other = "设置监控冷却时间（秒）"
+
+["set monitor interval"]
+other = "设置监控间隔"
+
+["set monitor jitter in milliseconds"]
+other = "设置监控抖动（毫秒）"
+
+["set monitor latency threshold in milliseconds"]
+other = "设置监控延迟阈值（毫秒）"
+
+["set monitor test URL"]
+other = "设置监控测试 URL"
+
+["set monitor timeout in milliseconds"]
+other = "设置监控超时（毫秒）"
+
+["show dialog help"]
+other = "显示对话框帮助"
+
+["show form help"]
+other = "显示表单帮助"
+
+["show keyboard help"]
+other = "显示键盘帮助"
+
+["show log help"]
+other = "显示日志帮助"
+
+["toggle field"]
+other = "切换字段"
+
+["toggle focused group automation"]
+other = "切换焦点组自动化"
+
+["toggle session log"]
+other = "切换会话日志"
+
+["Enter Unsupported dialog."]
+other = "不支持的对话框。"

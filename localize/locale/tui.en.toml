@@ -1,0 +1,115 @@
+["tui.tab.overview"]
+other = "Overview"
+
+["tui.tab.proxies"]
+other = "Proxies"
+
+["tui.tab.subscriptions"]
+other = "Subscriptions"
+
+["tui.tab.filters"]
+other = "Filter Lists"
+
+["tui.tab.resources"]
+other = "Data Resources"
+
+["tui.tab.settings"]
+other = "Settings"
+
+["tui.modal.title.binary"]
+other = "binary settings"
+
+["tui.modal.title.delete_subscription"]
+other = "Delete subscription"
+
+["tui.modal.title.subscription"]
+other = "subscription settings"
+
+["tui.modal.title.resource"]
+other = "resource settings"
+
+["tui.modal.title.filter"]
+other = "filter settings"
+
+["tui.modal.title.monitor_setting"]
+other = "Monitor policy"
+
+["tui.modal.title.dns_listen"]
+other = "DNS listener settings"
+
+["tui.modal.title.dns_resolver"]
+other = "dns resolver settings"
+
+["tui.modal.title.dns_route"]
+other = "dns route settings"
+
+["tui.modal.title.delete_dns"]
+other = "Delete DNS policy"
+
+["tui.modal.prompt.binary"]
+other = "system, bundled, or an absolute executable path"
+
+["tui.modal.prompt.delete_subscription"]
+other = "confirm subscription deletion"
+
+["tui.modal.prompt.delete_dns"]
+other = "confirm DNS policy removal"
+
+["tui.modal.prompt.dns_listen"]
+other = "DNS listener address"
+
+["tui.modal.notice.binary"]
+other = "Enter system, bundled, or an absolute executable path."
+
+["tui.modal.notice.delete_subscription"]
+other = "Confirm subscription deletion."
+
+["tui.modal.notice.subscription"]
+other = "Enter subscription details."
+
+["tui.modal.notice.resource"]
+other = "Enter resource details."
+
+["tui.modal.notice.filter"]
+other = "Enter filter details."
+
+["tui.modal.notice.monitor_setting"]
+other = "Edit monitor settings."
+
+["tui.modal.notice.dns_listen"]
+other = "Enter the DNS listener address."
+
+["tui.modal.notice.dns_resolver"]
+other = "Enter DNS resolver details."
+
+["tui.modal.notice.dns_route"]
+other = "Enter DNS route details."
+
+["tui.modal.notice.delete_dns"]
+other = "Confirm DNS policy removal."
+["tui.monitor.range.interval"]
+other = "Monitor interval must be between 1 and 86400 seconds."
+
+["tui.monitor.range.timeout"]
+other = "Monitor timeout must be between 1 and 86400000 milliseconds."
+
+["tui.monitor.range.concurrency"]
+other = "Monitor concurrency must be between 1 and 64."
+
+["tui.monitor.range.threshold"]
+other = "Monitor threshold must be between 1 and 4294967295 milliseconds."
+
+["tui.monitor.range.alert_threshold"]
+other = "Alert threshold must be between 1 and 60000 milliseconds."
+
+["tui.monitor.range.bad_samples"]
+other = "Consecutive bad samples must be between 1 and 5."
+
+["tui.monitor.range.improvement"]
+other = "Minimum improvement must be between 1 and 4294967295 milliseconds."
+
+["tui.monitor.range.cooldown"]
+other = "Cooldown must be between 0 and 4294967295 seconds."
+
+["tui.monitor.range.jitter"]
+other = "Jitter must be between 0 and 4294967295 milliseconds."

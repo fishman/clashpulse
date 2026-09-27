@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
+	"github.com/fishman/clashpulse/localize"
 )
 
 type sendIntent func(ipc.Command)
@@ -57,13 +59,13 @@ func newProxyPage(send sendIntent) *proxyPage {
 			p.updateSelectedGroup()
 		}
 	})
-	p.automation = widget.NewCheck("Enable group automation", func(enabled bool) {
+	p.automation = widget.NewCheck(localize.T("Enable group automation"), func(enabled bool) {
 		if p.refreshing || p.selectedGroupID == "" || !p.managedSelector() {
 			return
 		}
 		p.send(ipc.Command{Kind: ipc.CommandSetAutomation, GroupID: p.selectedGroupID, Automation: &ipc.AutomationSetting{Enabled: enabled}})
 	})
-	p.probe = widget.NewButton("Probe group", func() {
+	p.probe = widget.NewButton(localize.T("Probe group"), func() {
 		if p.selectedGroupID != "" && p.managedSelector() {
 			p.send(ipc.Command{Kind: ipc.CommandManualProbe, GroupID: p.selectedGroupID})
 		}
@@ -102,7 +104,7 @@ func newProxyPage(send sendIntent) *proxyPage {
 			}
 			item.name.SetText(name)
 			if selected {
-				item.state.SetText("Active")
+				item.state.SetText(localize.T("Active"))
 			} else {
 				item.state.SetText("")
 			}
@@ -114,9 +116,9 @@ func newProxyPage(send sendIntent) *proxyPage {
 			p.send(ipc.Command{Kind: ipc.CommandSelectGroup, GroupID: p.selectedGroupID, ChoiceID: p.choices[id]})
 		}
 	}
-	p.empty = widget.NewLabel("No proxy groups are available")
+	p.empty = widget.NewLabel(localize.T("No proxy groups are available"))
 	header := container.NewVBox(
-		widget.NewLabelWithStyle("Proxy groups and choices", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle(localize.T("Proxy groups and choices"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		p.groupSelect,
 		p.groupMode,
 		container.NewHBox(p.automation, p.probe),
@@ -168,11 +170,11 @@ func (p *proxyPage) updateSelectedGroup() {
 	}
 	p.refreshing = false
 	if p.managedSelector() {
-		p.groupMode.SetText("Manual selection and health probes are available")
+		p.groupMode.SetText(localize.T("Manual selection and health probes are available"))
 		p.automation.Enable()
 		p.probe.Enable()
 	} else {
-		p.groupMode.SetText("Mihomo manages selection for this group")
+		p.groupMode.SetText(localize.T("Mihomo manages selection for this group"))
 		p.automation.Disable()
 		p.probe.Disable()
 	}
@@ -215,37 +217,37 @@ type subscriptionPage struct {
 
 func newSubscriptionPage(send sendIntent, window fyne.Window) *subscriptionPage {
 	p := &subscriptionPage{send: send, window: window, items: make(map[*fyne.Container]*subscriptionItem)}
-	p.add = widget.NewButton("Add subscription", func() { p.openSubscriptionEditor(nil) })
+	p.add = widget.NewButton(localize.T("Add subscription"), func() { p.openSubscriptionEditor(nil) })
 	p.list = widget.NewList(
 		func() int { return len(p.rows) },
 		func() fyne.CanvasObject {
 			item := &subscriptionItem{name: widget.NewLabel(""), source: widget.NewLabel(""), status: widget.NewLabel("")}
-			item.refresh = widget.NewButton("Refresh", func() {
+			item.refresh = widget.NewButton(localize.T("Refresh"), func() {
 				if item.id != "" {
 					p.send(ipc.Command{Kind: ipc.CommandRefreshSubscription, SubscriptionID: item.id})
 				}
 			})
-			item.activate = widget.NewButton("Activate", func() {
+			item.activate = widget.NewButton(localize.T("Activate"), func() {
 				if item.id != "" {
 					p.send(ipc.Command{Kind: ipc.CommandActivateSubscription, SubscriptionID: item.id})
 				}
 			})
-			item.delete = widget.NewButton("Delete", func() {
+			item.delete = widget.NewButton(localize.T("Delete"), func() {
 				if item.id == "" {
 					return
 				}
 				id := item.id
-				dialog.ShowConfirm("Delete subscription", "Delete subscription "+id+" and its private snapshot?", func(confirmed bool) {
+				dialog.ShowConfirm(localize.T("Delete subscription"), fmt.Sprintf(localize.T("Delete subscription %s and its private snapshot?"), id), func(confirmed bool) {
 					if confirmed {
 						p.send(ipc.Command{Kind: ipc.CommandDeleteSubscription, SubscriptionID: id})
 					}
 				}, p.window)
 			})
-			item.edit = widget.NewButton("Edit", func() { p.editSubscription(item.id) })
-			item.details = widget.NewButton("Details", func() {
+			item.edit = widget.NewButton(localize.T("Edit"), func() { p.editSubscription(item.id) })
+			item.details = widget.NewButton(localize.T("Details"), func() {
 				for _, sub := range p.rows {
 					if sub.ID == item.id {
-						dialog.ShowInformation("Subscription "+sub.ID, subscriptionDetails(sub), p.window)
+						dialog.ShowInformation(fmt.Sprintf(localize.T("Subscription %s"), sub.ID), subscriptionDetails(sub), p.window)
 						return
 					}
 				}
@@ -275,9 +277,9 @@ func newSubscriptionPage(send sendIntent, window fyne.Window) *subscriptionPage 
 			}
 		},
 	)
-	p.empty = widget.NewLabel("No subscriptions are available")
+	p.empty = widget.NewLabel(localize.T("No subscriptions are available"))
 	p.list.Hide()
-	title := widget.NewLabelWithStyle("Subscriptions", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	title := widget.NewLabelWithStyle(localize.T("Subscriptions"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	p.view = container.NewBorder(container.NewVBox(title, p.add), nil, nil, nil, container.NewStack(p.empty, p.list))
 	return p
 }
@@ -319,21 +321,21 @@ func (p *subscriptionPage) openSubscriptionEditor(existing *core.SubscriptionSna
 	}
 	e := &subscriptionEditor{existing: existing}
 	e.name = widget.NewEntry()
-	e.name.SetPlaceHolder("Display name")
+	e.name.SetPlaceHolder(localize.T("Display name"))
 	// The URL is typed here and never loaded from the stored profile, so showing it
 	// reveals nothing the user did not enter; a masked field is uneditable in practice.
 	e.source = widget.NewEntry()
 	e.agent = widget.NewPasswordEntry()
 	e.refresh = widget.NewEntry()
 	e.timeout = widget.NewEntry()
-	e.enabled = widget.NewCheck("Enabled", nil)
-	routes := []string{"Direct", "System proxy", "Mihomo proxy"}
-	policies := []string{"HTTPS only", "Allow HTTP (insecure)"}
-	tlsPolicies := []string{"Verify certificates", "Allow invalid TLS certificates (insecure)"}
+	e.enabled = widget.NewCheck(localize.T("control.enable"), nil)
+	routes := []string{localize.T("Direct"), localize.T("System proxy"), localize.T("Mihomo proxy")}
+	policies := []string{localize.T("HTTPS only"), localize.T("Allow HTTP (insecure)")}
+	tlsPolicies := []string{localize.T("Verify certificates"), localize.T("Allow invalid TLS certificates (insecure)")}
 	if existing != nil {
-		routes = append([]string{"Keep current"}, routes...)
-		policies = append([]string{"Keep current"}, policies...)
-		tlsPolicies = append([]string{"Keep current"}, tlsPolicies...)
+		routes = append([]string{localize.T("Keep current")}, routes...)
+		policies = append([]string{localize.T("Keep current")}, policies...)
+		tlsPolicies = append([]string{localize.T("Keep current")}, tlsPolicies...)
 	}
 	e.route = widget.NewSelect(routes, nil)
 	e.http = widget.NewSelect(policies, nil)
@@ -341,64 +343,64 @@ func (p *subscriptionPage) openSubscriptionEditor(existing *core.SubscriptionSna
 	items := make([]*widget.FormItem, 0, 10)
 	if existing == nil {
 		e.id = widget.NewEntry()
-		e.id.SetPlaceHolder("Stable subscription ID")
-		e.source.SetPlaceHolder("HTTPS URL; insecure HTTP requires explicit opt-in")
-		e.agent.SetPlaceHolder("Optional User-Agent; default clash-pulse")
+		e.id.SetPlaceHolder(localize.T("Stable subscription ID"))
+		e.source.SetPlaceHolder(localize.T("HTTPS URL; insecure HTTP requires explicit opt-in"))
+		e.agent.SetPlaceHolder(localize.T("Optional User-Agent; default clash-pulse"))
 		e.refresh.SetText("43200")
 		e.timeout.SetText("30")
 		e.enabled.SetChecked(true)
-		e.route.SetSelected("Direct")
-		e.http.SetSelected("HTTPS only")
-		e.tls.SetSelected("Verify certificates")
-		items = append(items, widget.NewFormItem("Stable ID", e.id))
+		e.route.SetSelected(localize.T("Direct"))
+		e.http.SetSelected(localize.T("HTTPS only"))
+		e.tls.SetSelected(localize.T("Verify certificates"))
+		items = append(items, widget.NewFormItem(localize.T("Stable ID"), e.id))
 	} else {
 		e.name.SetText(existing.Name)
-		e.source.SetPlaceHolder("Leave blank to keep the current private URL")
+		e.source.SetPlaceHolder(localize.T("Leave blank to keep the current private URL"))
 		if existing.RefreshIntervalSeconds > 0 {
 			e.refresh.SetText(strconv.FormatUint(uint64(existing.RefreshIntervalSeconds), 10))
 		}
-		e.agent.SetPlaceHolder("Blank keeps current; '-' resets to clash-pulse")
+		e.agent.SetPlaceHolder(localize.T("Blank keeps current; '-' resets to clash-pulse"))
 		if existing.TimeoutSeconds > 0 {
 			e.timeout.SetText(strconv.FormatUint(uint64(existing.TimeoutSeconds), 10))
 		}
 		e.enabled.SetChecked(existing.Enabled)
 		switch existing.Route {
 		case "mihomo_proxy":
-			e.route.SetSelected("Mihomo proxy")
+			e.route.SetSelected(localize.T("Mihomo proxy"))
 		case "system_proxy":
-			e.route.SetSelected("System proxy")
+			e.route.SetSelected(localize.T("System proxy"))
 		default:
-			e.route.SetSelected("Direct")
+			e.route.SetSelected(localize.T("Direct"))
 		}
 		if existing.AllowHTTP {
-			e.http.SetSelected("Allow HTTP (insecure)")
+			e.http.SetSelected(localize.T("Allow HTTP (insecure)"))
 		} else {
-			e.http.SetSelected("HTTPS only")
+			e.http.SetSelected(localize.T("HTTPS only"))
 		}
 		if existing.AllowInvalidTLS {
-			e.tls.SetSelected("Allow invalid TLS certificates (insecure)")
+			e.tls.SetSelected(localize.T("Allow invalid TLS certificates (insecure)"))
 		} else {
-			e.tls.SetSelected("Verify certificates")
+			e.tls.SetSelected(localize.T("Verify certificates"))
 		}
-		items = append(items, widget.NewFormItem("Stable ID", widget.NewLabel(existing.ID)))
+		items = append(items, widget.NewFormItem(localize.T("Stable ID"), widget.NewLabel(existing.ID)))
 	}
 	items = append(items,
-		widget.NewFormItem("Display name", e.name),
-		widget.NewFormItem("Source URL", e.source),
-		widget.NewFormItem("User-Agent", e.agent),
+		widget.NewFormItem(localize.T("Display name"), e.name),
+		widget.NewFormItem(localize.T("Source URL"), e.source),
+		widget.NewFormItem(localize.T("User-Agent"), e.agent),
 		widget.NewFormItem("", e.enabled),
-		widget.NewFormItem("Refresh interval (seconds)", e.refresh),
-		widget.NewFormItem("Timeout (seconds)", e.timeout),
-		widget.NewFormItem("Connection route", e.route),
-		widget.NewFormItem("HTTP policy", e.http),
-		widget.NewFormItem("TLS policy", e.tls),
+		widget.NewFormItem(localize.T("Refresh interval (seconds)"), e.refresh),
+		widget.NewFormItem(localize.T("Timeout (seconds)"), e.timeout),
+		widget.NewFormItem(localize.T("Connection route"), e.route),
+		widget.NewFormItem(localize.T("HTTP policy"), e.http),
+		widget.NewFormItem(localize.T("TLS policy"), e.tls),
 	)
 	p.editor = e
-	title, confirm := "Add Subscription", "Add"
+	title, confirm := localize.T("Add Subscription"), localize.T("Add")
 	if existing != nil {
-		title, confirm = "Edit Subscription", "Save"
+		title, confirm = localize.T("Edit Subscription"), localize.T("Save")
 	}
-	e.dialog = dialog.NewForm(title, confirm, "Cancel", items, func(confirmed bool) {
+	e.dialog = dialog.NewForm(title, confirm, localize.T("Cancel"), items, func(confirmed bool) {
 		if !confirmed {
 			e.source.SetText("")
 			e.agent.SetText("")
@@ -441,12 +443,12 @@ func (e *subscriptionEditor) command() (ipc.Command, bool, error) {
 	if creating {
 		id = strings.TrimSpace(e.id.Text)
 		if !validSubscriptionID(id) {
-			return ipc.Command{}, false, fmt.Errorf("stable ID must start with a letter or number and contain only letters, numbers, '.', '_' or '-' (1-64 characters)")
+			return ipc.Command{}, false, errors.New(localize.T("stable ID must start with a letter or number and contain only letters, numbers, '.', '_' or '-' (1-64 characters)"))
 		}
 	}
 	name := strings.TrimSpace(e.name.Text)
 	if name == "" || len(name) > 128 {
-		return ipc.Command{}, false, fmt.Errorf("display name must contain 1-128 characters")
+		return ipc.Command{}, false, errors.New(localize.T("display name must contain 1-128 characters"))
 
 	}
 	patch := &ipc.SubscriptionEdit{}
@@ -454,14 +456,14 @@ func (e *subscriptionEditor) command() (ipc.Command, bool, error) {
 		patch.Name = &name
 	}
 	urlValue := strings.TrimSpace(e.source.Text)
-	allowHTTP, httpChanged, err := policyValue(e.http.Selected, creating, "HTTPS only", "Allow HTTP (insecure)")
+	allowHTTP, httpChanged, err := policyValue(e.http.Selected, creating, localize.T("HTTPS only"), localize.T("Allow HTTP (insecure)"))
 	if err != nil {
 		return ipc.Command{}, false, err
 	}
 	if creating || urlValue != "" {
 		permittedHTTP := allowHTTP != nil && *allowHTTP || !httpChanged && !creating && e.existing.AllowHTTP
 		if !validSubscriptionURL(urlValue, permittedHTTP) {
-			return ipc.Command{}, false, fmt.Errorf("source URL must be HTTPS; HTTP requires explicit opt-in")
+			return ipc.Command{}, false, errors.New(localize.T("source URL must be HTTPS; HTTP requires explicit opt-in"))
 		}
 		patch.URL = &urlValue
 	}
@@ -470,11 +472,11 @@ func (e *subscriptionEditor) command() (ipc.Command, bool, error) {
 			value = ""
 		}
 		if len(value) > 256 {
-			return ipc.Command{}, false, fmt.Errorf("User-Agent must be printable ASCII at most 256 bytes")
+			return ipc.Command{}, false, errors.New(localize.T("User-Agent must be printable ASCII at most 256 bytes"))
 		}
 		for _, r := range value {
 			if r < 0x20 || r > 0x7e {
-				return ipc.Command{}, false, fmt.Errorf("User-Agent must be printable ASCII at most 256 bytes")
+				return ipc.Command{}, false, errors.New(localize.T("User-Agent must be printable ASCII at most 256 bytes"))
 			}
 		}
 		patch.UserAgent = &value
@@ -495,17 +497,17 @@ func (e *subscriptionEditor) command() (ipc.Command, bool, error) {
 	if !creating && patch.TimeoutSeconds != nil && *patch.TimeoutSeconds == e.existing.TimeoutSeconds {
 		patch.TimeoutSeconds = nil
 	}
-	if e.route.Selected != "Keep current" {
+	if e.route.Selected != localize.T("Keep current") {
 		var route string
 		switch e.route.Selected {
-		case "Direct":
+		case localize.T("Direct"):
 			route = "direct"
-		case "System proxy":
+		case localize.T("System proxy"):
 			route = "system_proxy"
-		case "Mihomo proxy":
+		case localize.T("Mihomo proxy"):
 			route = "mihomo_proxy"
 		default:
-			return ipc.Command{}, false, fmt.Errorf("select a connection route")
+			return ipc.Command{}, false, errors.New(localize.T("select a connection route"))
 		}
 		if creating || route != e.existing.Route && !(route == "direct" && e.existing.Route == "") {
 			patch.Route = &route
@@ -514,7 +516,7 @@ func (e *subscriptionEditor) command() (ipc.Command, bool, error) {
 	if creating || httpChanged && *allowHTTP != e.existing.AllowHTTP {
 		patch.AllowHTTP = allowHTTP
 	}
-	allowTLS, tlsChanged, err := policyValue(e.tls.Selected, creating, "Verify certificates", "Allow invalid TLS certificates (insecure)")
+	allowTLS, tlsChanged, err := policyValue(e.tls.Selected, creating, localize.T("Verify certificates"), localize.T("Allow invalid TLS certificates (insecure)"))
 	if err != nil {
 		return ipc.Command{}, false, err
 	}
@@ -536,7 +538,7 @@ func (e *subscriptionEditor) existingID() string {
 }
 
 func policyValue(selected string, creating bool, deny, allow string) (*bool, bool, error) {
-	if selected == "Keep current" && !creating {
+	if selected == localize.T("Keep current") && !creating {
 		return nil, false, nil
 	}
 	var value bool
@@ -546,7 +548,7 @@ func policyValue(selected string, creating bool, deny, allow string) (*bool, boo
 	case allow:
 		value = true
 	default:
-		return nil, false, fmt.Errorf("select a security policy")
+		return nil, false, errors.New(localize.T("select a security policy"))
 	}
 	return &value, true, nil
 }
@@ -562,7 +564,7 @@ func subscriptionSeconds(input *widget.Entry, required bool, label string) (*uin
 		min, max = 60, 86400*30
 	}
 	if err != nil || value < min || value > max {
-		return nil, fmt.Errorf("%s must be between %d and %d seconds", label, min, max)
+		return nil, fmt.Errorf(localize.T("%s must be between %d and %d seconds"), localize.T(label), min, max)
 	}
 	seconds := uint32(value)
 	return &seconds, nil
@@ -619,25 +621,25 @@ type resourcePage struct {
 
 func newResourcePage(send sendIntent, window fyne.Window) *resourcePage {
 	p := &resourcePage{send: send, window: window, items: make(map[*fyne.Container]*resourceItem)}
-	p.add = widget.NewButton("Add resource", func() { p.openResourceEditor(nil) })
+	p.add = widget.NewButton(localize.T("Add resource"), func() { p.openResourceEditor(nil) })
 	p.list = widget.NewList(
 		func() int { return len(p.rows) },
 		func() fyne.CanvasObject {
 			item := &resourceItem{name: widget.NewLabel(""), source: widget.NewLabel(""), status: widget.NewLabel("")}
-			item.refresh = widget.NewButton("Refresh", func() {
+			item.refresh = widget.NewButton(localize.T("Refresh"), func() {
 				if item.id != "" {
 					p.send(ipc.Command{Kind: ipc.CommandRefreshResource, ResourceID: item.id})
 				}
 			})
-			item.details = widget.NewButton("Details", func() {
+			item.details = widget.NewButton(localize.T("Details"), func() {
 				for _, resource := range p.rows {
 					if resource.ID == item.id {
-						dialog.ShowInformation("Resource "+resource.ID, resourceDetails(resource), p.window)
+						dialog.ShowInformation(fmt.Sprintf(localize.T("Resource %s"), resource.ID), resourceDetails(resource), p.window)
 						return
 					}
 				}
 			})
-			item.edit = widget.NewButton("Edit", func() { p.editResource(item.id) })
+			item.edit = widget.NewButton(localize.T("Edit"), func() { p.editResource(item.id) })
 			row := container.NewVBox(container.NewGridWithColumns(3, item.name, item.source, item.status), container.NewHBox(item.refresh, item.edit, item.details), widget.NewSeparator())
 			p.items[row] = item
 			return row
@@ -666,9 +668,9 @@ func newResourcePage(send sendIntent, window fyne.Window) *resourcePage {
 			item.edit.Enable()
 		},
 	)
-	p.empty = widget.NewLabel("No data resources are available")
+	p.empty = widget.NewLabel(localize.T("No data resources are available"))
 	p.list.Hide()
-	p.view = container.NewBorder(container.NewVBox(widget.NewLabelWithStyle("Data resources", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), p.add), nil, nil, nil, container.NewStack(p.empty, p.list))
+	p.view = container.NewBorder(container.NewVBox(widget.NewLabelWithStyle(localize.T("Data resources"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), p.add), nil, nil, nil, container.NewStack(p.empty, p.list))
 	return p
 }
 
@@ -719,25 +721,25 @@ type filterPage struct {
 
 func newFilterPage(send sendIntent, window fyne.Window) *filterPage {
 	p := &filterPage{send: send, window: window, items: make(map[*fyne.Container]*filterItem)}
-	p.add = widget.NewButton("Add filter", func() { p.openFilterEditor(nil) })
+	p.add = widget.NewButton(localize.T("Add filter"), func() { p.openFilterEditor(nil) })
 	p.list = widget.NewList(
 		func() int { return len(p.rows) },
 		func() fyne.CanvasObject {
 			item := &filterItem{name: widget.NewLabel(""), format: widget.NewLabel(""), status: widget.NewLabel("")}
-			item.refresh = widget.NewButton("Refresh", func() {
+			item.refresh = widget.NewButton(localize.T("Refresh"), func() {
 				if item.id != "" {
 					p.send(ipc.Command{Kind: ipc.CommandRefreshFilter, FilterID: item.id})
 				}
 			})
-			item.details = widget.NewButton("Details", func() {
+			item.details = widget.NewButton(localize.T("Details"), func() {
 				for _, filter := range p.rows {
 					if filter.ID == item.id {
-						dialog.ShowInformation("Filter "+filter.ID, filterDetails(filter), p.window)
+						dialog.ShowInformation(fmt.Sprintf(localize.T("Filter %s"), filter.ID), filterDetails(filter), p.window)
 						return
 					}
 				}
 			})
-			item.edit = widget.NewButton("Edit", func() { p.editFilter(item.id) })
+			item.edit = widget.NewButton(localize.T("Edit"), func() { p.editFilter(item.id) })
 			row := container.NewVBox(container.NewGridWithColumns(3, item.name, item.format, item.status), container.NewHBox(item.refresh, item.edit, item.details), widget.NewSeparator())
 			p.items[row] = item
 			return row
@@ -766,9 +768,9 @@ func newFilterPage(send sendIntent, window fyne.Window) *filterPage {
 			item.edit.Enable()
 		},
 	)
-	p.empty = widget.NewLabel("No filter lists are available")
+	p.empty = widget.NewLabel(localize.T("No filter lists are available"))
 	p.list.Hide()
-	p.view = container.NewBorder(container.NewVBox(widget.NewLabelWithStyle("Filter lists", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), p.add), nil, nil, nil, container.NewStack(p.empty, p.list))
+	p.view = container.NewBorder(container.NewVBox(widget.NewLabelWithStyle(localize.T("Filter lists"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), p.add), nil, nil, nil, container.NewStack(p.empty, p.list))
 	return p
 }
 
@@ -817,47 +819,47 @@ func (p *resourcePage) openResourceEditor(existing *core.ResourceSnapshot) {
 	}
 	e := &resourceEditor{existing: existing}
 	e.source, e.interval, e.pin = widget.NewPasswordEntry(), widget.NewEntry(), widget.NewEntry()
-	e.enabled = widget.NewCheck("Enabled", nil)
+	e.enabled = widget.NewCheck(localize.T("control.enable"), nil)
 	e.kind = widget.NewSelect([]string{"geoip.dat", "geosite.dat", "Country.mmdb", "rule-set", "rule-provider"}, nil)
 	e.format = widget.NewSelect([]string{"dat", "mmdb", "yaml", "text", "mrs"}, nil)
-	e.ruleType = widget.NewSelect([]string{"None", "domain", "ipcidr", "classical"}, nil)
+	e.ruleType = widget.NewSelect([]string{localize.T("None"), "domain", "ipcidr", "classical"}, nil)
 	items := make([]*widget.FormItem, 0, 9)
 	if existing == nil {
 		e.id = widget.NewEntry()
-		e.id.SetPlaceHolder("Stable resource ID")
-		e.source.SetPlaceHolder("HTTPS URL or local path")
+		e.id.SetPlaceHolder(localize.T("Stable resource ID"))
+		e.source.SetPlaceHolder(localize.T("HTTPS URL or local path"))
 		e.interval.SetText("43200")
-		e.pin.SetPlaceHolder("Optional 64-character SHA-256")
+		e.pin.SetPlaceHolder(localize.T("Optional 64-character SHA-256"))
 		e.enabled.SetChecked(true)
 		e.kind.SetSelected("rule-provider")
 		e.format.SetSelected("yaml")
 		e.ruleType.SetSelected("domain")
-		items = append(items, widget.NewFormItem("Stable ID", e.id))
+		items = append(items, widget.NewFormItem(localize.T("Stable ID"), e.id))
 	} else {
-		e.source.SetPlaceHolder("Leave blank to keep the current private URL")
-		e.interval.SetPlaceHolder("Leave blank to keep current")
-		e.pin.SetPlaceHolder("Leave blank to keep current")
-		e.clearPin = widget.NewCheck("Clear existing pin", nil)
+		e.source.SetPlaceHolder(localize.T("Leave blank to keep the current private URL"))
+		e.interval.SetPlaceHolder(localize.T("Leave blank to keep current"))
+		e.pin.SetPlaceHolder(localize.T("Leave blank to keep current"))
+		e.clearPin = widget.NewCheck(localize.T("Clear existing pin"), nil)
 		e.enabled.SetChecked(existing.Enabled)
 		e.kind.SetSelected(existing.Kind)
 		e.format.SetSelected(existing.Format)
 		ruleType := existing.RuleType
 		if ruleType == "" {
-			ruleType = "None"
+			ruleType = localize.T("None")
 		}
 		e.ruleType.SetSelected(ruleType)
-		items = append(items, widget.NewFormItem("Stable ID", widget.NewLabel(existing.ID)))
+		items = append(items, widget.NewFormItem(localize.T("Stable ID"), widget.NewLabel(existing.ID)))
 	}
-	items = append(items, widget.NewFormItem("Kind", e.kind), widget.NewFormItem("Format", e.format), widget.NewFormItem("Rule type", e.ruleType), widget.NewFormItem("Private URL / local path", e.source), widget.NewFormItem("", e.enabled), widget.NewFormItem("Update interval (seconds)", e.interval), widget.NewFormItem("Optional SHA-256 pin", e.pin))
+	items = append(items, widget.NewFormItem(localize.T("Kind"), e.kind), widget.NewFormItem(localize.T("Format"), e.format), widget.NewFormItem(localize.T("Rule type"), e.ruleType), widget.NewFormItem(localize.T("Private URL / local path"), e.source), widget.NewFormItem("", e.enabled), widget.NewFormItem(localize.T("Update interval (seconds)"), e.interval), widget.NewFormItem(localize.T("Optional SHA-256 pin"), e.pin))
 	if e.clearPin != nil {
 		items = append(items, widget.NewFormItem("", e.clearPin))
 	}
 	p.editor = e
-	title, confirm := "Add Data Resource", "Add"
+	title, confirm := localize.T("Add Data Resource"), localize.T("Add")
 	if existing != nil {
-		title, confirm = "Edit Data Resource", "Save"
+		title, confirm = localize.T("Edit Data Resource"), localize.T("Save")
 	}
-	e.dialog = dialog.NewForm(title, confirm, "Cancel", items, func(confirmed bool) {
+	e.dialog = dialog.NewForm(title, confirm, localize.T("Cancel"), items, func(confirmed bool) {
 		if !confirmed {
 			e.source.SetText("")
 			p.editor = nil
@@ -900,14 +902,14 @@ func (e *resourceEditor) command() (ipc.Command, bool, error) {
 		id = e.existing.ID
 	}
 	if !validSubscriptionID(id) {
-		return ipc.Command{}, false, fmt.Errorf("stable ID must start with a letter or number and contain only letters, numbers, '.', '_' or '-' (1-64 characters)")
+		return ipc.Command{}, false, errors.New(localize.T("stable ID must start with a letter or number and contain only letters, numbers, '.', '_' or '-' (1-64 characters)"))
 	}
 	kind, format, ruleType := e.kind.Selected, e.format.Selected, e.ruleType.Selected
-	if ruleType == "None" {
+	if ruleType == localize.T("None") {
 		ruleType = ""
 	}
 	if !validResourceCombination(kind, format, ruleType) {
-		return ipc.Command{}, false, fmt.Errorf("select a compatible resource kind, format, and rule type")
+		return ipc.Command{}, false, errors.New(localize.T("select a compatible resource kind, format, and rule type"))
 	}
 	patch := &ipc.ResourceEdit{}
 	if creating || kind != e.existing.Kind {
@@ -922,7 +924,7 @@ func (e *resourceEditor) command() (ipc.Command, bool, error) {
 	source := strings.TrimSpace(e.source.Text)
 	if creating || source != "" {
 		if !validResourceSource(source) {
-			return ipc.Command{}, false, fmt.Errorf("source must be an HTTPS URL without user information or an absolute local path")
+			return ipc.Command{}, false, errors.New(localize.T("source must be an HTTPS URL without user information or an absolute local path"))
 		}
 		patch.URL = &source
 	}
@@ -937,10 +939,10 @@ func (e *resourceEditor) command() (ipc.Command, bool, error) {
 	patch.IntervalSeconds = interval
 	pin := strings.TrimSpace(e.pin.Text)
 	if pin != "" && !validResourcePin(pin) {
-		return ipc.Command{}, false, fmt.Errorf("SHA-256 pin must contain exactly 64 hexadecimal characters")
+		return ipc.Command{}, false, errors.New(localize.T("SHA-256 pin must contain exactly 64 hexadecimal characters"))
 	}
 	if e.clearPin != nil && e.clearPin.Checked && pin != "" {
-		return ipc.Command{}, false, fmt.Errorf("enter a new pin or clear the existing pin, not both")
+		return ipc.Command{}, false, errors.New(localize.T("enter a new pin or clear the existing pin, not both"))
 	}
 	if pin != "" {
 		patch.SHA256 = &pin
@@ -1000,35 +1002,35 @@ func (p *filterPage) openFilterEditor(existing *core.FilterSnapshot) {
 	}
 	e := &filterEditor{existing: existing}
 	e.resource, e.target = widget.NewEntry(), widget.NewEntry()
-	e.format = widget.NewSelect([]string{"Keep current", "yaml", "text", "mrs"}, nil)
-	e.enabled = widget.NewCheck("Enabled", nil)
+	e.format = widget.NewSelect([]string{localize.T("Keep current"), "yaml", "text", "mrs"}, nil)
+	e.enabled = widget.NewCheck(localize.T("control.enable"), nil)
 	items := make([]*widget.FormItem, 0, 5)
 	if existing == nil {
 		e.id = widget.NewEntry()
-		e.id.SetPlaceHolder("Stable filter ID")
-		e.resource.SetPlaceHolder("Managed rule resource ID")
+		e.id.SetPlaceHolder(localize.T("Stable filter ID"))
+		e.resource.SetPlaceHolder(localize.T("Managed rule resource ID"))
 		e.format = widget.NewSelect([]string{"yaml", "text", "mrs"}, nil)
 		e.format.SetSelected("yaml")
 		e.enabled.SetChecked(true)
-		items = append(items, widget.NewFormItem("Stable ID", e.id))
+		items = append(items, widget.NewFormItem(localize.T("Stable ID"), e.id))
 	} else {
 		e.resource.SetText(existing.ResourceID)
 		e.target.SetText(existing.Target)
 		if existing.Format != "" {
 			e.format.SetSelected(existing.Format)
 		} else {
-			e.format.SetSelected("Keep current")
+			e.format.SetSelected(localize.T("Keep current"))
 		}
 		e.enabled.SetChecked(existing.Enabled)
-		items = append(items, widget.NewFormItem("Stable ID", widget.NewLabel(existing.ID)))
+		items = append(items, widget.NewFormItem(localize.T("Stable ID"), widget.NewLabel(existing.ID)))
 	}
-	items = append(items, widget.NewFormItem("Managed resource ID", e.resource), widget.NewFormItem("Format", e.format), widget.NewFormItem("Target", e.target), widget.NewFormItem("", e.enabled))
+	items = append(items, widget.NewFormItem(localize.T("Managed resource ID"), e.resource), widget.NewFormItem(localize.T("Format"), e.format), widget.NewFormItem(localize.T("Target"), e.target), widget.NewFormItem("", e.enabled))
 	p.editor = e
-	title, confirm := "Add Filter List", "Add"
+	title, confirm := localize.T("Add Filter List"), localize.T("Add")
 	if existing != nil {
-		title, confirm = "Edit Filter List", "Save"
+		title, confirm = localize.T("Edit Filter List"), localize.T("Save")
 	}
-	e.dialog = dialog.NewForm(title, confirm, "Cancel", items, func(confirmed bool) {
+	e.dialog = dialog.NewForm(title, confirm, localize.T("Cancel"), items, func(confirmed bool) {
 		if !confirmed {
 			p.editor = nil
 			return
@@ -1065,28 +1067,28 @@ func (e *filterEditor) command() (ipc.Command, bool, error) {
 		id = e.existing.ID
 	}
 	if !validSubscriptionID(id) {
-		return ipc.Command{}, false, fmt.Errorf("stable ID must start with a letter or number and contain only letters, numbers, '.', '_' or '-' (1-64 characters)")
+		return ipc.Command{}, false, errors.New(localize.T("stable ID must start with a letter or number and contain only letters, numbers, '.', '_' or '-' (1-64 characters)"))
 	}
 	resourceID := strings.TrimSpace(e.resource.Text)
 	if !validSubscriptionID(resourceID) {
-		return ipc.Command{}, false, fmt.Errorf("managed resource ID must be a stable ID")
+		return ipc.Command{}, false, errors.New(localize.T("managed resource ID must be a stable ID"))
 	}
 	target := strings.TrimSpace(e.target.Text)
 	if target == "" || len(target) > 128 || strings.ContainsAny(target, ",\r\n\t\x00") {
-		return ipc.Command{}, false, fmt.Errorf("target must contain 1-128 characters and no commas or control characters")
+		return ipc.Command{}, false, errors.New(localize.T("target must contain 1-128 characters and no commas or control characters"))
 	}
 	patch := &ipc.FilterEdit{}
 	if creating || resourceID != e.existing.ResourceID {
 		patch.ResourceID = &resourceID
 	}
-	if e.format.Selected != "Keep current" && (creating || e.format.Selected != e.existing.Format) {
+	if e.format.Selected != localize.T("Keep current") && (creating || e.format.Selected != e.existing.Format) {
 		format := e.format.Selected
 		if format != "yaml" && format != "text" && format != "mrs" {
-			return ipc.Command{}, false, fmt.Errorf("select a filter format")
+			return ipc.Command{}, false, errors.New(localize.T("select a filter format"))
 		}
 		patch.Format = &format
 	} else if creating {
-		return ipc.Command{}, false, fmt.Errorf("select a filter format")
+		return ipc.Command{}, false, errors.New(localize.T("select a filter format"))
 	}
 	if creating || target != e.existing.Target {
 		patch.Target = &target
@@ -1158,17 +1160,17 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 	p := &settingsPage{send: send, window: window, intervals: make(map[string]uint32)}
 	p.dns = newDNSSettings(send, window)
 	p.binary, p.binaryValues = newBinaryForm()
-	p.threshold = widget.NewLabel("Not configured")
-	p.urlTestDelay = widget.NewLabel("Profile default")
-	p.systemProxy = widget.NewCheck("Enable system proxy", func(enabled bool) {
+	p.threshold = widget.NewLabel(localize.T("Not configured"))
+	p.urlTestDelay = widget.NewLabel(localize.T("Profile default"))
+	p.systemProxy = widget.NewCheck(localize.T("Enable system proxy"), func(enabled bool) {
 		if p.refreshing {
 			return
 		}
 		value := enabled
 		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{SystemProxyEnabled: &value}})
 	})
-	p.proxyStatus = widget.NewLabel("System proxy inactive")
-	p.monitor = widget.NewCheck("Enable latency monitor", func(enabled bool) {
+	p.proxyStatus = widget.NewLabel(localize.T("System proxy inactive"))
+	p.monitor = widget.NewCheck(localize.T("Enable latency monitor"), func(enabled bool) {
 		if p.refreshing {
 			return
 		}
@@ -1185,41 +1187,53 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 		}
 	})
 	sections := []string{"Mihomo binary", "System Proxy", "Monitor", "DNS"}
+	sectionNames := make([]string, len(sections))
+	for i, section := range sections {
+		sectionNames[i] = localize.T("gui.settings.section." + section)
+	}
 	p.sectionViews = map[string]fyne.CanvasObject{
-		"Mihomo binary": container.NewVBox(
-			widget.NewLabelWithStyle("Mihomo binary", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		sections[0]: container.NewVBox(
+			widget.NewLabelWithStyle(localize.T("Mihomo binary"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 			p.binary,
 			container.NewVBox(
-				widget.NewButton("Use system Mihomo", func() {
+				widget.NewButton(localize.T("Use system Mihomo"), func() {
 					value := "system"
 					p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{Binary: &value}})
 				}),
-				widget.NewButton("Use bundled Mihomo", func() {
+				widget.NewButton(localize.T("Use bundled Mihomo"), func() {
 					value := "bundled"
 					p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{Binary: &value}})
 				}),
-				widget.NewButton("Choose executable path", p.editBinaryPath),
+				widget.NewButton(localize.T("Choose executable path"), p.editBinaryPath),
 			),
 		),
-		"System Proxy": container.NewVBox(
-			widget.NewLabelWithStyle("System proxy", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		sections[1]: container.NewVBox(
+			widget.NewLabelWithStyle(localize.T("System proxy"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 			p.systemProxy, p.proxyStatus,
 		),
-		"Monitor": container.NewVBox(
-			widget.NewLabelWithStyle("Monitor", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		sections[2]: container.NewVBox(
+			widget.NewLabelWithStyle(localize.T("Monitor"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 			p.monitor,
-			container.NewHBox(widget.NewLabel("Monitor interval"), p.interval),
-			container.NewHBox(widget.NewLabel("Alert threshold"), p.threshold, widget.NewButton("Change", p.editThreshold)),
-			widget.NewButton("Edit probe policy", p.editMonitorPolicy),
-			container.NewHBox(widget.NewLabel("Mihomo url-test delay"), p.urlTestDelay, widget.NewButton("Change", p.editURLTestDelay)),
+			container.NewHBox(widget.NewLabel(localize.T("Monitor interval")), p.interval),
+			container.NewHBox(widget.NewLabel(localize.T("Alert threshold")), p.threshold, widget.NewButton(localize.T("Change"), p.editThreshold)),
+			widget.NewButton(localize.T("Edit probe policy"), p.editMonitorPolicy),
+			container.NewHBox(widget.NewLabel(localize.T("Mihomo url-test delay")), p.urlTestDelay, widget.NewButton(localize.T("Change"), p.editURLTestDelay)),
 		),
-		"DNS": p.dns.view,
+		sections[3]: p.dns.view,
+	}
+	selectSection := func(label string) {
+		for i, name := range sectionNames {
+			if label == name {
+				p.selectSection(sections[i])
+				return
+			}
+		}
 	}
 	p.sectionContent = container.NewStack(p.sectionViews[sections[0]])
-	p.sidebar = widget.NewRadioGroup(sections, p.selectSection)
-	p.sectionSelect = widget.NewSelect(sections, p.selectSection)
-	p.sidebar.SetSelected(sections[0])
-	p.sectionSelect.SetSelected(sections[0])
+	p.sidebar = widget.NewRadioGroup(sectionNames, selectSection)
+	p.sectionSelect = widget.NewSelect(sectionNames, selectSection)
+	p.sidebar.SetSelected(sectionNames[0])
+	p.sectionSelect.SetSelected(sectionNames[0])
 	p.view = container.New(settingsLayout{}, p.sidebar, p.sectionSelect, container.NewVScroll(p.sectionContent))
 	return p
 }
@@ -1231,27 +1245,28 @@ func (p *settingsPage) selectSection(name string) {
 	}
 	p.sectionContent.Objects = []fyne.CanvasObject{view}
 	p.view.Refresh()
-	if p.sidebar.Selected != name {
-		p.sidebar.SetSelected(name)
+	label := localize.T("gui.settings.section." + name)
+	if p.sidebar.Selected != label {
+		p.sidebar.SetSelected(label)
 	}
-	if p.sectionSelect.Selected != name {
-		p.sectionSelect.SetSelected(name)
+	if p.sectionSelect.Selected != label {
+		p.sectionSelect.SetSelected(label)
 	}
 }
 
 func (p *settingsPage) editBinaryPath() {
 	input := widget.NewEntry()
-	input.SetPlaceHolder("Absolute path to Mihomo")
+	input.SetPlaceHolder(localize.T("Absolute path to Mihomo"))
 	if filepath.IsAbs(p.binaryPath) {
 		input.SetText(p.binaryPath)
 	}
-	dialog.NewForm("Mihomo binary", "Select", "Cancel", []*widget.FormItem{widget.NewFormItem("Executable path", input)}, func(confirmed bool) {
+	dialog.NewForm(localize.T("Mihomo binary"), localize.T("Select"), localize.T("Cancel"), []*widget.FormItem{widget.NewFormItem(localize.T("Executable path"), input)}, func(confirmed bool) {
 		if !confirmed {
 			return
 		}
 		path := strings.TrimSpace(input.Text)
 		if !filepath.IsAbs(path) || len(path) > 4096 || strings.ContainsAny(path, "\x00\r\n") {
-			dialog.ShowError(fmt.Errorf("select an absolute executable path"), p.window)
+			dialog.ShowError(errors.New(localize.T("select an absolute executable path")), p.window)
 			return
 		}
 		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{Binary: &path}})
@@ -1260,18 +1275,17 @@ func (p *settingsPage) editBinaryPath() {
 
 func (p *settingsPage) editThreshold() {
 	input := widget.NewEntry()
-	input.SetPlaceHolder("Milliseconds (1-60000)")
-	current := strings.TrimSuffix(p.threshold.Text, " ms")
-	if current != p.threshold.Text {
-		input.SetText(current)
+	input.SetPlaceHolder(localize.T("Milliseconds (1-60000)"))
+	if p.monitorState.AlertThresholdMillis > 0 {
+		input.SetText(strconv.FormatInt(p.monitorState.AlertThresholdMillis, 10))
 	}
-	dialog.NewForm("Alert threshold", "Apply", "Cancel", []*widget.FormItem{widget.NewFormItem("Milliseconds", input)}, func(confirmed bool) {
+	dialog.NewForm(localize.T("Alert threshold"), localize.T("Apply"), localize.T("Cancel"), []*widget.FormItem{widget.NewFormItem(localize.T("Milliseconds"), input)}, func(confirmed bool) {
 		if !confirmed {
 			return
 		}
 		parsed, err := strconv.ParseUint(strings.TrimSpace(input.Text), 10, 32)
 		if err != nil || parsed < 1 || parsed > 60000 {
-			dialog.ShowError(fmt.Errorf("alert threshold must be 1-60000 ms"), p.window)
+			dialog.ShowError(errors.New(localize.T("alert threshold must be 1-60000 ms")), p.window)
 			return
 		}
 		value := uint32(parsed)
@@ -1300,11 +1314,11 @@ func (p *settingsPage) update(binary core.BinarySnapshot, monitor core.MonitorSn
 		if proxyChanged {
 			p.systemProxy.SetChecked(systemProxy.Enabled)
 			if systemProxy.Active {
-				p.proxyStatus.SetText("Active on the local Mihomo listener")
+				p.proxyStatus.SetText(localize.T("Active on the local Mihomo listener"))
 			} else if systemProxy.Enabled {
-				p.proxyStatus.SetText("Requested; waiting for a ready listener")
+				p.proxyStatus.SetText(localize.T("Requested; waiting for a ready listener"))
 			} else {
-				p.proxyStatus.SetText("Inactive")
+				p.proxyStatus.SetText(localize.T("Inactive"))
 			}
 		}
 		if monitorChanged {
@@ -1319,7 +1333,7 @@ func (p *settingsPage) update(binary core.BinarySnapshot, monitor core.MonitorSn
 			}
 			p.interval.Selected = ""
 			if monitor.IntervalSeconds > 0 && monitor.IntervalSeconds <= 86400 {
-				p.interval.Selected = fmt.Sprintf("%d seconds", monitor.IntervalSeconds)
+				p.interval.Selected = fmt.Sprintf(localize.T("%d seconds"), monitor.IntervalSeconds)
 			}
 			p.interval.Refresh()
 		}
@@ -1328,7 +1342,7 @@ func (p *settingsPage) update(binary core.BinarySnapshot, monitor core.MonitorSn
 }
 
 func (p *settingsPage) addInterval(seconds uint32) {
-	label := strconv.FormatUint(uint64(seconds), 10) + " seconds"
+	label := fmt.Sprintf(localize.T("%d seconds"), seconds)
 	if _, exists := p.intervals[label]; exists {
 		return
 	}

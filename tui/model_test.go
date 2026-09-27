@@ -9,6 +9,7 @@ import (
 
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
+	"github.com/fishman/clashpulse/localize"
 )
 
 func TestLogOverlayScrollsWithoutDispatch(t *testing.T) {
@@ -989,6 +990,88 @@ func TestSettingsWarnsAboutPlainHTTPProbe(t *testing.T) {
 		}
 	}
 	t.Fatal("monitor URL setting is missing")
+}
+func TestMonitorRangeNoticeUsesCatalogIdentity(t *testing.T) {
+	localize.SetLanguage("zh-CN")
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	if got := monitorRangeNotice(monitorField("interval")); got != "\u76d1\u63a7\u95f4\u9694\u5fc5\u987b\u4ecb\u4e8e 1 \u81f3 86400 \u79d2\u4e4b\u95f4\u3002" {
+		t.Fatalf("Mainland monitor interval range = %q", got)
+	}
+	if got := monitorRangeNotice(monitorField("other")); got != "\u76d1\u63a7\u8bbe\u7f6e\u8d85\u51fa\u8303\u56f4\u3002" {
+		t.Fatalf("unknown setting range = %q", got)
+	}
+}
+
+func TestMainlandSystemProxyStatusUsesLocalizedBooleanText(t *testing.T) {
+	localize.SetLanguage("zh-CN")
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{SystemProxy: core.SystemProxySnapshot{Enabled: true, Active: false}}}).selectTab(TabSettings)
+	for _, row := range model.Rows() {
+		if row.ID != "setting:system-proxy" {
+			continue
+		}
+		if strings.Contains(row.Detail, "true") || strings.Contains(row.Detail, "false") || !strings.Contains(row.Detail, "\u662f") || !strings.Contains(row.Detail, "\u5426") {
+			t.Fatalf("unsafe Mainland proxy state: %q", row.Detail)
+		}
+		return
+	}
+	t.Fatal("system proxy status missing")
+}
+
+func TestMainlandResourceToggleUsesActionLabel(t *testing.T) {
+	localize.SetLanguage("zh-CN")
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	model := NewModel().openManagedModal(ModalResource, false, "")
+	if model.Modal == nil || model.Modal.Form == nil {
+		t.Fatal("resource editor unavailable")
+	}
+	var formText string
+	for _, row := range model.Modal.Form.Rows(80, 16) {
+		formText += row.Text
+	}
+	if !strings.Contains(formText, "\u542f\u7528") || strings.Contains(formText, "\u5df2\u542f\u7528") {
+		t.Fatalf("resource toggle label = %q", formText)
+	}
+}
+
+func TestMainlandJobKindAndStateDisplayOnly(t *testing.T) {
+	localize.SetLanguage("zh-CN")
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Jobs: []core.JobSnapshot{{ID: "job-a", Kind: "refresh_subscription", State: "running"}}}})
+	for _, row := range model.Rows() {
+		if row.ID != "job:job-a" {
+			continue
+		}
+		if row.Title != "\u5237\u65b0\u8ba2\u9605" || row.Detail != "\u8fdb\u884c\u4e2d" {
+			t.Fatalf("job display = %q, %q", row.Title, row.Detail)
+		}
+		if progress := model.Progress(); strings.Contains(progress, "refresh_subscription") || strings.Contains(progress, "running") {
+			t.Fatalf("progress leaked fixed codes: %q", progress)
+		}
+		return
+	}
+	t.Fatal("job row missing")
+}
+
+func TestMainlandSwitchAndProxyOutcomeDisplayOnly(t *testing.T) {
+	localize.SetLanguage("zh-CN")
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	state := core.Snapshot{Switches: []core.SwitchSnapshot{{OldID: "old", NewID: "new", Reason: "materially better candidate", Evidence: []core.ProbeSnapshot{{ProxyID: "old", Outcome: "timeout"}}}}, Groups: []core.GroupSnapshot{{ID: "group", Label: "Group", Type: "Selector", Selected: "old", Proxies: []string{"old"}}}, Proxies: []core.ProxySnapshot{{ID: "old", GroupID: "group", Label: "node-a", Outcome: "timeout"}}}
+	model := NewModel().Apply(ipc.Event{Snapshot: state})
+	for _, row := range model.Rows() {
+		if row.ID != "switch:last" {
+			continue
+		}
+		if !strings.Contains(row.Detail, "\u5019\u9009\u8282\u70b9\u660e\u663e\u66f4\u4f18") || !strings.Contains(row.Detail, "\u8d85\u65f6") || strings.Contains(row.Detail, "materially better candidate") {
+			t.Fatalf("switch display = %q", row.Detail)
+		}
+	}
+	model = model.selectTab(TabProxies)
+	for _, row := range model.Rows() {
+		if row.choiceID == "old" && strings.Contains(row.Detail, "timeout") {
+			t.Fatalf("proxy outcome leaked enum: %q", row.Detail)
+		}
+	}
 }
 func dnsPolicyModel(t *testing.T) Model {
 	t.Helper()

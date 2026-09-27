@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/fishman/clashpulse/ipc"
+	"github.com/fishman/clashpulse/localize"
 	"github.com/gdamore/tcell/v3"
 )
 
@@ -37,25 +38,25 @@ func Run(ctx context.Context, endpoint string) error {
 	}
 	client, err := ipc.Dial(ctx, endpoint)
 	if err != nil {
-		return fmt.Errorf("cannot connect to the ClashPulse IPC service at %q: %w (start the application service first)", endpoint, err)
+		return fmt.Errorf(localize.T("cannot connect to the ClashPulse IPC service at %q: %w (start the application service first)"), endpoint, err)
 	}
 	defer client.Close()
 
 	keymap, err := DefaultKeymap()
 	if err != nil {
-		return fmt.Errorf("load TUI keybindings: %w", err)
+		return fmt.Errorf(localize.T("load TUI keybindings: %w"), err)
 	}
 	snapshot, err := client.Snapshot(ctx)
 	if err != nil {
-		return fmt.Errorf("cannot read initial snapshot from the ClashPulse IPC service: %w", err)
+		return fmt.Errorf(localize.T("cannot read initial snapshot from the ClashPulse IPC service: %w"), err)
 	}
 
 	screen, err := tcell.NewScreen()
 	if err != nil {
-		return fmt.Errorf("create terminal screen: %w", err)
+		return fmt.Errorf(localize.T("create terminal screen: %w"), err)
 	}
 	if err := screen.Init(); err != nil {
-		return fmt.Errorf("initialize terminal screen: %w", err)
+		return fmt.Errorf(localize.T("initialize terminal screen: %w"), err)
 	}
 	defer screen.Fini()
 
@@ -79,7 +80,7 @@ func Run(ctx context.Context, endpoint string) error {
 				if ctx.Err() != nil {
 					return nil
 				}
-				return errors.New("ClashPulse IPC connection closed while the TUI was running")
+				return errors.New(localize.T("ClashPulse IPC connection closed while the TUI was running"))
 			}
 			model = model.Apply(event)
 			render(screen, model, &cache)
@@ -88,7 +89,7 @@ func Run(ctx context.Context, endpoint string) error {
 			render(screen, model, &cache)
 		case event, ok := <-screen.EventQ():
 			if !ok {
-				return errors.New("terminal event stream closed")
+				return errors.New(localize.T("terminal event stream closed"))
 			}
 			switch event := event.(type) {
 			case *tcell.EventResize:
@@ -156,20 +157,9 @@ func commandHasPrivateSource(command ipc.Command) bool {
 }
 
 func viewTitle(tab Tab) string {
-	switch tab {
-	case TabOverview:
-		return "Overview"
-	case TabProxies:
-		return "Proxies"
-	case TabSubscriptions:
-		return "Subscriptions"
-	case TabFilters:
-		return "Filter Lists"
-	case TabResources:
-		return "Data Resources"
-	case TabSettings:
-		return "Settings"
-	default:
-		return string(tab)
+	id := "tui.tab." + string(tab)
+	if title := localize.T(id); title != id {
+		return title
 	}
+	return string(tab)
 }

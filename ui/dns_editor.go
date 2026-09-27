@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
+	"github.com/fishman/clashpulse/localize"
 )
 
 type dnsSettings struct {
@@ -44,38 +46,38 @@ type dnsSettings struct {
 
 func newDNSSettings(send sendIntent, window fyne.Window) *dnsSettings {
 	p := &dnsSettings{send: send, window: window, routeIndexes: make(map[string]int)}
-	p.listener = widget.NewLabel("Listen: not configured")
-	p.resolverSummary = widget.NewLabel("No resolver sets configured")
+	p.listener = widget.NewLabel(localize.T("Listen: not configured"))
+	p.resolverSummary = widget.NewLabel(localize.T("No resolver sets configured"))
 	p.resolverSummary.Wrapping = fyne.TextWrapWord
-	p.routeSummary = widget.NewLabel("No DNS routes configured")
+	p.routeSummary = widget.NewLabel(localize.T("No DNS routes configured"))
 	p.routeSummary.Wrapping = fyne.TextWrapWord
-	p.editListener = widget.NewButton("Change listener", p.openListenerEditor)
+	p.editListener = widget.NewButton(localize.T("Change listener"), p.openListenerEditor)
 	p.resolverSelect = widget.NewSelect(nil, func(string) {
 		if !p.refreshing {
 			p.updateButtons()
 		}
 	})
-	p.resolverSelect.PlaceHolder = "Select resolver set"
+	p.resolverSelect.PlaceHolder = localize.T("Select resolver set")
 	p.routeSelect = widget.NewSelect(nil, func(string) {
 		if !p.refreshing {
 			p.updateButtons()
 		}
 	})
-	p.routeSelect.PlaceHolder = "Select DNS route"
-	p.addResolver = widget.NewButton("Add resolver set", func() { p.openResolverEditor(nil) })
-	p.editResolver = widget.NewButton("Edit resolver set", p.editSelectedResolver)
-	p.removeResolver = widget.NewButton("Remove resolver set", p.removeSelectedResolver)
-	p.addRoute = widget.NewButton("Add DNS route", func() { p.openRouteEditor(-1) })
-	p.editRoute = widget.NewButton("Edit DNS route", p.editSelectedRoute)
-	p.removeRoute = widget.NewButton("Remove DNS route", p.removeSelectedRoute)
+	p.routeSelect.PlaceHolder = localize.T("Select DNS route")
+	p.addResolver = widget.NewButton(localize.T("Add resolver set"), func() { p.openResolverEditor(nil) })
+	p.editResolver = widget.NewButton(localize.T("Edit resolver set"), p.editSelectedResolver)
+	p.removeResolver = widget.NewButton(localize.T("Remove resolver set"), p.removeSelectedResolver)
+	p.addRoute = widget.NewButton(localize.T("Add DNS route"), func() { p.openRouteEditor(-1) })
+	p.editRoute = widget.NewButton(localize.T("Edit DNS route"), p.editSelectedRoute)
+	p.removeRoute = widget.NewButton(localize.T("Remove DNS route"), p.removeSelectedRoute)
 	p.view = container.NewVBox(
-		widget.NewLabelWithStyle("DNS policy", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		container.NewHBox(widget.NewLabel("DNS listener"), p.listener, p.editListener),
-		widget.NewLabelWithStyle("Resolver sets", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle(localize.T("DNS policy"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		container.NewHBox(widget.NewLabel(localize.T("DNS listener")), p.listener, p.editListener),
+		widget.NewLabelWithStyle(localize.T("Resolver sets"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		p.resolverSummary,
 		p.resolverSelect,
 		container.NewHBox(p.addResolver, p.editResolver, p.removeResolver),
-		widget.NewLabelWithStyle("DNS routes", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle(localize.T("DNS routes"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		p.routeSummary,
 		p.routeSelect,
 		container.NewHBox(p.addRoute, p.editRoute, p.removeRoute),
@@ -99,7 +101,7 @@ func (p *dnsSettings) update(snapshot core.DNSSnapshot) {
 	}
 	p.snapshot = cloneDNSSnapshot(snapshot)
 	if listenerChanged {
-		p.listener.SetText("Listen: " + dnsListenLabel(snapshot.Listen))
+		p.listener.SetText(fmt.Sprintf(localize.T("Listen: %s"), dnsListenLabel(snapshot.Listen)))
 	}
 	p.refreshing = true
 	if resolversChanged {
@@ -110,15 +112,15 @@ func (p *dnsSettings) update(snapshot core.DNSSnapshot) {
 			for i, endpoint := range set.Endpoints {
 				endpoints[i] = dnsEndpointLabel(endpoint)
 			}
-			detail := set.ID + ": " + strings.Join(endpoints, ", ")
+			detail := fmt.Sprintf(localize.T("%s: %s"), set.ID, strings.Join(endpoints, localize.T(", ")))
 			if set.DNSCrypt {
-				detail += " (DNSCrypt)"
+				detail += localize.T(" (DNSCrypt)")
 			}
 			lines = append(lines, detail)
 			p.resolverSelect.Options = append(p.resolverSelect.Options, set.ID)
 		}
 		if len(lines) == 0 {
-			p.resolverSummary.SetText("No resolver sets configured")
+			p.resolverSummary.SetText(localize.T("No resolver sets configured"))
 		} else {
 			p.resolverSummary.SetText(strings.Join(lines, "\n"))
 		}
@@ -135,12 +137,12 @@ func (p *dnsSettings) update(snapshot core.DNSSnapshot) {
 		for i, route := range snapshot.Routes {
 			label := dnsRouteDetail(route)
 			lines = append(lines, label)
-			option := fmt.Sprintf("%d. %s", i+1, label)
+			option := fmt.Sprintf(localize.T("%d. %s"), i+1, label)
 			p.routeSelect.Options = append(p.routeSelect.Options, option)
 			p.routeIndexes[option] = i
 		}
 		if len(lines) == 0 {
-			p.routeSummary.SetText("No DNS routes configured")
+			p.routeSummary.SetText(localize.T("No DNS routes configured"))
 		} else {
 			p.routeSummary.SetText(strings.Join(lines, "\n"))
 		}
@@ -148,7 +150,7 @@ func (p *dnsSettings) update(snapshot core.DNSSnapshot) {
 		if selectedRoute != nil {
 			for i, route := range snapshot.Routes {
 				if route == *selectedRoute {
-					p.routeSelect.Selected = fmt.Sprintf("%d. %s", i+1, dnsRouteDetail(route))
+					p.routeSelect.Selected = fmt.Sprintf(localize.T("%d. %s"), i+1, dnsRouteDetail(route))
 					break
 				}
 			}
@@ -182,16 +184,16 @@ func (p *dnsSettings) updateButtons() {
 func (p *dnsSettings) openListenerEditor() {
 	input := widget.NewEntry()
 	input.SetText(p.snapshot.Listen)
-	input.SetPlaceHolder("127.0.0.1:5353 or [::1]:5353")
+	input.SetPlaceHolder(localize.T("127.0.0.1:5353 or [::1]:5353"))
 	p.listenerEditor = input
-	p.listenerDialog = dialog.NewForm("DNS listener", "Save", "Cancel", []*widget.FormItem{widget.NewFormItem("Loopback address", input)}, func(confirmed bool) {
+	p.listenerDialog = dialog.NewForm(localize.T("DNS listener"), localize.T("Save"), localize.T("Cancel"), []*widget.FormItem{widget.NewFormItem(localize.T("Loopback address"), input)}, func(confirmed bool) {
 		p.listenerDialog = nil
 		if !confirmed {
 			return
 		}
 		listen := strings.TrimSpace(input.Text)
 		if !validDNSListen(listen) {
-			dialog.ShowError(fmt.Errorf("DNS listener must use a loopback IP address and valid port"), p.window)
+			dialog.ShowError(errors.New(localize.T("DNS listener must use a loopback IP address and valid port")), p.window)
 			return
 		}
 		if listen != p.snapshot.Listen {
@@ -222,25 +224,25 @@ func (p *dnsSettings) openResolverEditor(existing *core.ResolverSetSnapshot) {
 	}
 	e.id = widget.NewEntry()
 	e.endpoints = widget.NewMultiLineEntry()
-	e.dnscrypt = widget.NewCheck("DNSCrypt listener", nil)
-	e.id.SetPlaceHolder("Stable resolver set ID")
+	e.dnscrypt = widget.NewCheck(localize.T("DNSCrypt listener"), nil)
+	e.id.SetPlaceHolder(localize.T("Stable resolver set ID"))
 	items := make([]*widget.FormItem, 0, 3)
 	if selected == nil {
-		items = append(items, widget.NewFormItem("Stable ID", e.id))
+		items = append(items, widget.NewFormItem(localize.T("Stable ID"), e.id))
 	} else {
 		e.id.SetText(selected.ID)
 		e.endpoints.SetText(strings.Join(selected.Endpoints, "\n"))
 		e.dnscrypt.SetChecked(selected.DNSCrypt)
-		items = append(items, widget.NewFormItem("Stable ID", e.id))
+		items = append(items, widget.NewFormItem(localize.T("Stable ID"), e.id))
 	}
-	e.endpoints.SetPlaceHolder("One DNS endpoint per line")
-	items = append(items, widget.NewFormItem("Endpoints", e.endpoints), widget.NewFormItem("", e.dnscrypt))
+	e.endpoints.SetPlaceHolder(localize.T("One DNS endpoint per line"))
+	items = append(items, widget.NewFormItem(localize.T("Endpoints"), e.endpoints), widget.NewFormItem("", e.dnscrypt))
 	p.resolverEditor = e
-	title, confirm := "Add resolver set", "Add"
+	title, confirm := localize.T("Add resolver set"), localize.T("Add")
 	if selected != nil {
-		title, confirm = "Edit resolver set", "Save"
+		title, confirm = localize.T("Edit resolver set"), localize.T("Save")
 	}
-	e.dialog = dialog.NewForm(title, confirm, "Cancel", items, func(confirmed bool) {
+	e.dialog = dialog.NewForm(title, confirm, localize.T("Cancel"), items, func(confirmed bool) {
 		p.resolverEditor = nil
 		if !confirmed {
 			return
@@ -265,7 +267,7 @@ func (p *dnsSettings) removeSelectedResolver() {
 	}
 	for _, route := range p.snapshot.Routes {
 		if route.ResolverSet == id {
-			dialog.ShowError(fmt.Errorf("remove or reassign DNS routes using resolver set %q first", id), p.window)
+			dialog.ShowError(fmt.Errorf(localize.T("remove or reassign DNS routes using resolver set %q first"), id), p.window)
 			return
 		}
 	}
@@ -289,10 +291,10 @@ func (p *dnsSettings) openRouteEditor(index int) {
 		existing = &copy
 	}
 	e := &dnsRouteEditor{existing: existing, existingIndex: index}
-	e.matcher = widget.NewSelect([]string{"Domain suffix", "GeoSite", "Resource ID"}, nil)
+	e.matcher = widget.NewSelect([]string{localize.T("Domain suffix"), "GeoSite", localize.T("Resource ID")}, nil)
 	e.resolver = widget.NewSelect(nil, nil)
 	e.value = widget.NewEntry()
-	e.value.SetPlaceHolder("Matcher value")
+	e.value.SetPlaceHolder(localize.T("Matcher value"))
 	e.resolver.Options = make([]string, 0, len(p.snapshot.ResolverSets))
 	for _, set := range p.snapshot.ResolverSets {
 		e.resolver.Options = append(e.resolver.Options, set.ID)
@@ -301,26 +303,26 @@ func (p *dnsSettings) openRouteEditor(index int) {
 	if existing != nil {
 		switch {
 		case existing.Suffix != "":
-			e.matcher.SetSelected("Domain suffix")
+			e.matcher.SetSelected(localize.T("Domain suffix"))
 			e.value.SetText(existing.Suffix)
 		case existing.GeoSite != "":
 			e.matcher.SetSelected("GeoSite")
 			e.value.SetText(existing.GeoSite)
 		case existing.Resource != "":
-			e.matcher.SetSelected("Resource ID")
+			e.matcher.SetSelected(localize.T("Resource ID"))
 			e.value.SetText(existing.Resource)
 		}
 		e.resolver.SetSelected(existing.ResolverSet)
 	}
 	p.routeEditor = e
-	title, confirm := "Add DNS route", "Add"
+	title, confirm := localize.T("Add DNS route"), localize.T("Add")
 	if existing != nil {
-		title, confirm = "Edit DNS route", "Save"
+		title, confirm = localize.T("Edit DNS route"), localize.T("Save")
 	}
-	e.dialog = dialog.NewForm(title, confirm, "Cancel", []*widget.FormItem{
-		widget.NewFormItem("Matcher type", e.matcher),
-		widget.NewFormItem("Matcher value", e.value),
-		widget.NewFormItem("Resolver set", e.resolver),
+	e.dialog = dialog.NewForm(title, confirm, localize.T("Cancel"), []*widget.FormItem{
+		widget.NewFormItem(localize.T("Matcher type"), e.matcher),
+		widget.NewFormItem(localize.T("Matcher value"), e.value),
+		widget.NewFormItem(localize.T("Resolver set"), e.resolver),
 	}, func(confirmed bool) {
 		p.routeEditor = nil
 		if !confirmed {
@@ -359,18 +361,18 @@ type dnsResolverEditor struct {
 func (e *dnsResolverEditor) command(current core.DNSSnapshot) (ipc.Command, bool, error) {
 	id := strings.TrimSpace(e.id.Text)
 	if !validSubscriptionID(id) {
-		return ipc.Command{}, false, fmt.Errorf("resolver set ID must start with a letter or number and use only letters, numbers, '.', '_' or '-' (1-64 characters)")
+		return ipc.Command{}, false, errors.New(localize.T("resolver set ID must start with a letter or number and use only letters, numbers, '.', '_' or '-' (1-64 characters)"))
 	}
 	index := findResolverSet(current, e.existingID)
 	if e.existingID == "" {
 		index = findResolverSet(current, id)
 		if index >= 0 {
-			return ipc.Command{}, false, fmt.Errorf("resolver set ID already exists")
+			return ipc.Command{}, false, errors.New(localize.T("resolver set ID already exists"))
 		}
 	} else if index < 0 {
-		return ipc.Command{}, false, fmt.Errorf("resolver set no longer exists")
+		return ipc.Command{}, false, errors.New(localize.T("resolver set no longer exists"))
 	} else if id != e.existingID && findResolverSet(current, id) >= 0 {
-		return ipc.Command{}, false, fmt.Errorf("resolver set ID already exists")
+		return ipc.Command{}, false, errors.New(localize.T("resolver set ID already exists"))
 	}
 	endpoints := make([]string, 0, 4)
 	for _, raw := range strings.Split(e.endpoints.Text, "\n") {
@@ -384,7 +386,7 @@ func (e *dnsResolverEditor) command(current core.DNSSnapshot) (ipc.Command, bool
 		endpoints = append(endpoints, endpoint)
 	}
 	if len(endpoints) == 0 || len(endpoints) > 16 {
-		return ipc.Command{}, false, fmt.Errorf("resolver set must contain 1-16 endpoints")
+		return ipc.Command{}, false, errors.New(localize.T("resolver set must contain 1-16 endpoints"))
 	}
 	set := core.ResolverSetSnapshot{ID: id, Endpoints: endpoints, DNSCrypt: e.dnscrypt.Checked}
 	if index >= 0 && reflect.DeepEqual(current.ResolverSets[index], set) {
@@ -419,27 +421,27 @@ func (e *dnsRouteEditor) command(current core.DNSSnapshot) (ipc.Command, bool, e
 	value := strings.TrimSpace(e.value.Text)
 	resolverSet := strings.TrimSpace(e.resolver.Selected)
 	if findResolverSet(current, resolverSet) < 0 {
-		return ipc.Command{}, false, fmt.Errorf("select an existing resolver set")
+		return ipc.Command{}, false, errors.New(localize.T("select an existing resolver set"))
 	}
 	route := core.DNSRouteSnapshot{ResolverSet: resolverSet}
 	switch e.matcher.Selected {
-	case "Domain suffix":
+	case localize.T("Domain suffix"):
 		if !validDNSDomain(value) {
-			return ipc.Command{}, false, fmt.Errorf("domain suffix is invalid")
+			return ipc.Command{}, false, errors.New(localize.T("domain suffix is invalid"))
 		}
 		route.Suffix = value
 	case "GeoSite":
 		if !validDNSRuleToken(value) {
-			return ipc.Command{}, false, fmt.Errorf("GeoSite selector is invalid")
+			return ipc.Command{}, false, errors.New(localize.T("GeoSite selector is invalid"))
 		}
 		route.GeoSite = value
-	case "Resource ID":
+	case localize.T("Resource ID"):
 		if !validSubscriptionID(value) {
-			return ipc.Command{}, false, fmt.Errorf("resource ID is invalid")
+			return ipc.Command{}, false, errors.New(localize.T("resource ID is invalid"))
 		}
 		route.Resource = value
 	default:
-		return ipc.Command{}, false, fmt.Errorf("select exactly one route matcher")
+		return ipc.Command{}, false, errors.New(localize.T("select exactly one route matcher"))
 	}
 	edit := dnsRoutingEdit(current)
 	if e.existing == nil {
@@ -451,7 +453,7 @@ func (e *dnsRouteEditor) command(current core.DNSSnapshot) (ipc.Command, bool, e
 		index = findDNSRoute(current.Routes, *e.existing)
 	}
 	if index < 0 {
-		return ipc.Command{}, false, fmt.Errorf("DNS route no longer exists")
+		return ipc.Command{}, false, errors.New(localize.T("DNS route no longer exists"))
 	}
 	if reflect.DeepEqual(current.Routes[index], route) {
 		return ipc.Command{}, false, nil
@@ -513,19 +515,19 @@ func findDNSRoute(routes []core.DNSRouteSnapshot, target core.DNSRouteSnapshot) 
 
 func dnsListenLabel(listen string) string {
 	if listen == "" {
-		return "not configured"
+		return localize.T("not configured")
 	}
 	return listen
 }
 
 func dnsEndpointLabel(endpoint string) string {
 	if strings.Contains(endpoint, "@") {
-		return "invalid endpoint (credentials hidden)"
+		return localize.T("invalid endpoint (credentials hidden)")
 	}
 	if strings.Contains(endpoint, "://") {
 		parsed, err := url.Parse(endpoint)
 		if err != nil || parsed.User != nil {
-			return "invalid endpoint (credentials hidden)"
+			return localize.T("invalid endpoint (credentials hidden)")
 		}
 	}
 	return endpoint
@@ -535,15 +537,15 @@ func dnsRouteDetail(route core.DNSRouteSnapshot) string {
 	matcher := ""
 	switch {
 	case route.Suffix != "":
-		matcher = "suffix=" + route.Suffix
+		matcher = fmt.Sprintf(localize.T("suffix=%s"), route.Suffix)
 	case route.GeoSite != "":
-		matcher = "geosite=" + route.GeoSite
+		matcher = fmt.Sprintf(localize.T("geosite=%s"), route.GeoSite)
 	case route.Resource != "":
-		matcher = "resource=" + route.Resource
+		matcher = fmt.Sprintf(localize.T("resource=%s"), route.Resource)
 	default:
-		matcher = "matcher not configured"
+		matcher = localize.T("matcher not configured")
 	}
-	return matcher + " -> resolver=" + route.ResolverSet
+	return fmt.Sprintf(localize.T("%s -> resolver=%s"), matcher, route.ResolverSet)
 }
 
 func validDNSListen(listen string) bool {
@@ -557,33 +559,33 @@ func validDNSListen(listen string) bool {
 
 func validateDNSEndpoint(endpoint string, dnscrypt bool) error {
 	if endpoint == "" || len(endpoint) > 256 || strings.TrimSpace(endpoint) != endpoint || strings.ContainsAny(endpoint, "\x00\r\n") {
-		return fmt.Errorf("resolver endpoint is invalid")
+		return errors.New(localize.T("resolver endpoint is invalid"))
 	}
 	host, scheme := "", "udp"
 	if strings.Contains(endpoint, "://") {
 		parsed, err := url.Parse(endpoint)
 		if err != nil || parsed.User != nil || parsed.Host == "" || parsed.Opaque != "" {
-			return fmt.Errorf("resolver endpoint is invalid or contains credentials")
+			return errors.New(localize.T("resolver endpoint is invalid or contains credentials"))
 		}
 		scheme = strings.ToLower(parsed.Scheme)
 		switch scheme {
 		case "udp", "tcp", "tls", "https", "quic":
 		default:
-			return fmt.Errorf("resolver endpoint scheme is unsupported")
+			return errors.New(localize.T("resolver endpoint scheme is unsupported"))
 		}
 		host = parsed.Hostname()
 		if host == "" || parsed.Port() != "" && !validDNSPort(parsed.Port()) || scheme != "https" && parsed.Path != "" && parsed.Path != "/" {
-			return fmt.Errorf("resolver endpoint is invalid")
+			return errors.New(localize.T("resolver endpoint is invalid"))
 		}
 	} else {
 		var port string
 		host, port, _ = net.SplitHostPort(endpoint)
 		if host == "" || strings.Contains(host, "@") || !validDNSPort(port) {
-			return fmt.Errorf("resolver endpoint is invalid or contains credentials")
+			return errors.New(localize.T("resolver endpoint is invalid or contains credentials"))
 		}
 	}
 	if dnscrypt && (scheme != "udp" && scheme != "tcp" || !dnsLoopbackHost(host)) {
-		return fmt.Errorf("DNSCrypt endpoints must use a loopback UDP or TCP listener")
+		return errors.New(localize.T("DNSCrypt endpoints must use a loopback UDP or TCP listener"))
 	}
 	return nil
 }

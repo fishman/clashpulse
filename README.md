@@ -25,6 +25,8 @@ The GUI needs a graphical desktop session (X11 or Wayland on Linux). Its tray us
 
 In the GUI, add an HTTPS subscription, refresh it to fetch and validate the candidate profile, then activate it. Open a second terminal for `./clashpulse tui`; the TUI connects to the running desktop service and does not start one itself. On Windows use `.\clashpulse.exe` and `.\clashpulse.exe tui`.
 
+The GUI, TUI, and CLI use Simplified Chinese when the operating-system locale is `zh-CN` (including `zh_CN.UTF-8` and `zh-Hans-CN`); other locales retain English. Translation catalogs are embedded in the binary, not loaded from the profile or state directory. Machine IDs, proxy names, source URLs, and credentials are never translated. Chinese glyph rendering uses the system's installed fonts; ClashPulse does not bundle or select a CJK font.
+
 To run a local profile without the GUI:
 
 ```sh

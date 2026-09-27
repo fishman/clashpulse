@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/BurntSushi/toml"
+	"github.com/fishman/clashpulse/localize"
 	sharedkeymap "github.com/fishman/notmutt/lib/tui/keymap"
 	"github.com/gdamore/tcell/v3"
 )
@@ -76,7 +77,7 @@ func formatBindings(entries []sharedkeymap.Entry) []string {
 		if description == "" {
 			description = entry.Fun
 		}
-		labels = append(labels, entry.Key+" "+description)
+		labels = append(labels, entry.Key+" "+localize.T(description))
 	}
 	return labels
 }

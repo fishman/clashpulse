@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/localize"
 )
 
 func TestCLIUsesDesktopByDefault(t *testing.T) {
@@ -229,5 +230,32 @@ func TestCLIActivateOptionLikeFilenameIsPrivate(t *testing.T) {
 	code := runCLI(context.Background(), []string{"clashpulse", "activate", "-private-token.yaml"}, new(bytes.Buffer), stderr, actions)
 	if !called || code != 1 || stderr.String() != core.ActivationFileInput.Message()+"\n" {
 		t.Fatalf("unsafe filename handling: called=%t code=%d stderr=%q", called, code, stderr.String())
+	}
+}
+
+func TestMainlandCLIHelpReadinessAndSafeError(t *testing.T) {
+	localize.SetLanguage("zh-CN")
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+	actions := cliActions{activateFile: func(_ context.Context, _ string, ready func() error) error { return ready() }}
+	if code := runCLI(context.Background(), []string{"clashpulse", "activate", "profile.yaml"}, stdout, stderr, actions); code != 0 || stdout.String() != "\u672c\u5730\u914d\u7f6e\u5df2\u542f\u7528\uff1b\u6309 Ctrl-C \u505c\u6b62\n" {
+		t.Fatalf("Chinese readiness: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := runCLI(context.Background(), []string{"clashpulse", "--help"}, stdout, stderr, actions); code != 0 || !strings.Contains(stdout.String(), "\u684c\u9762 Mihomo \u4ee3\u7406\u7ba1\u7406\u5668") || !strings.Contains(stdout.String(), "\u7528\u6cd5\uff1a") || !strings.Contains(stdout.String(), "\u547d\u4ee4\uff1a") || strings.Contains(stdout.String(), "show help") || strings.Contains(stdout.String(), "Shows a list of commands") || !strings.Contains(stdout.String(), "\u663e\u793a\u5e2e\u52a9") {
+		t.Fatalf("Chinese help: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	if code := runCLI(context.Background(), []string{"clashpulse", "refresh", "--help"}, stdout, stderr, actions); code != 0 || strings.Contains(stdout.String(), "show help") || !strings.Contains(stdout.String(), "\u663e\u793a\u5e2e\u52a9") {
+		t.Fatalf("Chinese subcommand help: code=%d stdout=%q", code, stdout.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	actions.activateFile = func(context.Context, string, func() error) error {
+		return core.WrapActivation(core.ActivationFileInput, errors.New("password=private"))
+	}
+	if code := runCLI(context.Background(), []string{"clashpulse", "activate", "profile.yaml"}, stdout, stderr, actions); code != 1 || stderr.String() != "\u672c\u5730\u914d\u7f6e\u6587\u4ef6\u4e0d\u53ef\u7528\u6216\u65e0\u6548\n" || strings.Contains(stderr.String(), "private") {
+		t.Fatalf("Chinese safe failure: code=%d stderr=%q", code, stderr.String())
 	}
 }

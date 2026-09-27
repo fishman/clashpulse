@@ -9,6 +9,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/localize"
 )
 
 type activityView struct {
@@ -72,7 +73,11 @@ func activityRowHeight(text string, width float32) float32 {
 }
 
 func activityText(entry core.DiagnosticSnapshot) string {
-	return time.Unix(entry.At, 0).UTC().Format(time.RFC3339) + "  " + entry.Severity + "  " + entry.SourceID + "  " + entry.Message
+	text := time.Unix(entry.At, 0).UTC().Format(time.RFC3339) + "  " + localize.Code("diagnostic.severity", entry.Severity)
+	if entry.Kind != "" {
+		text += "  " + localize.Code("operation", entry.Kind)
+	}
+	return text + "  " + entry.SourceID + "  " + localize.T(entry.Message)
 }
 
 func (v *activityView) update(entries []core.DiagnosticSnapshot) {
@@ -85,7 +90,7 @@ func (v *activityView) update(entries []core.DiagnosticSnapshot) {
 // configuration, above the diagnostics it recorded.
 func (d *desktopUI) openActivity() {
 	if d.activity.dialog == nil {
-		d.activity.dialog = dialog.NewCustom("Activity", "Close", container.NewBorder(d.overridesSection, nil, nil, nil, d.activity.content), d.window)
+		d.activity.dialog = dialog.NewCustom(localize.T("Activity"), localize.T("Close"), container.NewBorder(d.overridesSection, nil, nil, nil, d.activity.content), d.window)
 	}
 	d.activity.dialog.Show()
 }

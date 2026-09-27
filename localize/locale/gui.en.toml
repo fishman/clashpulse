@@ -1,0 +1,35 @@
+["gui.view.Overview"]
+other = "Overview"
+
+["gui.view.Proxies"]
+other = "Proxies"
+
+["gui.view.Subscriptions"]
+other = "Subscriptions"
+
+["gui.view.Filter Lists"]
+other = "Filter Lists"
+
+["gui.view.Data Resources"]
+other = "Data Resources"
+
+["gui.view.Settings"]
+other = "Settings"
+
+["gui.settings.section.Mihomo binary"]
+other = "Mihomo binary"
+
+["gui.settings.section.System Proxy"]
+other = "System Proxy"
+
+["gui.settings.section.Monitor"]
+other = "Monitor"
+
+["gui.settings.section.DNS"]
+other = "DNS"
+
+["gui.monitor.switch-policy.failover"]
+other = "Failover (switch once the selected node fails)"
+
+["gui.monitor.switch-policy.lowest_latency"]
+other = "Lowest latency (always keep the fastest node)"

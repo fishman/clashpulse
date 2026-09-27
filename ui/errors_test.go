@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/localize"
 )
 
 func TestOverviewDisplaysConfigurationErrorDetails(t *testing.T) {
@@ -165,9 +166,43 @@ func TestOverviewBinaryFieldsAreAligned(t *testing.T) {
 	}
 }
 
+func TestMainlandDesktopOverviewAndSubscriptionControls(t *testing.T) {
+	localize.SetLanguage("zh-CN")
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	a := test.NewApp()
+	defer a.Quit()
+	view := newDesktopUI(context.Background(), "", a.NewWindow("ClashPulse"))
+	labels := strings.Join(rowLabels(view.views["Overview"]), "\n")
+	for _, want := range []string{"\u670d\u52a1\u6982\u89c8", "\u542f\u52a8\u670d\u52a1"} {
+		if !strings.Contains(labels, want) {
+			t.Fatalf("Mainland overview lacks %q: %q", want, labels)
+		}
+	}
+	if view.subPage.add.Text != "\u6dfb\u52a0\u8ba2\u9605" {
+		t.Fatalf("subscription action = %q", view.subPage.add.Text)
+	}
+	if len(view.viewSelect.Options) == 0 || view.viewSelect.Options[0] != "\u6982\u89c8" {
+		t.Fatalf("view options = %v", view.viewSelect.Options)
+	}
+}
+
+func TestMainlandUncheckedToggleUsesActionLabel(t *testing.T) {
+	localize.SetLanguage("zh-CN")
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	a := test.NewApp()
+	defer a.Quit()
+	view := newDesktopUI(context.Background(), "", a.NewWindow("ClashPulse"))
+	view.subPage.openSubscriptionEditor(nil)
+	if got := view.subPage.editor.enabled.Text; got != "\u542f\u7528" {
+		t.Fatalf("unchecked action label = %q", got)
+	}
+}
+
 func rowLabels(object fyne.CanvasObject) []string {
 	switch object := object.(type) {
 	case *widget.Label:
+		return []string{object.Text}
+	case *widget.Button:
 		return []string{object.Text}
 	case *container.Scroll:
 		return rowLabels(object.Content)
@@ -207,5 +242,19 @@ func TestActivityListAllocatesHeightForWrappedMessage(t *testing.T) {
 	narrowHeight := renderer.Objects()[0].(*container.Scroll).Content.(*fyne.Container).Objects[0].Size().Height
 	if narrowHeight <= rowHeight {
 		t.Fatalf("resized activity row height %v did not grow beyond %v", narrowHeight, rowHeight)
+	}
+}
+
+func TestMainlandActivityTranslatesFixedDiagnosticText(t *testing.T) {
+	localize.SetLanguage("zh-CN")
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	text := activityText(core.DiagnosticSnapshot{At: 100, Severity: "error", Kind: "refresh_subscription", SourceID: "feed", Message: "fetch failed"})
+	for _, token := range []string{"\u9519\u8bef", "\u83b7\u53d6\u5931\u8d25", "feed"} {
+		if !strings.Contains(text, token) {
+			t.Fatalf("Activity message missing %q: %q", token, text)
+		}
+	}
+	if strings.Contains(text, "fetch failed") || strings.Contains(text, "error") {
+		t.Fatalf("fixed diagnostic text remained English: %q", text)
 	}
 }

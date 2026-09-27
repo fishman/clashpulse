@@ -1,5 +1,7 @@
 package core
 
+import "github.com/fishman/clashpulse/localize"
+
 const MaxDiagnostics = 200
 
 type GroupSnapshot struct {
@@ -80,30 +82,7 @@ func (o ConfigOverrideSnapshot) Description() string {
 	if !o.Valid() {
 		return ""
 	}
-	switch o.Key {
-	case "mixed-port", "port", "socks-port":
-		return "app-owned proxy listener"
-	case "external-controller":
-		return "local controller endpoint"
-	case "secret":
-		return "private controller authentication"
-	case "allow-lan", "bind-address":
-		return "loopback-only proxy binding"
-	case "dns.listen":
-		return "loopback DNS listener"
-	case "dns.nameserver-policy":
-		return "explicit DNS routing policy"
-	case "external-controller-tls", "external-controller-cors", "external-ui":
-		return "controller isolation"
-	case "rule-providers":
-		return "validated managed rule providers"
-	case "proxy-groups":
-		return "configured url-test delay settings"
-	case "rules":
-		return "managed filter rules"
-	default:
-		return ""
-	}
+	return localize.T("override." + o.Key)
 }
 
 type MonitorSnapshot struct {

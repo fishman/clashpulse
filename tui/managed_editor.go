@@ -9,6 +9,7 @@ import (
 
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
+	"github.com/fishman/clashpulse/localize"
 	"github.com/fishman/notmutt/lib/tui/form"
 )
 
@@ -17,7 +18,7 @@ func (m Model) openManagedModal(kind ModalKind, edit bool, targetID string) Mode
 	if kind == ModalResource {
 		resource := coreResource(m.snapshot.Snapshot.Resources, targetID)
 		if edit && resource == nil {
-			m.Notice = "Resource is no longer available."
+			m.Notice = localize.T("Resource is no longer available.")
 			return m
 		}
 		id, resourceKind, format, ruleType, enabled := "", "", "", "", true
@@ -25,19 +26,19 @@ func (m Model) openManagedModal(kind ModalKind, edit bool, targetID string) Mode
 			id, resourceKind, format, ruleType, enabled = resource.ID, resource.Kind, resource.Format, resource.RuleType, resource.Enabled
 		}
 		fields = []form.Field{
-			{ID: "id", Label: "ID", Kind: form.Text, Value: id, ReadOnly: edit},
-			{ID: "kind", Label: "Kind", Kind: form.Text, Value: resourceKind},
-			{ID: "format", Label: "Format", Kind: form.Text, Value: format},
-			{ID: "rule_type", Label: "Rule type", Kind: form.Text, Value: ruleType},
-			{ID: "url", Label: "Source URL", Kind: form.Text, Sensitive: true},
-			{ID: "enabled", Label: "Enabled", Kind: form.Toggle, Value: strconv.FormatBool(enabled)},
-			{ID: "interval", Label: "Interval seconds", Kind: form.Text},
-			{ID: "sha256", Label: "SHA-256 pin", Kind: form.Text},
+			{ID: "id", Label: localize.T("ID"), Kind: form.Text, Value: id, ReadOnly: edit},
+			{ID: "kind", Label: localize.T("Kind"), Kind: form.Text, Value: resourceKind},
+			{ID: "format", Label: localize.T("Format"), Kind: form.Text, Value: format},
+			{ID: "rule_type", Label: localize.T("Rule type"), Kind: form.Text, Value: ruleType},
+			{ID: "url", Label: localize.T("Source URL"), Kind: form.Text, Sensitive: true},
+			{ID: "enabled", Label: localize.T("control.enable"), Kind: form.Toggle, Value: strconv.FormatBool(enabled)},
+			{ID: "interval", Label: localize.T("Interval seconds"), Kind: form.Text},
+			{ID: "sha256", Label: localize.T("SHA-256 pin"), Kind: form.Text},
 		}
 	} else if kind == ModalFilter {
 		filter := coreFilter(m.snapshot.Snapshot.Filters, targetID)
 		if edit && filter == nil {
-			m.Notice = "Filter is no longer available."
+			m.Notice = localize.T("Filter is no longer available.")
 			return m
 		}
 		id, resourceID, format, target, enabled := "", "", "", "", true
@@ -45,11 +46,11 @@ func (m Model) openManagedModal(kind ModalKind, edit bool, targetID string) Mode
 			id, resourceID, format, target, enabled = filter.ID, filter.ResourceID, filter.Format, filter.Target, filter.Enabled
 		}
 		fields = []form.Field{
-			{ID: "id", Label: "ID", Kind: form.Text, Value: id, ReadOnly: edit},
-			{ID: "resource_id", Label: "Resource ID", Kind: form.Text, Value: resourceID},
-			{ID: "format", Label: "Format", Kind: form.Text, Value: format},
-			{ID: "target", Label: "Target", Kind: form.Text, Value: target},
-			{ID: "enabled", Label: "Enabled", Kind: form.Toggle, Value: strconv.FormatBool(enabled)},
+			{ID: "id", Label: localize.T("ID"), Kind: form.Text, Value: id, ReadOnly: edit},
+			{ID: "resource_id", Label: localize.T("Resource ID"), Kind: form.Text, Value: resourceID},
+			{ID: "format", Label: localize.T("Format"), Kind: form.Text, Value: format},
+			{ID: "target", Label: localize.T("Target"), Kind: form.Text, Value: target},
+			{ID: "enabled", Label: localize.T("control.enable"), Kind: form.Toggle, Value: strconv.FormatBool(enabled)},
 		}
 	} else {
 		return m
@@ -57,7 +58,7 @@ func (m Model) openManagedModal(kind ModalKind, edit bool, targetID string) Mode
 
 	editor, err := form.New(fields)
 	if err != nil {
-		m.Notice = "Managed form unavailable."
+		m.Notice = localize.T("Managed form unavailable.")
 		return m
 	}
 	if edit {
@@ -67,21 +68,21 @@ func (m Model) openManagedModal(kind ModalKind, edit bool, targetID string) Mode
 	m.Focus = FocusModal
 	if edit {
 		if kind == ModalResource {
-			m.Notice = "Edit fields, then Ctrl+S to save; private URLs stay hidden. Use - to clear an optional rule type or SHA-256 pin."
+			m.Notice = localize.T("Edit fields, then Ctrl+S to save; private URLs stay hidden. Use - to clear an optional rule type or SHA-256 pin.")
 		} else {
-			m.Notice = "Edit fields, then Ctrl+S to save."
+			m.Notice = localize.T("Edit fields, then Ctrl+S to save.")
 		}
 	} else if kind == ModalResource {
-		m.Notice = "Enter required fields, then Ctrl+S to save; private source stays hidden."
+		m.Notice = localize.T("Enter required fields, then Ctrl+S to save; private source stays hidden.")
 	} else {
-		m.Notice = "Enter required fields, then Ctrl+S to save."
+		m.Notice = localize.T("Enter required fields, then Ctrl+S to save.")
 	}
 	return m
 }
 
 func managedFormIntent(modal *Modal) (*ipc.Command, string) {
 	if modal == nil || modal.Form == nil {
-		return nil, "Managed form unavailable."
+		return nil, localize.T("Managed form unavailable.")
 	}
 	creating := modal.TargetID == ""
 	if modal.Kind == ModalResource {
@@ -90,36 +91,36 @@ func managedFormIntent(modal *Modal) (*ipc.Command, string) {
 		for _, change := range modal.Form.Changes() {
 			value := change.Value
 			if len(value) > 4096 {
-				return nil, "Field is too long."
+				return nil, localize.T("Field is too long.")
 			}
 			switch change.ID {
 			case "id":
 				if creating {
 					id = value
 					if !validSubscriptionID(value) {
-						return nil, "Enter a valid stable ID."
+						return nil, localize.T("Enter a valid stable ID.")
 					}
 				}
 			case "kind":
 				if !validResourceKind(value) {
-					return nil, "Choose a supported resource kind."
+					return nil, localize.T("Choose a supported resource kind.")
 				}
 				patch.Kind = &value
 			case "format":
 				if !validResourceFormat(value) {
-					return nil, "Choose a supported resource format."
+					return nil, localize.T("Choose a supported resource format.")
 				}
 				patch.Format = &value
 			case "rule_type":
 				if value == "-" {
 					value = ""
 				} else if value != "" && !validResourceRuleType(value) {
-					return nil, "Choose domain, ipcidr, or classical."
+					return nil, localize.T("Choose domain, ipcidr, or classical.")
 				}
 				patch.RuleType = &value
 			case "url":
 				if strings.ContainsAny(value, "\x00\r\n") || value != "" && !validManagedResourceSource(value) {
-					return nil, "Source must be HTTPS without credentials or an absolute local path."
+					return nil, localize.T("Source must be HTTPS without credentials or an absolute local path.")
 				}
 				if value != "" {
 					patch.URL = &value
@@ -127,12 +128,12 @@ func managedFormIntent(modal *Modal) (*ipc.Command, string) {
 			case "enabled":
 				enabled, err := strconv.ParseBool(value)
 				if err != nil {
-					return nil, "Enabled must be true or false."
+					return nil, localize.T("Enabled must be true or false.")
 				}
 				patch.Enabled = &enabled
 			case "interval":
 				if !validSubscriptionNumber(value, 60, 86400*30) {
-					return nil, "Interval must be between 60 and 2592000 seconds."
+					return nil, localize.T("Interval must be between 60 and 2592000 seconds.")
 				}
 				interval, _ := strconv.ParseUint(value, 10, 32)
 				seconds := uint32(interval)
@@ -142,30 +143,30 @@ func managedFormIntent(modal *Modal) (*ipc.Command, string) {
 					value = ""
 				} else if value != "" {
 					if len(value) != 64 {
-						return nil, "SHA-256 must be 64 hexadecimal characters."
+						return nil, localize.T("SHA-256 must be 64 hexadecimal characters.")
 					}
 					if _, err := hex.DecodeString(value); err != nil {
-						return nil, "SHA-256 must be hexadecimal."
+						return nil, localize.T("SHA-256 must be hexadecimal.")
 					}
 				}
 				patch.SHA256 = &value
 			default:
-				return nil, "Managed form unavailable."
+				return nil, localize.T("Managed form unavailable.")
 			}
 		}
 		if creating {
 			if !validSubscriptionID(id) {
-				return nil, "Enter a valid stable ID."
+				return nil, localize.T("Enter a valid stable ID.")
 			}
 			if patch.Kind == nil || patch.Format == nil || patch.URL == nil || patch.IntervalSeconds == nil {
-				return nil, "Kind, format, source URL, and positive interval are required."
+				return nil, localize.T("Kind, format, source URL, and positive interval are required.")
 			}
 			ruleType := ""
 			if patch.RuleType != nil {
 				ruleType = *patch.RuleType
 			}
 			if !validResourceDeclaration(*patch.Kind, *patch.Format, ruleType) {
-				return nil, "Resource kind, format, and rule type are incompatible."
+				return nil, localize.T("Resource kind, format, and rule type are incompatible.")
 			}
 			if patch.Enabled == nil {
 				enabled := true
@@ -178,54 +179,54 @@ func managedFormIntent(modal *Modal) (*ipc.Command, string) {
 		return &ipc.Command{Kind: ipc.CommandPutResource, ResourceID: id, Resource: patch}, ""
 	}
 	if modal.Kind != ModalFilter {
-		return nil, "Managed form unavailable."
+		return nil, localize.T("Managed form unavailable.")
 	}
 	id := modal.TargetID
 	patch := &ipc.FilterEdit{}
 	for _, change := range modal.Form.Changes() {
 		value := change.Value
 		if len(value) > 4096 {
-			return nil, "Field is too long."
+			return nil, localize.T("Field is too long.")
 		}
 		switch change.ID {
 		case "id":
 			if creating {
 				id = value
 				if !validSubscriptionID(value) {
-					return nil, "Enter a valid stable ID."
+					return nil, localize.T("Enter a valid stable ID.")
 				}
 			}
 		case "resource_id":
 			if !validSubscriptionID(value) {
-				return nil, "Enter a valid resource ID."
+				return nil, localize.T("Enter a valid resource ID.")
 			}
 			patch.ResourceID = &value
 		case "format":
 			if !validFilterFormat(value) {
-				return nil, "Filter format must be yaml, text, or mrs."
+				return nil, localize.T("Filter format must be yaml, text, or mrs.")
 			}
 			patch.Format = &value
 		case "target":
 			if len(value) > 128 || value == "" || strings.TrimSpace(value) != value || strings.ContainsAny(value, ",\r\n\t\x00") {
-				return nil, "Target is required and cannot contain commas or control characters."
+				return nil, localize.T("Target is required and cannot contain commas or control characters.")
 			}
 			patch.Target = &value
 		case "enabled":
 			enabled, err := strconv.ParseBool(value)
 			if err != nil {
-				return nil, "Enabled must be true or false."
+				return nil, localize.T("Enabled must be true or false.")
 			}
 			patch.Enabled = &enabled
 		default:
-			return nil, "Managed form unavailable."
+			return nil, localize.T("Managed form unavailable.")
 		}
 	}
 	if creating {
 		if !validSubscriptionID(id) {
-			return nil, "Enter a valid stable ID."
+			return nil, localize.T("Enter a valid stable ID.")
 		}
 		if patch.ResourceID == nil || patch.Format == nil || patch.Target == nil {
-			return nil, "Resource ID, format, and target are required."
+			return nil, localize.T("Resource ID, format, and target are required.")
 		}
 		if patch.Enabled == nil {
 			enabled := true

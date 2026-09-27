@@ -1,0 +1,846 @@
+["gui.view.Overview"]
+other = "概览"
+
+["gui.view.Proxies"]
+other = "代理"
+
+["gui.view.Subscriptions"]
+other = "订阅"
+
+["gui.view.Filter Lists"]
+other = "过滤列表"
+
+["gui.view.Data Resources"]
+other = "数据资源"
+
+["gui.view.Settings"]
+other = "设置"
+
+["gui.settings.section.Mihomo binary"]
+other = "Mihomo 内核"
+
+["gui.settings.section.System Proxy"]
+other = "系统代理"
+
+["gui.settings.section.Monitor"]
+other = "延迟监测"
+
+["gui.settings.section.DNS"]
+other = "DNS"
+
+["gui.monitor.switch-policy.failover"]
+other = "所选节点失效后切换一次"
+
+["gui.monitor.switch-policy.lowest_latency"]
+other = "始终使用延迟最低的节点"
+
+["Connecting to local service..."]
+other = "正在连接本地服务…"
+
+["Proxy groups"]
+other = "代理组"
+
+["Data resources"]
+other = "数据资源"
+
+["Filter lists"]
+other = "过滤列表"
+
+["Jobs"]
+other = "任务"
+
+["Reported issues"]
+other = "报告的问题"
+
+["No automatic switches recorded"]
+other = "暂无自动切换记录"
+
+["No service errors"]
+other = "当前没有服务错误"
+
+["Choose a view"]
+other = "选择视图"
+
+["Service overview"]
+other = "服务概览"
+
+["Start service"]
+other = "启动服务"
+
+["Stop service"]
+other = "停止服务"
+
+["Restart service"]
+other = "重启服务"
+
+["Reload configuration"]
+other = "重新加载配置"
+
+["View activity"]
+other = "查看活动记录"
+
+["Disconnected"]
+other = "已断开连接"
+
+["Action queue is busy"]
+other = "操作队列繁忙"
+
+["Action could not be queued"]
+other = "无法将操作加入队列"
+
+["Action queued"]
+other = "操作已加入队列"
+
+["Connected"]
+other = "已连接"
+
+["Connected - local profile"]
+other = "已连接 - 本地配置"
+
+["Service"]
+other = "服务"
+
+["Desired"]
+other = "期望值"
+
+["Observed"]
+other = "实际检测到"
+
+["Capabilities"]
+other = "支持能力"
+
+["Compatibility"]
+other = "兼容性"
+
+["Enable group automation"]
+other = "启用组自动切换"
+
+["Probe group"]
+other = "测试组延迟"
+
+["Active"]
+other = "活跃"
+
+["No proxy groups are available"]
+other = "当前没有可用代理组"
+
+["Proxy groups and choices"]
+other = "代理组与节点"
+
+["Manual selection and health probes are available"]
+other = "可手动选择节点并检测健康状态"
+
+["Mihomo manages selection for this group"]
+other = "Mihomo 正在管理此组的节点选择"
+
+["Add subscription"]
+other = "添加订阅"
+
+["Refresh"]
+other = "刷新"
+
+["Activate"]
+other = "启用"
+
+["Delete"]
+other = "删除"
+
+["Delete subscription"]
+other = "删除订阅"
+
+["Delete subscription %s and its private snapshot?"]
+other = "确定删除订阅 %s 及其私有快照？"
+
+["Edit"]
+other = "编辑"
+
+["Subscription %s"]
+other = "订阅 %s"
+
+["No subscriptions are available"]
+other = "当前没有可用订阅"
+
+["Direct"]
+other = "直连"
+
+["Mihomo proxy"]
+other = "Mihomo 代理"
+
+["HTTPS only"]
+other = "仅 HTTPS"
+
+["Allow HTTP (insecure)"]
+other = "允许 HTTP（不安全）"
+
+["Verify certificates"]
+other = "验证证书"
+
+["Allow invalid TLS certificates (insecure)"]
+other = "允许无效 TLS 证书（不安全）"
+
+["Keep current"]
+other = "保持当前值"
+
+["Stable subscription ID"]
+other = "稳定订阅 ID"
+
+["HTTPS URL; insecure HTTP requires explicit opt-in"]
+other = "HTTPS URL；如需使用不安全的 HTTP，必须明确允许"
+
+["Optional User-Agent; default clash-pulse"]
+other = "可选 User-Agent；默认值为 clash-pulse"
+
+["Refresh interval (seconds)"]
+other = "刷新间隔（秒）"
+
+["Timeout (seconds)"]
+other = "超时（秒）"
+
+["HTTP policy"]
+other = "HTTP 策略"
+
+["TLS policy"]
+other = "TLS 策略"
+
+["Add Subscription"]
+other = "添加订阅"
+
+["Add"]
+other = "添加"
+
+["Edit Subscription"]
+other = "编辑订阅"
+
+["Save"]
+other = "保存"
+
+["Cancel"]
+other = "取消"
+
+["stable ID must start with a letter or number and contain only letters, numbers, '.', '_' or '-' (1-64 characters)"]
+other = "稳定 ID 必须以字母或数字开头，且只能包含字母、数字、'.'、'_' 或 '-'（1-64 个字符）"
+
+["display name must contain 1-128 characters"]
+other = "显示名称长度必须为 1-128 个字符"
+
+["source URL must be HTTPS; HTTP requires explicit opt-in"]
+other = "来源 URL 必须使用 HTTPS；使用 HTTP 需要明确允许"
+
+["User-Agent must be printable ASCII at most 256 bytes"]
+other = "User-Agent 必须为可打印的 ASCII 字符，且不超过 256 字节"
+
+["select a connection route"]
+other = "请选择连接路由"
+
+["select a security policy"]
+other = "请选择安全策略"
+
+["%s must be between %d and %d seconds"]
+other = "%s 必须介于 %d 到 %d 秒之间"
+
+["refresh interval"]
+other = "刷新间隔"
+
+["timeout"]
+other = "超时时间"
+
+["Add resource"]
+other = "添加资源"
+
+["Resource %s"]
+other = "资源 %s"
+
+["No data resources are available"]
+other = "当前没有可用数据资源"
+
+["Add filter"]
+other = "添加过滤列表"
+
+["Filter %s"]
+other = "过滤列表 %s"
+
+["No filter lists are available"]
+other = "当前没有可用过滤列表"
+
+["None"]
+other = "无"
+
+["Stable resource ID"]
+other = "稳定资源 ID"
+
+["HTTPS URL or local path"]
+other = "HTTPS URL 或本地路径"
+
+["Optional 64-character SHA-256"]
+other = "可选的 64 位 SHA-256 校验值"
+
+["Leave blank to keep the current private URL"]
+other = "留空以保留当前私有 URL"
+
+["Leave blank to keep current"]
+other = "留空以保留当前值"
+
+["Clear existing pin"]
+other = "清除现有 SHA-256 校验值"
+
+["Private URL / local path"]
+other = "私有 URL / 本地路径"
+
+["Update interval (seconds)"]
+other = "更新间隔（秒）"
+
+["Optional SHA-256 pin"]
+other = "可选 SHA-256 校验值"
+
+["Add Data Resource"]
+other = "添加数据资源"
+
+["Edit Data Resource"]
+other = "编辑数据资源"
+
+
+["select a compatible resource kind, format, and rule type"]
+other = "请选择相互兼容的资源类型、格式和规则类型"
+
+["source must be an HTTPS URL without user information or an absolute local path"]
+other = "来源必须是无用户信息的 HTTPS URL 或绝对本地路径"
+
+["SHA-256 pin must contain exactly 64 hexadecimal characters"]
+other = "SHA-256 校验值必须恰好包含 64 个十六进制字符"
+
+["enter a new pin or clear the existing pin, not both"]
+other = "请填写新的校验值或清除现有校验值，不能同时执行"
+
+["Stable filter ID"]
+other = "稳定过滤列表 ID"
+
+["Managed rule resource ID"]
+other = "托管规则资源 ID"
+
+["Add Filter List"]
+other = "添加过滤列表"
+
+["Edit Filter List"]
+other = "编辑过滤列表"
+
+["managed resource ID must be a stable ID"]
+other = "托管资源 ID 必须是稳定 ID"
+
+["target must contain 1-128 characters and no commas or control characters"]
+other = "目标必须包含 1-128 个字符，且不能包含逗号或控制字符"
+
+["select a filter format"]
+other = "请选择过滤列表格式"
+
+["Not configured"]
+other = "未配置"
+
+["Profile default"]
+other = "使用配置文件默认值"
+
+["Enable system proxy"]
+other = "启用系统代理"
+
+["System proxy inactive"]
+other = "系统代理未启用"
+
+["Enable latency monitor"]
+other = "启用延迟监测"
+
+["System Proxy"]
+other = "系统代理"
+
+
+["Change"]
+other = "修改"
+
+["Edit probe policy"]
+other = "编辑探测策略"
+
+["Mihomo url-test delay"]
+other = "Mihomo URL-test 延迟"
+
+["Use system Mihomo"]
+other = "使用系统 Mihomo"
+
+["Use bundled Mihomo"]
+other = "使用内置 Mihomo"
+
+["Choose executable path"]
+other = "选择可执行文件路径"
+
+["Absolute path to Mihomo"]
+other = "Mihomo 的绝对路径"
+
+["Select"]
+other = "选择"
+
+["Executable path"]
+other = "可执行文件路径"
+
+["select an absolute executable path"]
+other = "请选择绝对路径的可执行文件"
+
+["Milliseconds (1-60000)"]
+other = "毫秒（1-60000）"
+
+["Milliseconds"]
+other = "毫秒"
+
+["Apply"]
+other = "应用"
+
+["alert threshold must be 1-60000 ms"]
+other = "告警阈值必须为 1-60000 毫秒"
+
+["Active on the local Mihomo listener"]
+other = "已在本机 Mihomo 监听地址启用"
+
+["Requested; waiting for a ready listener"]
+other = "已请求；正在等待监听地址就绪"
+
+["Inactive"]
+other = "未启用"
+
+["%d seconds"]
+other = "%d 秒"
+
+["unavailable"]
+other = "不可用"
+
+["not measured"]
+other = "尚未测量"
+
+["%d ms"]
+other = "%d 毫秒"
+
+["%d ms (mihomo)"]
+other = "%d 毫秒（Mihomo）"
+
+["Unknown source"]
+other = "未知来源"
+
+["Disabled"]
+other = "已停用"
+
+["Active (Needs attention)"]
+other = "活跃（需关注）"
+
+["Needs attention"]
+other = "需关注"
+
+["Active (update ready)"]
+other = "活跃（更新就绪）"
+
+["Ready"]
+other = "就绪"
+
+["Pending"]
+other = "等待中"
+
+["Not validated"]
+other = "未验证"
+
+["No compatibility issue reported"]
+other = "未报告兼容性问题"
+
+["bundled Mihomo is not installed"]
+other = "内置 Mihomo 未安装"
+
+["Compatibility issue reported"]
+other = "已报告兼容性问题"
+
+
+["%s %s %d ms"]
+other = "%s %s %d 毫秒"
+
+["Last switch %s -> %s: %s. Measurements: %s"]
+other = "上次切换：%s -> %s；%s。测量结果：%s"
+
+["not yet"]
+other = "尚无"
+
+["Source host: %s"]
+other = "来源主机：%s"
+
+["State: %s"]
+other = "状态：%s"
+
+["Last check: %s"]
+other = "上次检查：%s"
+
+["Last success: %s"]
+other = "上次成功：%s"
+
+["Next refresh: %s"]
+other = "下次刷新：%s"
+
+["Downloaded hash: %s"]
+other = "已下载哈希：%s"
+
+["Applied hash: %s"]
+other = "已应用哈希：%s"
+
+["Last failure: needs attention"]
+other = "上次失败：需要关注"
+
+["Traffic: up %d, down %d, total %d bytes"]
+other = "流量：上传 %d 字节，下载 %d 字节，共 %d 字节"
+
+["Expires: %s"]
+other = "到期时间：%s"
+
+["Kind: %s"]
+other = "类型：%s"
+
+["Format: %s"]
+other = "格式：%s"
+
+["Rule behavior: %s"]
+other = "规则行为：%s"
+
+["Current hash: %s"]
+other = "当前哈希：%s"
+
+["Destination: %s"]
+other = "目标位置：%s"
+
+["Next update: %s"]
+other = "下次更新：%s"
+
+["Resource: %s"]
+other = "资源：%s"
+
+["Target: %s"]
+other = "目标：%s"
+
+["Provider: %s"]
+other = "提供方：%s"
+
+["Profiles"]
+other = "订阅配置"
+
+["Profile %s: last selected median %d ms"]
+other = "配置 %s：最近选中节点延迟中位数 %d 毫秒"
+
+["Profile %s: not measured"]
+other = "配置 %s：尚未测量"
+
+["Active local profile"]
+other = "本地配置已启用"
+
+["No active profile"]
+other = "没有活动配置"
+
+["Disconnected - state unavailable"]
+other = "已断开连接 - 状态不可用"
+
+["Show ClashPulse"]
+other = "显示 ClashPulse"
+
+["Quit"]
+other = "退出"
+
+["%s (%s)"]
+other = "%s（%s）"
+
+[" - update ready"]
+other = " - 更新就绪"
+
+["No downloaded profiles"]
+other = "没有已下载的订阅配置"
+
+["Proxy %d [%s]"]
+other = "代理 %d [%s]"
+
+["%s - %s"]
+other = "%s - %s"
+
+["Group %s"]
+other = "组 %s"
+
+["No managed select groups"]
+other = "没有可手动管理的选择组"
+
+
+["System Proxy (requested, inactive)"]
+other = "系统代理（已请求，未启用）"
+
+["System Proxy (restore needed)"]
+other = "系统代理（需要恢复）"
+
+["Activity"]
+other = "活动记录"
+
+["Close"]
+other = "关闭"
+
+["Listen: not configured"]
+other = "监听：未配置"
+
+["Listen: %s"]
+other = "监听：%s"
+
+["No resolver sets configured"]
+other = "尚未配置解析器组"
+
+["No DNS routes configured"]
+other = "尚未配置 DNS 路由"
+
+["Change listener"]
+other = "更改监听地址"
+
+["Select resolver set"]
+other = "选择解析器组"
+
+["Select DNS route"]
+other = "选择 DNS 路由"
+
+["Add resolver set"]
+other = "添加解析器组"
+
+["Edit resolver set"]
+other = "编辑解析器组"
+
+["Remove resolver set"]
+other = "移除解析器组"
+
+["Add DNS route"]
+other = "添加 DNS 路由"
+
+["Edit DNS route"]
+other = "编辑 DNS 路由"
+
+["Remove DNS route"]
+other = "移除 DNS 路由"
+
+["DNS policy"]
+other = "DNS 策略"
+
+["Resolver sets"]
+other = "解析器组"
+
+["DNS routes"]
+other = "DNS 路由"
+
+["%s: %s"]
+other = "%s：%s"
+
+[", "]
+other = "，"
+
+[" (DNSCrypt)"]
+other = "（DNSCrypt）"
+
+["%d. %s"]
+other = "%d. %s"
+
+["127.0.0.1:5353 or [::1]:5353"]
+other = "127.0.0.1:5353 或 [::1]:5353"
+
+
+
+["Loopback address"]
+other = "回环地址"
+
+["DNS listener must use a loopback IP address and valid port"]
+other = "DNS 监听地址必须使用回环 IP 地址和有效端口"
+
+["DNSCrypt listener"]
+other = "DNSCrypt 监听器"
+
+["Stable resolver set ID"]
+other = "稳定解析器组 ID"
+
+["One DNS endpoint per line"]
+other = "每行填写一个 DNS 端点"
+
+
+["remove or reassign DNS routes using resolver set %q first"]
+other = "请先删除或重新指定使用解析器组 %q 的 DNS 路由"
+
+["Domain suffix"]
+other = "域名后缀"
+
+["Matcher type"]
+other = "匹配类型"
+
+["resolver set ID must start with a letter or number and use only letters, numbers, '.', '_' or '-' (1-64 characters)"]
+other = "解析器组 ID 必须以字母或数字开头，且只能包含字母、数字、'.'、'_' 或 '-'（1-64 个字符）"
+
+["resolver set ID already exists"]
+other = "解析器组 ID 已存在"
+
+["resolver set no longer exists"]
+other = "解析器组已不存在"
+
+["resolver set must contain 1-16 endpoints"]
+other = "解析器组必须包含 1-16 个端点"
+
+["select an existing resolver set"]
+other = "请选择一个现有解析器组"
+
+["domain suffix is invalid"]
+other = "域名后缀无效"
+
+["GeoSite selector is invalid"]
+other = "GeoSite 选择器无效"
+
+["resource ID is invalid"]
+other = "资源 ID 无效"
+
+["select exactly one route matcher"]
+other = "请且仅选择一种路由匹配类型"
+
+["DNS route no longer exists"]
+other = "DNS 路由已不存在"
+
+["invalid endpoint (credentials hidden)"]
+other = "端点无效（凭据已隐藏）"
+
+["suffix=%s"]
+other = "域名后缀=%s"
+
+["geosite=%s"]
+other = "geosite=%s"
+
+["resource=%s"]
+other = "资源=%s"
+
+["matcher not configured"]
+other = "匹配器未配置"
+
+["%s -> resolver=%s"]
+other = "%s -> 解析器组=%s"
+
+["resolver endpoint is invalid"]
+other = "解析器端点无效"
+
+["resolver endpoint is invalid or contains credentials"]
+other = "解析器端点无效或包含凭据"
+
+["resolver endpoint scheme is unsupported"]
+other = "解析器端点协议不受支持"
+
+["DNSCrypt endpoints must use a loopback UDP or TCP listener"]
+other = "DNSCrypt 端点必须使用回环 UDP 或 TCP 监听器"
+
+["interval seconds"]
+other = "间隔（秒）"
+
+["timeout milliseconds"]
+other = "超时（毫秒）"
+
+["concurrency"]
+other = "并发数"
+
+["threshold milliseconds"]
+other = "不健康阈值（毫秒）"
+
+["alert milliseconds"]
+other = "告警阈值（毫秒）"
+
+["consecutive bad samples"]
+other = "连续异常样本数"
+
+["minimum improvement milliseconds"]
+other = "最低改善幅度（毫秒）"
+
+["cooldown seconds"]
+other = "冷却时间（秒）"
+
+["jitter milliseconds"]
+other = "抖动（毫秒）"
+
+["select a switch policy"]
+other = "请选择切换策略"
+
+["test URL must use HTTP or HTTPS without credentials or fragment"]
+other = "探测 URL 必须使用 HTTP 或 HTTPS，且不能包含凭据或片段"
+
+["%s must be between %d and %d"]
+other = "%s 必须介于 %d 到 %d 之间"
+
+["interval %s"]
+other = "间隔 %s"
+
+["tolerance %d ms"]
+other = "容差 %d 毫秒"
+
+
+["Interval (seconds)"]
+other = "间隔（秒）"
+
+["Switch tolerance (ms)"]
+other = "切换容差（毫秒）"
+
+["Applies to"]
+other = "适用于"
+
+["url-test and fallback groups in the generated config. A blank field keeps what the profile sets."]
+other = "生成配置中的 url-test 和 fallback 组。留空表示保留配置文件中的设置。"
+
+
+
+["url-test interval must be between 1 and 86400 seconds"]
+other = "url-test 间隔必须介于 1 到 86400 秒之间"
+
+["url-test switch tolerance must be between 1 and 60000 ms"]
+other = "url-test 切换容差必须介于 1 到 60000 毫秒之间"
+
+["enter an interval or a switch tolerance"]
+other = "请输入间隔或切换容差"
+
+["Probe URL"]
+other = "探测 URL"
+
+["Warning"]
+other = "警告"
+
+["Plain HTTP probes can be intercepted; use HTTPS for probe integrity."]
+other = "普通 HTTP 探测可能被拦截；请使用 HTTPS 确保探测完整性。"
+
+["Switch policy"]
+other = "切换策略"
+
+["Note"]
+other = "说明"
+
+["A switch needs at least three probes of each node and the switch cooldown after one. Lowest latency compares median latencies and requires the required improvement; the unhealthy threshold then no longer gates switching."]
+other = "切换前每个节点至少需要三次探测；切换后还需等待冷却时间。最低延迟策略会比较延迟中位数，并要求达到设定的改善幅度；此时不再以不健康阈值作为切换条件。"
+
+["Timeout (ms)"]
+other = "超时（毫秒）"
+
+["Concurrent probes"]
+other = "并发探测数"
+
+["Unhealthy threshold (ms)"]
+other = "不健康阈值（毫秒）"
+
+["Alert threshold (ms)"]
+other = "告警阈值（毫秒）"
+
+["Required improvement (ms)"]
+other = "要求的延迟改善（毫秒）"
+
+["Switch cooldown (seconds)"]
+other = "切换冷却时间（秒）"
+
+["Probe jitter (ms)"]
+other = "探测抖动（毫秒）"
+
+["Monitor probe policy"]
+other = "监测探测策略"
+
+["Blank keeps current; '-' resets to clash-pulse"]
+other = "留空保留当前值；输入“-”恢复为默认 clash-pulse"
+
+["Managed resource ID"]
+other = "托管资源 ID"
+
+["Resolver set"]
+other = "解析器组"
+
+["resource %s requires %s"]
+other = "资源 %s 需要 %s"

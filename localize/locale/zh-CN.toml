@@ -1,0 +1,275 @@
+["Overview"]
+other = "概览"
+
+["Proxies"]
+other = "代理"
+
+["Subscriptions"]
+other = "订阅"
+
+["Filter Lists"]
+other = "过滤列表"
+
+["Data Resources"]
+other = "数据资源"
+
+["Settings"]
+other = "设置"
+
+["Mihomo binary"]
+other = "Mihomo 内核"
+
+["Name"]
+other = "名称"
+
+["Details"]
+other = "详情"
+
+["Generated config changes"]
+other = "生成配置变更"
+
+["No managed overrides"]
+other = "无应用接管的配置项"
+
+["override.dns.listen"]
+other = "仅在本机监听 DNS"
+
+["override.mixed-port"]
+other = "由应用管理的代理监听端口"
+
+["override.port"]
+other = "由应用管理的代理监听端口"
+
+["override.socks-port"]
+other = "由应用管理的代理监听端口"
+
+["override.external-controller"]
+other = "仅供本机使用的控制接口"
+
+["override.secret"]
+other = "私有控制接口认证"
+
+["override.allow-lan"]
+other = "代理仅绑定本机"
+
+["override.bind-address"]
+other = "代理仅绑定本机"
+
+["override.dns.nameserver-policy"]
+other = "明确配置的 DNS 分流规则"
+
+["override.external-controller-tls"]
+other = "隔离控制接口"
+
+["override.external-controller-cors"]
+other = "隔离控制接口"
+
+["override.external-ui"]
+other = "隔离控制接口"
+
+["override.rule-providers"]
+other = "已验证的托管规则提供器"
+
+["override.proxy-groups"]
+other = "已配置的自动测速延迟设置"
+
+["override.rules"]
+other = "托管过滤规则"
+
+["Alert threshold"]
+other = "告警阈值"
+
+["Connection route"]
+other = "连接路由"
+
+["Consecutive bad samples"]
+other = "连续异常样本数"
+
+["DNS listener"]
+other = "DNS 监听地址"
+
+["Display name"]
+other = "显示名称"
+
+["Enabled"]
+other = "已启用"
+
+["Endpoints"]
+other = "端点"
+
+["Format"]
+other = "格式"
+
+["Kind"]
+other = "类型"
+
+["Matcher value"]
+other = "匹配值"
+
+["Monitor"]
+other = "延迟监测"
+
+["Monitor interval"]
+other = "监测间隔"
+
+["Resource ID"]
+other = "资源 ID"
+
+["Rule type"]
+other = "规则类型"
+
+["Source URL"]
+other = "来源 URL"
+
+["Stable ID"]
+other = "稳定 ID"
+
+["System proxy"]
+other = "系统代理"
+
+["Target"]
+other = "目标"
+
+["User-Agent"]
+other = "User-Agent"
+
+["none verified"]
+other = "无已验证项"
+
+["not configured"]
+other = "未配置"
+
+["unknown"]
+other = "未知"
+
+["unspecified"]
+other = "未指定"
+
+["control.enable"]
+other = "启用"
+
+["operation.start"]
+other = "启动服务"
+
+["operation.stop"]
+other = "停止服务"
+
+["operation.restart"]
+other = "重启服务"
+
+["operation.reload_configuration"]
+other = "重新加载配置"
+
+["operation.update_configuration"]
+other = "更新配置"
+
+["operation.manual_probe"]
+other = "手动测速"
+
+["operation.select_group"]
+other = "选择代理组"
+
+["operation.set_automation"]
+other = "设置自动切换"
+
+["operation.refresh_subscription"]
+other = "刷新订阅"
+
+["operation.activate_subscription"]
+other = "启用订阅"
+
+["operation.delete_subscription"]
+other = "删除订阅"
+
+["operation.put_subscription"]
+other = "编辑订阅"
+
+["operation.refresh_resource"]
+other = "刷新数据资源"
+
+["operation.refresh_filter"]
+other = "刷新过滤列表"
+
+["operation.put_resource"]
+other = "编辑数据资源"
+
+["operation.put_filter"]
+other = "编辑过滤列表"
+
+["operation.set_dns_routing"]
+other = "设置 DNS 分流"
+
+["operation.subscription"]
+other = "订阅"
+
+["operation.resource"]
+other = "数据资源"
+
+["operation.config"]
+other = "配置"
+
+["operation.config_reload"]
+other = "重新加载配置"
+
+["operation.system_proxy"]
+other = "系统代理"
+
+["operation.notification"]
+other = "通知"
+
+["operation.mihomo"]
+other = "Mihomo 内核"
+
+["operation.service"]
+other = "服务"
+
+["job.state.running"]
+other = "进行中"
+
+["job.state.queued"]
+other = "排队中"
+
+["job.state.completed"]
+other = "已完成"
+
+["job.state.failed"]
+other = "失败"
+
+["probe.outcome.success"]
+other = "成功"
+
+["probe.outcome.timeout"]
+other = "超时"
+
+["probe.outcome.error"]
+other = "错误"
+
+["diagnostic.severity.error"]
+other = "错误"
+
+["diagnostic.severity.info"]
+other = "信息"
+
+["materially better candidate"]
+other = "候选节点明显更优"
+
+["fetch failed"]
+other = "获取失败"
+
+["invalid proxy profile"]
+other = "代理配置无效"
+
+["candidate validation failed"]
+other = "候选配置验证失败"
+
+["operation timed out"]
+other = "操作超时"
+
+["operation cancelled"]
+other = "操作已取消"
+
+["operation failed"]
+other = "操作失败"
+
+["recovered"]
+other = "已恢复"

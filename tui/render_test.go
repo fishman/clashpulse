@@ -7,6 +7,7 @@ import (
 
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
+	"github.com/fishman/clashpulse/localize"
 	"github.com/fishman/notmutt/lib/tui/form"
 	"github.com/gdamore/tcell/v3"
 	"github.com/gdamore/tcell/v3/vt"
@@ -175,6 +176,24 @@ func TestRenderHasNoDetailLineAboveStatusBar(t *testing.T) {
 		}
 	}
 }
+func TestMainlandTerminalOverviewAndKeyHelp(t *testing.T) {
+	localize.SetLanguage("zh-CN")
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{ConfigOverrides: []core.ConfigOverrideSnapshot{{Key: "dns.listen", Change: "replaced"}}}})
+	rows := mockRender(t, model, 90, 12)
+	for _, test := range []struct {
+		row  int
+		want string
+	}{{0, "\u6982\u89c8"}, {1, "\u540d\u79f0"}, {2, "Mihomo \u5185\u6838"}} {
+		if !strings.Contains(rows[test.row], test.want) {
+			t.Fatalf("Mainland TUI row %d lacks %q: %q", test.row, test.want, rows[test.row])
+		}
+	}
+	if help := strings.Join(model.helpEntries(), " "); !strings.Contains(help, "\u663e\u793a\u952e\u76d8\u5e2e\u52a9") {
+		t.Fatalf("key help not localized: %q", help)
+	}
+}
+
 func TestRenderStatusIdentifiesConnectionAndActiveProfile(t *testing.T) {
 	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{
 		Subscriptions: []core.SubscriptionSnapshot{{ID: "primary", Name: "Primary", Active: true}},
@@ -245,6 +264,22 @@ func TestRenderLogKeepsBottomStatus(t *testing.T) {
 		if !strings.Contains(rows[size.height-1], "IPC connected") {
 			t.Fatalf("%d-column activity covered connection status: %q", size.width, rows[size.height-1])
 		}
+	}
+}
+
+func TestMainlandSessionLogTranslatesFixedDiagnostics(t *testing.T) {
+	localize.SetLanguage("zh-CN")
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Diagnostics: []core.DiagnosticSnapshot{{At: 100, Severity: "error", Kind: "refresh_subscription", SourceID: "feed", Message: "fetch failed"}}}})
+	model, _, _ = model.HandleKey("~")
+	text := strings.Join(mockRender(t, model, 120, 12), "\n")
+	for _, token := range []string{"\u9519\u8bef", "\u5237\u65b0\u8ba2\u9605", "\u83b7\u53d6\u5931\u8d25", "feed"} {
+		if !strings.Contains(text, token) {
+			t.Fatalf("session log missing %q: %q", token, text)
+		}
+	}
+	if strings.Contains(text, "refresh_subscription") || strings.Contains(text, "fetch failed") {
+		t.Fatalf("fixed diagnostic code remained English: %q", text)
 	}
 }
 

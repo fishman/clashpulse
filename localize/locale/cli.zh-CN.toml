@@ -1,0 +1,170 @@
+["desktop Mihomo proxy manager"]
+other = "桌面 Mihomo 代理管理器"
+
+["print version"]
+other = "显示版本"
+
+["run the desktop GUI"]
+other = "启动桌面界面"
+
+["connect the terminal UI to the desktop service"]
+other = "连接桌面服务的终端界面"
+
+["run a local profile until interrupted"]
+other = "运行本地配置，直到手动停止"
+
+["local profile active; press Ctrl-C to stop"]
+other = "本地配置已启用；按 Ctrl-C 停止"
+
+["local profile file is unavailable or invalid"]
+other = "本地配置文件不可用或无效"
+
+["selected Mihomo binary is incompatible or unavailable"]
+other = "所选 Mihomo 程序不兼容或不可用"
+
+["managed resources could not be validated"]
+other = "托管资源验证失败"
+
+["generated Mihomo configuration was rejected"]
+other = "生成的 Mihomo 配置未通过验证"
+
+["Mihomo process could not start"]
+other = "Mihomo 进程无法启动"
+
+["Mihomo controller did not become ready"]
+other = "Mihomo 控制接口未就绪"
+
+["System Proxy could not be applied"]
+other = "无法设置系统代理"
+
+["system proxy is unsupported in this desktop environment"]
+other = "当前桌面环境不支持系统代理"
+
+["private activation state could not be committed"]
+other = "无法保存本地启用状态"
+
+["activation rollback failed; prior runtime needs attention"]
+other = "回滚失败，请检查之前的运行状态"
+
+["activation failed"]
+other = "启用失败"
+
+[" (resource %s)"]
+other = "（资源 %s）"
+
+["refresh subscriptions and resources, then validate generated config"]
+other = "刷新订阅与资源并验证生成配置"
+
+["print bounded HTTP error response text"]
+other = "打印有大小限制的 HTTP 错误响应"
+
+["download and parse subscription profiles without running Mihomo"]
+other = "仅下载并解析订阅配置，不启动 Mihomo"
+
+["unexpected refresh arguments"]
+other = "刷新命令参数无效"
+
+["download accepts subscription profiles only"]
+other = "仅支持下载订阅配置"
+
+["activate requires one file"]
+other = "启用命令需要一个文件"
+
+["clashpulse: activation is unavailable"]
+other = "ClashPulse：启用功能不可用"
+
+["clashpulse: TUI is unavailable"]
+other = "ClashPulse：终端界面不可用"
+
+["clashpulse: application service is unavailable"]
+other = "ClashPulse：应用服务不可用"
+
+["clashpulse: refresh is unavailable"]
+other = "ClashPulse：刷新功能不可用"
+
+["clashpulse: subscription download is unavailable"]
+other = "ClashPulse：订阅下载不可用"
+
+["too many refresh arguments"]
+other = "刷新命令参数过多"
+
+["too many download arguments"]
+other = "下载命令参数过多"
+
+["refresh all enabled %s sources, or one source by ID"]
+other = "刷新所有已启用的 %s 来源，或按 ID 刷新一个来源"
+
+["download all enabled subscription profiles, or one profile by ID"]
+other = "下载所有已启用的订阅配置，或按 ID 下载一个配置"
+
+["subscription"]
+other = "订阅"
+
+["resource"]
+other = "资源"
+
+["all enabled sources"]
+other = "所有已启用来源"
+
+["all enabled %s sources"]
+other = "所有已启用的 %s 来源"
+
+["refreshed %s"]
+other = "已刷新 %s"
+
+["all enabled subscriptions"]
+other = "所有已启用订阅"
+
+["downloaded %s"]
+other = "已下载 %s"
+
+["%s response body (bounded):"]
+other = "%s 响应正文（已限制大小）："
+
+["<empty>"]
+other = "<空>"
+
+["NAME:"]
+other = "名称："
+
+["USAGE:"]
+other = "用法："
+
+["COMMANDS:"]
+other = "命令："
+
+["GLOBAL OPTIONS:"]
+other = "全局选项："
+
+["OPTIONS:"]
+other = "选项："
+
+["DESCRIPTION:"]
+other = "说明："
+
+["VERSION:"]
+other = "版本："
+
+["CATEGORY:"]
+other = "分类："
+
+["COPYRIGHT:"]
+other = "版权："
+
+["[global options]"]
+other = "[全局选项]"
+
+["[command [command options]]"]
+other = "[命令 [命令选项]]"
+
+["[arguments...]"]
+other = "[参数...]"
+
+["show help"]
+other = "显示帮助"
+
+["Shows a list of commands or help for one command"]
+other = "显示命令列表或指定命令的帮助"
+
+["[options]"]
+other = "[选项]"

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
+	"github.com/fishman/clashpulse/localize"
 	"github.com/fishman/clashpulse/monitor"
 )
 
@@ -20,34 +22,31 @@ type monitorPolicyInput struct {
 	MinImprovementMillis, CooldownSeconds, JitterMillis                string
 }
 
-// The stored value is opaque, so the label carries the whole intent.
-var switchPolicyChoices = []struct{ label, value string }{
-	{"Failover (switch once the selected node fails)", monitor.SwitchFailover},
-	{"Lowest latency (always keep the fastest node)", monitor.SwitchLowestLatency},
-}
+// IDs remain opaque; descriptions live in the locale catalogs.
+var switchPolicyIDs = []string{monitor.SwitchFailover, monitor.SwitchLowestLatency}
 
 func switchPolicyLabel(value string) string {
-	for _, choice := range switchPolicyChoices {
-		if choice.value == value {
-			return choice.label
+	for _, id := range switchPolicyIDs {
+		if id == value {
+			return localize.T("gui.monitor.switch-policy." + id)
 		}
 	}
-	return switchPolicyChoices[0].label
+	return localize.T("gui.monitor.switch-policy." + monitor.SwitchFailover)
 }
 
 func switchPolicyValue(label string) (string, bool) {
-	for _, choice := range switchPolicyChoices {
-		if choice.label == label {
-			return choice.value, true
+	for _, value := range switchPolicyIDs {
+		if switchPolicyLabel(value) == label {
+			return value, true
 		}
 	}
 	return "", false
 }
 
 func switchPolicySelect(current string) *widget.Select {
-	labels := make([]string, 0, len(switchPolicyChoices))
-	for _, choice := range switchPolicyChoices {
-		labels = append(labels, choice.label)
+	labels := make([]string, 0, len(switchPolicyIDs))
+	for _, value := range switchPolicyIDs {
+		labels = append(labels, switchPolicyLabel(value))
 	}
 	selects := widget.NewSelect(labels, nil)
 	selects.SetSelected(switchPolicyLabel(current))
@@ -57,18 +56,18 @@ func switchPolicySelect(current string) *widget.Select {
 func monitorPolicyPatch(input monitorPolicyInput) (*ipc.ConfigPatch, error) {
 	switchPolicy, ok := switchPolicyValue(input.SwitchPolicy)
 	if !ok {
-		return nil, fmt.Errorf("select a switch policy")
+		return nil, errors.New(localize.T("select a switch policy"))
 	}
 
 	rawURL := strings.TrimSpace(input.TestURL)
 	parsed, err := url.Parse(rawURL)
 	if err != nil || strings.ContainsAny(input.TestURL, "\x00\r\n#") || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" || parsed.Opaque != "" {
-		return nil, fmt.Errorf("test URL must use HTTP or HTTPS without credentials or fragment")
+		return nil, errors.New(localize.T("test URL must use HTTP or HTTPS without credentials or fragment"))
 	}
 	parse := func(label, text string, min, max uint64) (*uint32, error) {
 		value, err := strconv.ParseUint(strings.TrimSpace(text), 10, 32)
 		if err != nil || value < min || value > max {
-			return nil, fmt.Errorf("%s must be between %d and %d", label, min, max)
+			return nil, fmt.Errorf(localize.T("%s must be between %d and %d"), localize.T(label), min, max)
 		}
 		result := uint32(value)
 		return &result, nil
@@ -110,22 +109,22 @@ func monitorPolicyPatch(input monitorPolicyInput) (*ipc.ConfigPatch, error) {
 func urlTestDelayLabel(state core.MonitorSnapshot) string {
 	parts := make([]string, 0, 2)
 	if state.URLTestIntervalSeconds > 0 {
-		parts = append(parts, "interval "+(time.Duration(state.URLTestIntervalSeconds)*time.Second).String())
+		parts = append(parts, fmt.Sprintf(localize.T("interval %s"), (time.Duration(state.URLTestIntervalSeconds)*time.Second).String()))
 	}
 	if state.URLTestToleranceMillis > 0 {
-		parts = append(parts, "tolerance "+strconv.FormatInt(state.URLTestToleranceMillis, 10)+" ms")
+		parts = append(parts, fmt.Sprintf(localize.T("tolerance %d ms"), state.URLTestToleranceMillis))
 	}
 	if len(parts) == 0 {
-		return "Profile default"
+		return localize.T("Profile default")
 	}
-	return strings.Join(parts, ", ")
+	return strings.Join(parts, localize.T(", "))
 }
 
 func (p *settingsPage) editURLTestDelay() {
 	state := p.monitorState
 	entry := func(value int64) *widget.Entry {
 		field := widget.NewEntry()
-		field.SetPlaceHolder("Profile default")
+		field.SetPlaceHolder(localize.T("Profile default"))
 		if value > 0 {
 			field.SetText(strconv.FormatInt(value, 10))
 		}
@@ -134,11 +133,11 @@ func (p *settingsPage) editURLTestDelay() {
 	interval := entry(state.URLTestIntervalSeconds)
 	tolerance := entry(state.URLTestToleranceMillis)
 	items := []*widget.FormItem{
-		widget.NewFormItem("Interval (seconds)", interval),
-		widget.NewFormItem("Switch tolerance (ms)", tolerance),
-		widget.NewFormItem("Applies to", widget.NewLabel("url-test and fallback groups in the generated config. A blank field keeps what the profile sets.")),
+		widget.NewFormItem(localize.T("Interval (seconds)"), interval),
+		widget.NewFormItem(localize.T("Switch tolerance (ms)"), tolerance),
+		widget.NewFormItem(localize.T("Applies to"), widget.NewLabel(localize.T("url-test and fallback groups in the generated config. A blank field keeps what the profile sets."))),
 	}
-	dialog.NewForm("Mihomo url-test delay", "Apply", "Cancel", items, func(confirmed bool) {
+	dialog.NewForm(localize.T("Mihomo url-test delay"), localize.T("Apply"), localize.T("Cancel"), items, func(confirmed bool) {
 		if !confirmed {
 			return
 		}
@@ -158,7 +157,7 @@ func urlTestDelayPatch(interval, tolerance string) (*ipc.ConfigPatch, error) {
 	if text := strings.TrimSpace(interval); text != "" {
 		value, err := strconv.ParseUint(text, 10, 32)
 		if err != nil || value < 1 || value > 86400 {
-			return nil, fmt.Errorf("url-test interval must be between 1 and 86400 seconds")
+			return nil, errors.New(localize.T("url-test interval must be between 1 and 86400 seconds"))
 		}
 		seconds := uint32(value)
 		patch.URLTestIntervalSeconds = &seconds
@@ -166,13 +165,13 @@ func urlTestDelayPatch(interval, tolerance string) (*ipc.ConfigPatch, error) {
 	if text := strings.TrimSpace(tolerance); text != "" {
 		value, err := strconv.ParseUint(text, 10, 32)
 		if err != nil || value < 1 || value > 60000 {
-			return nil, fmt.Errorf("url-test switch tolerance must be between 1 and 60000 ms")
+			return nil, errors.New(localize.T("url-test switch tolerance must be between 1 and 60000 ms"))
 		}
 		millis := uint32(value)
 		patch.URLTestToleranceMillis = &millis
 	}
 	if patch.URLTestIntervalSeconds == nil && patch.URLTestToleranceMillis == nil {
-		return nil, fmt.Errorf("enter an interval or a switch tolerance")
+		return nil, errors.New(localize.T("enter an interval or a switch tolerance"))
 	}
 	return patch, nil
 }
@@ -186,21 +185,21 @@ func (p *settingsPage) editMonitorPolicy() {
 		items = append(items, widget.NewFormItem(label, field))
 		return field
 	}
-	testURL := add("Probe URL", state.TestURL)
-	items = append(items, widget.NewFormItem("Warning", widget.NewLabel("Plain HTTP probes can be intercepted; use HTTPS for probe integrity.")))
+	testURL := add(localize.T("Probe URL"), state.TestURL)
+	items = append(items, widget.NewFormItem(localize.T("Warning"), widget.NewLabel(localize.T("Plain HTTP probes can be intercepted; use HTTPS for probe integrity."))))
 	policy := switchPolicySelect(state.SwitchPolicy)
-	items = append(items, widget.NewFormItem("Switch policy", policy))
-	items = append(items, widget.NewFormItem("Note", widget.NewLabel("A switch needs at least three probes of each node and the switch cooldown after one. Lowest latency compares median latencies and requires the required improvement; the unhealthy threshold then no longer gates switching.")))
-	interval := add("Interval (seconds)", strconv.FormatInt(state.IntervalSeconds, 10))
-	timeout := add("Timeout (ms)", strconv.FormatInt(state.TimeoutMillis, 10))
-	concurrency := add("Concurrent probes", strconv.Itoa(state.Concurrency))
-	threshold := add("Unhealthy threshold (ms)", strconv.FormatInt(state.ThresholdMillis, 10))
-	alert := add("Alert threshold (ms)", strconv.FormatInt(state.AlertThresholdMillis, 10))
-	consecutive := add("Consecutive bad samples", strconv.Itoa(state.ConsecutiveBadSamples))
-	improvement := add("Required improvement (ms)", strconv.FormatInt(state.MinImprovementMillis, 10))
-	cooldown := add("Switch cooldown (seconds)", strconv.FormatInt(state.CooldownSeconds, 10))
-	jitter := add("Probe jitter (ms)", strconv.FormatInt(state.JitterMillis, 10))
-	dialog.NewForm("Monitor probe policy", "Apply", "Cancel", items, func(confirmed bool) {
+	items = append(items, widget.NewFormItem(localize.T("Switch policy"), policy))
+	items = append(items, widget.NewFormItem(localize.T("Note"), widget.NewLabel(localize.T("A switch needs at least three probes of each node and the switch cooldown after one. Lowest latency compares median latencies and requires the required improvement; the unhealthy threshold then no longer gates switching."))))
+	interval := add(localize.T("Interval (seconds)"), strconv.FormatInt(state.IntervalSeconds, 10))
+	timeout := add(localize.T("Timeout (ms)"), strconv.FormatInt(state.TimeoutMillis, 10))
+	concurrency := add(localize.T("Concurrent probes"), strconv.Itoa(state.Concurrency))
+	threshold := add(localize.T("Unhealthy threshold (ms)"), strconv.FormatInt(state.ThresholdMillis, 10))
+	alert := add(localize.T("Alert threshold (ms)"), strconv.FormatInt(state.AlertThresholdMillis, 10))
+	consecutive := add(localize.T("Consecutive bad samples"), strconv.Itoa(state.ConsecutiveBadSamples))
+	improvement := add(localize.T("Required improvement (ms)"), strconv.FormatInt(state.MinImprovementMillis, 10))
+	cooldown := add(localize.T("Switch cooldown (seconds)"), strconv.FormatInt(state.CooldownSeconds, 10))
+	jitter := add(localize.T("Probe jitter (ms)"), strconv.FormatInt(state.JitterMillis, 10))
+	dialog.NewForm(localize.T("Monitor probe policy"), localize.T("Apply"), localize.T("Cancel"), items, func(confirmed bool) {
 		if !confirmed {
 			return
 		}

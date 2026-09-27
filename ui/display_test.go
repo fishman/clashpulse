@@ -9,6 +9,7 @@ import (
 	"fyne.io/fyne/v2/test"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/localize"
 )
 
 func TestSourceHostLabelRejectsURLsAndCredentials(t *testing.T) {
@@ -108,6 +109,21 @@ func TestLastSwitchSummaryShowsDecisionEvidence(t *testing.T) {
 		if !strings.Contains(got, piece) {
 			t.Fatalf("switch evidence missing %q: %q", piece, got)
 		}
+	}
+}
+
+func TestMainlandSwitchEvidenceUsesFixedDisplayTranslations(t *testing.T) {
+	localize.SetLanguage("zh-CN")
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	view := core.Snapshot{Switches: []core.SwitchSnapshot{{OldID: "aaaaaaaa11111111", NewID: "bbbbbbbb22222222", Reason: "materially better candidate", Evidence: []core.ProbeSnapshot{{ProxyID: "aaaaaaaa11111111", Outcome: "timeout"}, {ProxyID: "bbbbbbbb22222222", Outcome: "success", LatencyMillis: 180}}}}}
+	text := lastSwitchSummary(view)
+	for _, value := range []string{"\u5019\u9009\u8282\u70b9\u660e\u663e\u66f4\u4f18", "\u8d85\u65f6", "\u6210\u529f"} {
+		if !strings.Contains(text, value) {
+			t.Fatalf("Chinese switch summary lost %q: %q", value, text)
+		}
+	}
+	if strings.Contains(text, "materially better candidate") || strings.Contains(text, "timeout") {
+		t.Fatalf("switch reason or outcome leaked English codes: %q", text)
 	}
 }
 

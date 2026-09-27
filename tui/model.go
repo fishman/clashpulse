@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/fishman/clashpulse/ipc"
+	"github.com/fishman/clashpulse/localize"
 	"github.com/fishman/notmutt/lib/tui/form"
 )
 
@@ -50,19 +51,19 @@ const (
 	ModalDeleteDNS          ModalKind = "delete_dns"
 )
 
-type monitorField uint8
+type monitorField string
 
 const (
-	monitorTestURL monitorField = iota + 1
-	monitorInterval
-	monitorTimeout
-	monitorConcurrency
-	monitorThreshold
-	monitorAlertThreshold
-	monitorBadSamples
-	monitorImprovement
-	monitorCooldown
-	monitorJitter
+	monitorTestURL        monitorField = "test_url"
+	monitorInterval       monitorField = "interval"
+	monitorTimeout        monitorField = "timeout"
+	monitorConcurrency    monitorField = "concurrency"
+	monitorThreshold      monitorField = "threshold"
+	monitorAlertThreshold monitorField = "alert_threshold"
+	monitorBadSamples     monitorField = "bad_samples"
+	monitorImprovement    monitorField = "improvement"
+	monitorCooldown       monitorField = "cooldown"
+	monitorJitter         monitorField = "jitter"
 )
 
 type dnsForm struct{ values [3]string }
@@ -373,7 +374,7 @@ func (m Model) HandleKey(key string) (Model, *ipc.Command, bool) {
 		if row, ok := m.selectedRow(); ok && row.kind == rowSubscription && row.subscriptionID != "" {
 			m.Modal = &Modal{Kind: ModalDeleteSubscription, Input: row.Title, TargetID: row.subscriptionID}
 			m.Focus = FocusModal
-			m.Notice = "Confirm subscription deletion."
+			m.Notice = localize.T("Confirm subscription deletion.")
 			return m, nil, false
 		}
 	case "refresh_filter":
@@ -407,23 +408,23 @@ func (m Model) HandleKey(key string) (Model, *ipc.Command, bool) {
 	case "manual_probe":
 		groupID := m.focusedGroupID()
 		if groupID == "" {
-			m.Notice = "Select a group before requesting a probe."
+			m.Notice = localize.T("Select a group before requesting a probe.")
 			return m, nil, false
 		}
 		if !m.managedSelector(groupID) {
-			m.Notice = "Mihomo manages this group; manual probes are unavailable."
+			m.Notice = localize.T("Mihomo manages this group; manual probes are unavailable.")
 			return m, nil, false
 		}
 		return m, &ipc.Command{Kind: ipc.CommandManualProbe, GroupID: groupID}, false
 	case "toggle_automation":
 		groupID := m.focusedGroupID()
 		if groupID != "" && !m.managedSelector(groupID) {
-			m.Notice = "Mihomo manages this group; automation is unavailable."
+			m.Notice = localize.T("Mihomo manages this group; automation is unavailable.")
 			return m, nil, false
 		}
 		enabled, ok := groupAutomation(m.snapshot, groupID)
 		if !ok {
-			m.Notice = "Select a group before changing automation."
+			m.Notice = localize.T("Select a group before changing automation.")
 			return m, nil, false
 		}
 		return m, &ipc.Command{Kind: ipc.CommandSetAutomation, GroupID: groupID, Automation: &ipc.AutomationSetting{Enabled: !enabled}}, false
@@ -475,7 +476,7 @@ func (m Model) HandleKey(key string) (Model, *ipc.Command, bool) {
 
 func (m Model) CommandQueued() Model {
 	m.Pending++
-	m.Notice = "Sending intent to the application..."
+	m.Notice = localize.T("Sending intent to the application...")
 	return m
 }
 
@@ -485,35 +486,35 @@ func (m Model) CommandResult(queued bool, err error, private ...bool) Model {
 	}
 	if err != nil {
 		if len(private) > 0 && private[0] {
-			m.Notice = "Managed source command failed."
+			m.Notice = localize.T("Managed source command failed.")
 		} else {
-			m.Notice = "Command failed: " + err.Error()
+			m.Notice = localize.T("Command failed: ") + err.Error()
 		}
 	} else if queued {
-		m.Notice = "Intent queued; operation progress appears in Jobs."
+		m.Notice = localize.T("Intent queued; operation progress appears in Jobs.")
 	} else {
-		m.Notice = "Application did not queue the intent."
+		m.Notice = localize.T("Application did not queue the intent.")
 	}
 	return m
 }
 
 func (m Model) QueueFull() Model {
-	m.Notice = "Command queue is full; wait for a pending command to finish."
+	m.Notice = localize.T("Command queue is full; wait for a pending command to finish.")
 	return m
 }
 
 func (m Model) Progress() string {
 	jobs := m.snapshot.Snapshot.Jobs
 	if len(jobs) == 0 {
-		return "Jobs: idle"
+		return localize.T("Jobs: idle")
 	}
 	parts := make([]string, 0, len(jobs))
 	for _, job := range jobs {
-		kind := fallback(job.Kind, "operation")
-		state := fallback(job.State, "pending")
+		kind := fallback(localize.Code("operation", job.Kind), localize.T("operation"))
+		state := fallback(localize.Code("job.state", job.State), localize.T("pending"))
 		parts = append(parts, kind+": "+state)
 	}
-	return "Jobs: " + strings.Join(parts, " | ")
+	return localize.T("Jobs:") + " " + strings.Join(parts, " | ")
 }
 
 func (m Model) handleModalKey(key string) (Model, *ipc.Command, bool) {
@@ -560,14 +561,14 @@ func (m Model) handleModalKey(key string) (Model, *ipc.Command, bool) {
 		if m.Modal.Kind == ModalBinary {
 			value := m.Modal.Input
 			if value != "system" && value != "bundled" && (!filepath.IsAbs(value) || len(value) > 4096 || strings.ContainsAny(value, "\x00\r\n")) {
-				m.Notice = "Select system, bundled, or an absolute executable path."
+				m.Notice = localize.T("Select system, bundled, or an absolute executable path.")
 				return m, nil, false
 			}
 			m.Modal = nil
 			m.Focus = FocusContent
 			return m, configCommand(&ipc.ConfigPatch{Binary: &value}), false
 		}
-		m.Notice = "Unsupported settings dialog."
+		m.Notice = localize.T("Unsupported settings dialog.")
 		return m, nil, false
 	}
 	if m.Modal.Kind == ModalBinary {
@@ -585,38 +586,38 @@ func (m Model) handleModalKey(key string) (Model, *ipc.Command, bool) {
 func (m Model) openMonitorModal(_ monitorField) Model {
 	monitor := m.snapshot.Snapshot.Monitor
 	editor, err := form.New([]form.Field{
-		{ID: "enabled", Label: "Enabled", Kind: form.Toggle, Value: strconv.FormatBool(monitor.Enabled)},
-		{ID: "test_url", Label: "Test URL", Kind: form.Text, Sensitive: true},
-		{ID: "interval", Label: "Interval seconds", Kind: form.Text, Value: strconv.FormatInt(monitor.IntervalSeconds, 10)},
-		{ID: "timeout", Label: "Timeout milliseconds", Kind: form.Text, Value: strconv.FormatInt(monitor.TimeoutMillis, 10)},
-		{ID: "concurrency", Label: "Concurrency", Kind: form.Text, Value: strconv.Itoa(monitor.Concurrency)},
-		{ID: "threshold", Label: "Threshold milliseconds", Kind: form.Text, Value: strconv.FormatInt(monitor.ThresholdMillis, 10)},
-		{ID: "alert_threshold", Label: "Alert threshold milliseconds", Kind: form.Text, Value: strconv.FormatInt(monitor.AlertThresholdMillis, 10)},
-		{ID: "bad_samples", Label: "Consecutive bad samples", Kind: form.Text, Value: strconv.Itoa(monitor.ConsecutiveBadSamples)},
-		{ID: "improvement", Label: "Minimum improvement milliseconds", Kind: form.Text, Value: strconv.FormatInt(monitor.MinImprovementMillis, 10)},
-		{ID: "cooldown", Label: "Cooldown seconds", Kind: form.Text, Value: strconv.FormatInt(monitor.CooldownSeconds, 10)},
-		{ID: "jitter", Label: "Jitter milliseconds", Kind: form.Text, Value: strconv.FormatInt(monitor.JitterMillis, 10)},
+		{ID: "enabled", Label: localize.T("control.enable"), Kind: form.Toggle, Value: strconv.FormatBool(monitor.Enabled)},
+		{ID: "test_url", Label: localize.T("Test URL"), Kind: form.Text, Sensitive: true},
+		{ID: "interval", Label: localize.T("Interval seconds"), Kind: form.Text, Value: strconv.FormatInt(monitor.IntervalSeconds, 10)},
+		{ID: "timeout", Label: localize.T("Timeout milliseconds"), Kind: form.Text, Value: strconv.FormatInt(monitor.TimeoutMillis, 10)},
+		{ID: "concurrency", Label: localize.T("Concurrency"), Kind: form.Text, Value: strconv.Itoa(monitor.Concurrency)},
+		{ID: "threshold", Label: localize.T("Threshold milliseconds"), Kind: form.Text, Value: strconv.FormatInt(monitor.ThresholdMillis, 10)},
+		{ID: "alert_threshold", Label: localize.T("Alert threshold milliseconds"), Kind: form.Text, Value: strconv.FormatInt(monitor.AlertThresholdMillis, 10)},
+		{ID: "bad_samples", Label: localize.T("Consecutive bad samples"), Kind: form.Text, Value: strconv.Itoa(monitor.ConsecutiveBadSamples)},
+		{ID: "improvement", Label: localize.T("Minimum improvement milliseconds"), Kind: form.Text, Value: strconv.FormatInt(monitor.MinImprovementMillis, 10)},
+		{ID: "cooldown", Label: localize.T("Cooldown seconds"), Kind: form.Text, Value: strconv.FormatInt(monitor.CooldownSeconds, 10)},
+		{ID: "jitter", Label: localize.T("Jitter milliseconds"), Kind: form.Text, Value: strconv.FormatInt(monitor.JitterMillis, 10)},
 	})
 	if err != nil {
-		m.Notice = "Monitor settings form unavailable."
+		m.Notice = localize.T("Monitor settings form unavailable.")
 		return m
 	}
 	m.Modal = &Modal{Kind: ModalMonitorSetting, Form: editor}
 	m.Focus = FocusModal
-	m.Notice = "Edit monitor settings; the test URL stays hidden unless changed."
+	m.Notice = localize.T("Edit monitor settings; the test URL stays hidden unless changed.")
 	return m
 }
 
 func monitorSettingPatch(field monitorField, input string) (*ipc.ConfigPatch, string) {
 	if field == monitorTestURL {
 		if input == "" || len(input) > 2048 || strings.ContainsAny(input, "\x00\r\n") {
-			return nil, "Monitor test URL must be 1-2048 bytes without line breaks."
+			return nil, localize.T("Monitor test URL must be 1-2048 bytes without line breaks.")
 		}
 		return &ipc.ConfigPatch{MonitorTestURL: &input}, ""
 	}
 	value, err := strconv.ParseUint(input, 10, 32)
 	if err != nil {
-		return nil, "Enter a whole number within the setting's range."
+		return nil, localize.T("Enter a whole number within the setting's range.")
 	}
 	max := uint64(^uint32(0))
 	min := uint64(1)
@@ -635,7 +636,7 @@ func monitorSettingPatch(field monitorField, input string) (*ipc.ConfigPatch, st
 		min = 0
 	case monitorThreshold, monitorImprovement:
 	default:
-		return nil, "Unsupported monitor setting."
+		return nil, localize.T("Unsupported monitor setting.")
 	}
 	if value < min || value > max {
 		return nil, monitorRangeNotice(field)
@@ -666,28 +667,11 @@ func monitorSettingPatch(field monitorField, input string) (*ipc.ConfigPatch, st
 }
 
 func monitorRangeNotice(field monitorField) string {
-	switch field {
-	case monitorInterval:
-		return "Monitor interval must be between 1 and 86400 seconds."
-	case monitorTimeout:
-		return "Monitor timeout must be between 1 and 86400000 milliseconds."
-	case monitorConcurrency:
-		return "Monitor concurrency must be between 1 and 64."
-	case monitorThreshold:
-		return "Monitor threshold must be between 1 and 4294967295 milliseconds."
-	case monitorAlertThreshold:
-		return "Alert threshold must be between 1 and 60000 milliseconds."
-	case monitorBadSamples:
-		return "Consecutive bad samples must be between 1 and 5."
-	case monitorImprovement:
-		return "Minimum improvement must be between 1 and 4294967295 milliseconds."
-	case monitorCooldown:
-		return "Cooldown must be between 0 and 4294967295 seconds."
-	case monitorJitter:
-		return "Jitter must be between 0 and 4294967295 milliseconds."
-	default:
-		return "Monitor setting is out of range."
+	id := "tui.monitor.range." + string(field)
+	if notice := localize.T(id); notice != id {
+		return notice
 	}
+	return localize.T("Monitor setting is out of range.")
 }
 func monitorFormIntent(modal *Modal) (*ipc.Command, string) {
 	patch := &ipc.ConfigPatch{}
@@ -695,7 +679,7 @@ func monitorFormIntent(modal *Modal) (*ipc.Command, string) {
 		switch change.ID {
 		case "enabled":
 			if change.Value != "true" && change.Value != "false" {
-				return nil, "Monitor enabled must be true or false."
+				return nil, localize.T("Monitor enabled must be true or false.")
 			}
 			patch.MonitorEnabled = new(change.Value == "true")
 		case "test_url":
@@ -705,33 +689,11 @@ func monitorFormIntent(modal *Modal) (*ipc.Command, string) {
 			}
 			parsed, err := url.Parse(change.Value)
 			if err != nil || strings.ContainsAny(change.Value, "\x00\r\n#") || parsed.User != nil || parsed.Fragment != "" || parsed.Opaque != "" || parsed.Host == "" || parsed.Scheme != "http" && parsed.Scheme != "https" {
-				return nil, "Monitor test URL must use HTTP or HTTPS without credentials or fragment."
+				return nil, localize.T("Monitor test URL must use HTTP or HTTPS without credentials or fragment.")
 			}
 			patch.MonitorTestURL = setting.MonitorTestURL
 		default:
-			field := monitorField(0)
-			switch change.ID {
-			case "interval":
-				field = monitorInterval
-			case "timeout":
-				field = monitorTimeout
-			case "concurrency":
-				field = monitorConcurrency
-			case "threshold":
-				field = monitorThreshold
-			case "alert_threshold":
-				field = monitorAlertThreshold
-			case "bad_samples":
-				field = monitorBadSamples
-			case "improvement":
-				field = monitorImprovement
-			case "cooldown":
-				field = monitorCooldown
-			case "jitter":
-				field = monitorJitter
-			default:
-				return nil, "Unsupported monitor setting."
-			}
+			field := monitorField(change.ID)
 			setting, notice := monitorSettingPatch(field, change.Value)
 			if notice != "" {
 				return nil, notice
@@ -767,7 +729,7 @@ func monitorFormIntent(modal *Modal) (*ipc.Command, string) {
 func (m Model) openDNSListenModal() Model {
 	m.Modal = &Modal{Kind: ModalDNSListen, Input: m.snapshot.Snapshot.DNS.Listen}
 	m.Focus = FocusModal
-	m.Notice = "Edit the DNS listener; backend validates address and routing conflicts."
+	m.Notice = localize.T("Edit the DNS listener; backend validates address and routing conflicts.")
 	return m
 }
 
@@ -783,7 +745,7 @@ func (m Model) handleDNSListenKey(key string) (Model, *ipc.Command, bool) {
 	}
 	if key == "enter" {
 		if len(modal.Input) == 0 || len(modal.Input) > 128 || strings.ContainsAny(modal.Input, "\x00\r\n") {
-			m.Notice = "DNS listener must be 1-128 bytes without line breaks."
+			m.Notice = localize.T("DNS listener must be 1-128 bytes without line breaks.")
 			return m, nil, false
 		}
 		m.Modal = nil
@@ -799,7 +761,7 @@ func (m Model) handleDNSListenKey(key string) (Model, *ipc.Command, bool) {
 
 func (m Model) openDNSResolverModal(edit bool, targetID string) Model {
 	if !edit && len(m.snapshot.Snapshot.DNS.ResolverSets) >= 256 {
-		m.Notice = "DNS policy already has 256 resolver sets."
+		m.Notice = localize.T("DNS policy already has 256 resolver sets.")
 		return m
 	}
 	id, dnscrypt := "", false
@@ -812,28 +774,28 @@ func (m Model) openDNSResolverModal(edit bool, targetID string) Model {
 			}
 		}
 		if !found {
-			m.Notice = "DNS resolver set is no longer available."
+			m.Notice = localize.T("DNS resolver set is no longer available.")
 			return m
 		}
 	}
 	editor, err := form.New([]form.Field{
-		{ID: "id", Label: "Stable ID", Kind: form.Text, Value: id},
-		{ID: "endpoints", Label: "Endpoints", Kind: form.Text, Sensitive: true},
-		{ID: "dnscrypt", Label: "DNSCrypt", Kind: form.Toggle, Value: strconv.FormatBool(dnscrypt)},
+		{ID: "id", Label: localize.T("Stable ID"), Kind: form.Text, Value: id},
+		{ID: "endpoints", Label: localize.T("Endpoints"), Kind: form.Text, Sensitive: true},
+		{ID: "dnscrypt", Label: localize.T("DNSCrypt"), Kind: form.Toggle, Value: strconv.FormatBool(dnscrypt)},
 	})
 	if err != nil {
-		m.Notice = "DNS resolver form unavailable."
+		m.Notice = localize.T("DNS resolver form unavailable.")
 		return m
 	}
 	m.Modal = &Modal{Kind: ModalDNSResolver, TargetID: targetID, Form: editor}
 	m.Focus = FocusModal
-	m.Notice = "Endpoints accept 1-16 comma-separated values; credentials are not allowed."
+	m.Notice = localize.T("Endpoints accept 1-16 comma-separated values; credentials are not allowed.")
 	return m
 }
 
 func (m Model) openDNSRouteModal(edit bool, targetID string) Model {
 	if !edit && len(m.snapshot.Snapshot.DNS.Routes) >= 1024 {
-		m.Notice = "DNS policy already has 1024 routes."
+		m.Notice = localize.T("DNS policy already has 1024 routes.")
 		return m
 	}
 	matcher, value, resolver := "suffix", "", ""
@@ -847,22 +809,22 @@ func (m Model) openDNSRouteModal(edit bool, targetID string) Model {
 			}
 		}
 		if !found {
-			m.Notice = "DNS route is no longer available."
+			m.Notice = localize.T("DNS route is no longer available.")
 			return m
 		}
 	}
 	editor, err := form.New([]form.Field{
-		{ID: "matcher", Label: "Matcher", Kind: form.Choice, Value: matcher, Choices: []string{"suffix", "geosite", "resource"}},
-		{ID: "value", Label: "Matcher value", Kind: form.Text, Value: value},
-		{ID: "resolver", Label: "Resolver set ID", Kind: form.Text, Value: resolver},
+		{ID: "matcher", Label: localize.T("Matcher"), Kind: form.Choice, Value: matcher, Choices: []string{"suffix", "geosite", "resource"}},
+		{ID: "value", Label: localize.T("Matcher value"), Kind: form.Text, Value: value},
+		{ID: "resolver", Label: localize.T("Resolver set ID"), Kind: form.Text, Value: resolver},
 	})
 	if err != nil {
-		m.Notice = "DNS route form unavailable."
+		m.Notice = localize.T("DNS route form unavailable.")
 		return m
 	}
 	m.Modal = &Modal{Kind: ModalDNSRoute, TargetID: targetID, Form: editor}
 	m.Focus = FocusModal
-	m.Notice = "Choose a suffix, GeoSite, or resource matcher."
+	m.Notice = localize.T("Choose a suffix, GeoSite, or resource matcher.")
 	return m
 }
 
@@ -883,7 +845,7 @@ func (m Model) dnsFormIntent(modal *Modal) (*ipc.Command, string) {
 				}
 			}
 			if index < 0 {
-				return nil, "DNS resolver set is no longer available."
+				return nil, localize.T("DNS resolver set is no longer available.")
 			}
 		}
 		endpointsChanged := false
@@ -899,24 +861,24 @@ func (m Model) dnsFormIntent(modal *Modal) (*ipc.Command, string) {
 				set.Endpoints, endpointsChanged = endpoints, true
 			case "dnscrypt":
 				if change.Value != "true" && change.Value != "false" {
-					return nil, "DNSCrypt must be enabled or disabled."
+					return nil, localize.T("DNSCrypt must be enabled or disabled.")
 				}
 				set.DNSCrypt = change.Value == "true"
 			}
 		}
 		if !editing && !endpointsChanged {
-			return nil, "Enter between 1 and 16 DNS endpoints."
+			return nil, localize.T("Enter between 1 and 16 DNS endpoints.")
 		}
 		if !validSubscriptionID(set.ID) {
-			return nil, "Resolver ID must be a stable ID (max 64 characters)."
+			return nil, localize.T("Resolver ID must be a stable ID (max 64 characters).")
 		}
 		sets, routes := m.dnsResolverSets(), m.dnsRoutes()
 		if !editing && len(sets) >= 256 {
-			return nil, "DNS policy reached its command limit."
+			return nil, localize.T("DNS policy reached its command limit.")
 		}
 		for i, existing := range sets {
 			if existing.ID == set.ID && i != index {
-				return nil, "Resolver ID already exists."
+				return nil, localize.T("Resolver ID already exists.")
 			}
 		}
 		if editing {
@@ -948,7 +910,7 @@ func (m Model) dnsFormIntent(modal *Modal) (*ipc.Command, string) {
 			}
 		}
 		if index < 0 {
-			return nil, "DNS route is no longer available."
+			return nil, localize.T("DNS route is no longer available.")
 		}
 	}
 	for _, change := range changes {
@@ -967,12 +929,12 @@ func (m Model) dnsFormIntent(modal *Modal) (*ipc.Command, string) {
 		}
 	}
 	if !editing && len(routes) >= 1024 {
-		return nil, "DNS policy reached its command limit."
+		return nil, localize.T("DNS policy reached its command limit.")
 	}
 	route := routeFromDNSForm(form)
 	for i, existing := range routes {
 		if dnsRouteID(existing) == dnsRouteID(route) && (!editing || dnsRouteID(existing) != modal.TargetID) {
-			return nil, "DNS route matcher already exists."
+			return nil, localize.T("DNS route matcher already exists.")
 		}
 		if editing && dnsRouteID(existing) == modal.TargetID {
 			index = i
@@ -980,7 +942,7 @@ func (m Model) dnsFormIntent(modal *Modal) (*ipc.Command, string) {
 	}
 	if editing {
 		if index < 0 {
-			return nil, "DNS route is no longer available."
+			return nil, localize.T("DNS route is no longer available.")
 		}
 		routes[index] = route
 	} else {
@@ -1015,7 +977,7 @@ func (m Model) deleteSelectedDNS() Model {
 	}
 	m.Modal = &Modal{Kind: ModalDeleteDNS, TargetID: targetID, Input: row.Title}
 	m.Focus = FocusModal
-	m.Notice = "Confirm DNS policy removal."
+	m.Notice = localize.T("Confirm DNS policy removal.")
 	return m
 }
 
@@ -1024,7 +986,7 @@ func validateDNSRouteForm(form dnsForm, field int) string {
 	switch field {
 	case dnsRouteMatcher:
 		if value != "suffix" && value != "geosite" && value != "resource" {
-			return "Matcher must be suffix, geosite, or resource."
+			return localize.T("Matcher must be suffix, geosite, or resource.")
 		}
 	case dnsRouteValue:
 		max := 253
@@ -1032,14 +994,14 @@ func validateDNSRouteForm(form dnsForm, field int) string {
 			max = 64
 		}
 		if value == "" || len(value) > max || strings.ContainsAny(value, "\x00\r\n") {
-			return fmt.Sprintf("Matcher value must be 1-%d bytes.", max)
+			return fmt.Sprintf(localize.T("Matcher value must be 1-%d bytes."), max)
 		}
 		if form.values[dnsRouteMatcher] == "resource" && !validSubscriptionID(value) {
-			return "Resource matcher must be a stable resource ID."
+			return localize.T("Resource matcher must be a stable resource ID.")
 		}
 	case dnsRouteResolver:
 		if !validSubscriptionID(value) {
-			return "Resolver set must be a stable ID."
+			return localize.T("Resolver set must be a stable ID.")
 		}
 	}
 	return ""
@@ -1048,13 +1010,13 @@ func validateDNSRouteForm(form dnsForm, field int) string {
 func parseDNSEndpoints(value string) ([]string, error) {
 	parts := strings.Split(value, ",")
 	if value == "" || len(parts) > 16 {
-		return nil, fmt.Errorf("Enter between 1 and 16 DNS endpoints.")
+		return nil, fmt.Errorf("%s", localize.T("Enter between 1 and 16 DNS endpoints."))
 	}
 	endpoints := make([]string, 0, len(parts))
 	for _, part := range parts {
 		endpoint := strings.TrimSpace(part)
 		if endpoint == "" || len(endpoint) > 256 || strings.ContainsAny(endpoint, "\x00\r\n") || strings.ContainsRune(endpoint, '@') {
-			return nil, fmt.Errorf("DNS endpoints must be 1-256 bytes and cannot contain credentials.")
+			return nil, fmt.Errorf("%s", localize.T("DNS endpoints must be 1-256 bytes and cannot contain credentials."))
 		}
 		endpoints = append(endpoints, endpoint)
 	}
@@ -1139,7 +1101,7 @@ func (m Model) removeDNSIntent(targetID string) (Model, *ipc.Command, bool) {
 		}
 	}
 	if !removed {
-		m.Notice = "DNS policy entry is no longer available."
+		m.Notice = localize.T("DNS policy entry is no longer available.")
 		return m, nil, false
 	}
 	return m, dnsRoutingCommand(sets, routes), false
@@ -1147,9 +1109,9 @@ func (m Model) removeDNSIntent(targetID string) (Model, *ipc.Command, bool) {
 
 func yesNo(value bool) string {
 	if value {
-		return "yes"
+		return localize.T("yes")
 	}
-	return "no"
+	return localize.T("no")
 }
 func (m Model) openSubscriptionModal(edit bool, targetID string) Model {
 	name, route, enabled, refresh, timeout := "", "direct", true, uint32(43200), uint32(30)
@@ -1172,24 +1134,24 @@ func (m Model) openSubscriptionModal(edit bool, targetID string) Model {
 			}
 		}
 		if !found {
-			m.Notice = "Subscription is no longer available."
+			m.Notice = localize.T("Subscription is no longer available.")
 			return m
 		}
 	}
 	editor, err := form.New([]form.Field{
-		{ID: "id", Label: "Stable ID", Kind: form.Text, Value: targetID, ReadOnly: edit},
-		{ID: "name", Label: "Display name", Kind: form.Text, Value: name},
-		{ID: "url", Label: "Source URL", Kind: form.Text, Sensitive: true},
-		{ID: "user_agent", Label: "User-Agent", Kind: form.Text, Sensitive: true},
-		{ID: "enabled", Label: "Enabled", Kind: form.Toggle, Value: strconv.FormatBool(enabled)},
-		{ID: "refresh_interval", Label: "Refresh seconds", Kind: form.Text, Value: strconv.FormatUint(uint64(refresh), 10)},
-		{ID: "timeout", Label: "Timeout seconds", Kind: form.Text, Value: strconv.FormatUint(uint64(timeout), 10)},
-		{ID: "route", Label: "Connection route", Kind: form.Choice, Value: route, Choices: []string{"direct", "system_proxy", "mihomo_proxy"}},
-		{ID: "allow_http", Label: "Allow HTTP", Kind: form.Toggle, Value: strconv.FormatBool(allowHTTP)},
-		{ID: "allow_invalid_tls", Label: "Allow invalid TLS", Kind: form.Toggle, Value: strconv.FormatBool(allowInvalidTLS)},
+		{ID: "id", Label: localize.T("Stable ID"), Kind: form.Text, Value: targetID, ReadOnly: edit},
+		{ID: "name", Label: localize.T("Display name"), Kind: form.Text, Value: name},
+		{ID: "url", Label: localize.T("Source URL"), Kind: form.Text, Sensitive: true},
+		{ID: "user_agent", Label: localize.T("User-Agent"), Kind: form.Text, Sensitive: true},
+		{ID: "enabled", Label: localize.T("control.enable"), Kind: form.Toggle, Value: strconv.FormatBool(enabled)},
+		{ID: "refresh_interval", Label: localize.T("Refresh seconds"), Kind: form.Text, Value: strconv.FormatUint(uint64(refresh), 10)},
+		{ID: "timeout", Label: localize.T("Timeout seconds"), Kind: form.Text, Value: strconv.FormatUint(uint64(timeout), 10)},
+		{ID: "route", Label: localize.T("Connection route"), Kind: form.Choice, Value: route, Choices: []string{"direct", "system_proxy", "mihomo_proxy"}},
+		{ID: "allow_http", Label: localize.T("Allow HTTP"), Kind: form.Toggle, Value: strconv.FormatBool(allowHTTP)},
+		{ID: "allow_invalid_tls", Label: localize.T("Allow invalid TLS"), Kind: form.Toggle, Value: strconv.FormatBool(allowInvalidTLS)},
 	})
 	if err != nil {
-		m.Notice = "Subscription settings unavailable."
+		m.Notice = localize.T("Subscription settings unavailable.")
 		return m
 	}
 	if edit {
@@ -1197,7 +1159,7 @@ func (m Model) openSubscriptionModal(edit bool, targetID string) Model {
 	}
 	m.Modal = &Modal{Kind: ModalSubscription, TargetID: targetID, Form: editor}
 	m.Focus = FocusModal
-	m.Notice = "Edit fields, then Ctrl+S to save; private fields stay hidden."
+	m.Notice = localize.T("Edit fields, then Ctrl+S to save; private fields stay hidden.")
 	return m
 }
 
@@ -1207,7 +1169,7 @@ func (m Model) handleFormKey(key string) (Model, *ipc.Command, bool) {
 	if !ok {
 		if utf8.ValidString(key) && utf8.RuneCountInString(key) == 1 && unicode.IsPrint([]rune(key)[0]) {
 			if !editor.Insert(key) {
-				m.Notice = "Selected field does not accept this input."
+				m.Notice = localize.T("Selected field does not accept this input.")
 			}
 		}
 		return m, nil, false
@@ -1254,7 +1216,7 @@ func (m Model) handleFormKey(key string) (Model, *ipc.Command, bool) {
 		case ModalDNSResolver, ModalDNSRoute:
 			command, notice = m.dnsFormIntent(m.Modal)
 		default:
-			notice = "This configuration form is unavailable."
+			notice = localize.T("This configuration form is unavailable.")
 		}
 		if notice != "" {
 			m.Notice = notice
@@ -1287,12 +1249,12 @@ func subscriptionFormIntent(modal *Modal) (*ipc.Command, string) {
 				value = ""
 			}
 			if len(value) > 128 {
-				return nil, "Display name must be at most 128 bytes."
+				return nil, localize.T("Display name must be at most 128 bytes.")
 			}
 			patch.Name = &value
 		case "url":
 			if value == "" || value == "-" {
-				return nil, "A source URL is required."
+				return nil, localize.T("A source URL is required.")
 			}
 			patch.URL = &value
 		case "user_agent":
@@ -1300,11 +1262,11 @@ func subscriptionFormIntent(modal *Modal) (*ipc.Command, string) {
 				value = ""
 			}
 			if len(value) > 256 {
-				return nil, "User-Agent must be printable ASCII at most 256 bytes."
+				return nil, localize.T("User-Agent must be printable ASCII at most 256 bytes.")
 			}
 			for _, r := range value {
 				if r < 0x20 || r > 0x7e {
-					return nil, "User-Agent must be printable ASCII at most 256 bytes."
+					return nil, localize.T("User-Agent must be printable ASCII at most 256 bytes.")
 				}
 			}
 			patch.UserAgent = &value
@@ -1314,20 +1276,20 @@ func subscriptionFormIntent(modal *Modal) (*ipc.Command, string) {
 		case "refresh_interval":
 			v, err := strconv.ParseUint(value, 10, 32)
 			if err != nil || v < 60 || v > 86400*30 {
-				return nil, "Refresh interval must be between 60 and 2592000 seconds."
+				return nil, localize.T("Refresh interval must be between 60 and 2592000 seconds.")
 			}
 			n := uint32(v)
 			patch.RefreshIntervalSeconds = &n
 		case "timeout":
 			v, err := strconv.ParseUint(value, 10, 32)
 			if err != nil || v < 1 || v > 300 {
-				return nil, "Timeout must be between 1 and 300 seconds."
+				return nil, localize.T("Timeout must be between 1 and 300 seconds.")
 			}
 			n := uint32(v)
 			patch.TimeoutSeconds = &n
 		case "route":
 			if value != "direct" && value != "system_proxy" && value != "mihomo_proxy" {
-				return nil, "Choose direct, system_proxy, or mihomo_proxy."
+				return nil, localize.T("Choose direct, system_proxy, or mihomo_proxy.")
 			}
 			patch.Route = &value
 		case "allow_http":
@@ -1340,10 +1302,10 @@ func subscriptionFormIntent(modal *Modal) (*ipc.Command, string) {
 	}
 	if creating {
 		if !validSubscriptionID(id) {
-			return nil, "A stable subscription ID is required."
+			return nil, localize.T("A stable subscription ID is required.")
 		}
 		if patch.URL == nil {
-			return nil, "A source URL is required."
+			return nil, localize.T("A source URL is required.")
 		}
 		if patch.Enabled == nil {
 			enabled := true
@@ -1390,23 +1352,21 @@ func asciiAlphaNumeric(c byte) bool {
 func (m Model) openModal(kind ModalKind) Model {
 	m.Modal = &Modal{Kind: kind}
 	m.Focus = FocusModal
-	m.Notice = "Enter " + modalPrompt(kind) + "."
+	id := "tui.modal.notice." + string(kind)
+	if notice := localize.T(id); notice != id {
+		m.Notice = notice
+	} else {
+		m.Notice = localize.T("Enter Unsupported dialog.")
+	}
 	return m
 }
 
 func modalPrompt(kind ModalKind) string {
-	switch kind {
-	case ModalBinary:
-		return "system, bundled, or an absolute executable path"
-	case ModalDeleteSubscription:
-		return "confirm subscription deletion"
-	case ModalDeleteDNS:
-		return "confirm DNS policy removal"
-	case ModalDNSListen:
-		return "DNS listener address"
-	default:
-		return "Unsupported dialog"
+	id := "tui.modal.prompt." + string(kind)
+	if prompt := localize.T(id); prompt != id {
+		return prompt
 	}
+	return localize.T("Unsupported dialog")
 }
 
 func (m Model) selectTab(tab Tab) Model {
@@ -1452,10 +1412,10 @@ func (m Model) activate() (Model, *ipc.Command, bool) {
 	switch row.kind {
 	case rowGroup:
 		m.groupID = row.groupID
-		m.Notice = "Focused group " + row.groupID + "."
+		m.Notice = localize.T("Focused group ") + row.groupID + "."
 	case rowProxy:
 		if !m.managedSelector(row.groupID) {
-			m.Notice = "Mihomo selects members of this group."
+			m.Notice = localize.T("Mihomo selects members of this group.")
 			return m, nil, false
 		}
 		return m, &ipc.Command{Kind: ipc.CommandSelectGroup, GroupID: row.groupID, ChoiceID: row.choiceID}, false
@@ -1517,11 +1477,11 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 	snapshot := event.Snapshot
 	switch tab {
 	case TabOverview:
-		rows := []Row{{ID: "binary", Title: "Mihomo binary", Detail: binaryDetail(snapshot.Binary.Desired, snapshot.Binary.ObservedVersion, snapshot.Binary.LastCompatibilityFailure, snapshot.Binary.Capabilities)}}
+		rows := []Row{{ID: "binary", Title: localize.T("Mihomo binary"), Detail: binaryDetail(snapshot.Binary.Desired, snapshot.Binary.ObservedVersion, snapshot.Binary.LastCompatibilityFailure, snapshot.Binary.Capabilities)}}
 		if len(snapshot.ConfigOverrides) == 0 {
-			rows = append(rows, Row{ID: "override:summary", Title: "Generated config changes", Detail: "No managed overrides"})
+			rows = append(rows, Row{ID: "override:summary", Title: localize.T("Generated config changes"), Detail: localize.T("No managed overrides")})
 		} else {
-			rows = append(rows, Row{ID: "override:summary", Title: "Generated config changes", Detail: "App-owned fields in effective config"})
+			rows = append(rows, Row{ID: "override:summary", Title: localize.T("Generated config changes"), Detail: localize.T("App-owned fields in effective config")})
 			for _, override := range snapshot.ConfigOverrides {
 				if !override.Valid() {
 					continue
@@ -1533,16 +1493,16 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 			switchEvent := snapshot.Switches[len(snapshot.Switches)-1]
 			measurements := make([]string, 0, len(switchEvent.Evidence))
 			for _, sample := range switchEvent.Evidence {
-				measurements = append(measurements, fmt.Sprintf("%s %s %dms", shortProxyID(sample.ProxyID), sample.Outcome, sample.LatencyMillis))
+				measurements = append(measurements, fmt.Sprintf("%s %s %dms", shortProxyID(sample.ProxyID), localize.Code("probe.outcome", sample.Outcome), sample.LatencyMillis))
 			}
-			rows = append(rows, Row{ID: "switch:last", Title: "Last automatic switch", Detail: fmt.Sprintf("%s -> %s: %s [%s]", shortProxyID(switchEvent.OldID), shortProxyID(switchEvent.NewID), switchEvent.Reason, strings.Join(measurements, "; "))})
+			rows = append(rows, Row{ID: "switch:last", Title: localize.T("Last automatic switch"), Detail: fmt.Sprintf("%s -> %s: %s [%s]", shortProxyID(switchEvent.OldID), shortProxyID(switchEvent.NewID), localize.T(switchEvent.Reason), strings.Join(measurements, "; "))})
 		}
 		for _, job := range snapshot.Jobs {
 			id := job.ID
 			if id == "" {
 				id = job.Kind + ":" + job.State
 			}
-			rows = append(rows, Row{ID: "job:" + id, Title: fallback(job.Kind, "Operation"), Detail: fallback(job.State, "pending")})
+			rows = append(rows, Row{ID: "job:" + id, Title: fallback(localize.Code("operation", job.Kind), localize.T("Operation")), Detail: fallback(localize.Code("job.state", job.State), localize.T("pending"))})
 		}
 		for _, issue := range snapshot.Errors {
 			id := strings.Join([]string{issue.Kind, issue.SourceID, issue.File, issue.Key}, "\x00")
@@ -1559,12 +1519,12 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 		for _, proxy := range snapshot.Proxies {
 			key := proxy.GroupID + "\x00" + proxy.ID
 			info := struct{ label, detail, outcome, latency string }{
-				label: proxy.Label, detail: proxyDetail(proxy.LatencyMillis, proxy.Outcome), outcome: proxy.Outcome,
+				label: proxy.Label, detail: proxyDetail(proxy.LatencyMillis, proxy.Outcome), outcome: localize.Code("probe.outcome", proxy.Outcome),
 			}
 			if proxy.LatencyMillis > 0 && proxy.Outcome == "success" {
-				info.latency = fmt.Sprintf("%d ms", proxy.LatencyMillis)
+				info.latency = fmt.Sprintf("%d %s", proxy.LatencyMillis, localize.T("ms"))
 			} else if proxy.MihomoMillis > 0 {
-				info.latency = fmt.Sprintf("%d ms (mihomo)", proxy.MihomoMillis)
+				info.latency = fmt.Sprintf("%d %s (mihomo)", proxy.MihomoMillis, localize.T("ms"))
 			}
 			proxyInfo[key] = info
 		}
@@ -1574,12 +1534,12 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 			detail := group.Type
 			if group.Selected != "" {
 				selectedLabel := fallback(proxyInfo[group.ID+"\x00"+group.Selected].label, group.Selected)
-				detail = appendDetail(detail, "selected "+selectedLabel)
+				detail = appendDetail(detail, localize.T("selected ")+selectedLabel)
 			}
 			if group.AutomationEnabled {
-				detail = appendDetail(detail, "automation on")
+				detail = appendDetail(detail, localize.T("automation on"))
 			} else {
-				detail = appendDetail(detail, "automation off")
+				detail = appendDetail(detail, localize.T("automation off"))
 			}
 			rows = append(rows, Row{ID: "group:" + group.ID, Title: groupName, Detail: detail,
 				Cells: []string{groupName, groupName, fallback(proxyInfo[group.ID+"\x00"+group.Selected].label, group.Selected), "", "", automation},
@@ -1589,12 +1549,12 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 				info := proxyInfo[proxyKey]
 				proxyDetailText := info.detail
 				if proxyID == group.Selected {
-					proxyDetailText = appendDetail("active", proxyDetailText)
+					proxyDetailText = appendDetail(localize.T("active"), proxyDetailText)
 				}
 				proxyTitle := fallback(info.label, proxyID)
 				selected := ""
 				if proxyID == group.Selected {
-					selected = "yes"
+					selected = localize.T("yes")
 				}
 				rows = append(rows, Row{ID: "proxy:" + group.ID + ":" + proxyID, Title: "  " + proxyTitle, Detail: proxyDetailText,
 					Cells: []string{groupName, proxyTitle, selected, info.latency, info.outcome, automation},
@@ -1607,40 +1567,40 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 		for _, subscription := range snapshot.Subscriptions {
 			state := enabledLabel(subscription.Enabled)
 			if subscription.Active {
-				state = "active"
+				state = localize.T("active")
 			}
 			checked, next, usage := "", "", ""
 			// The status line holds only what no column shows; source, state,
 			// check time, next run and usage are already cells.
 			detail := ""
 			if subscription.Active && subscription.PendingActivation {
-				detail = appendDetail(detail, "update ready")
+				detail = appendDetail(detail, localize.T("update ready"))
 			}
 			if subscription.LastCheck > 0 {
 				checked = timeLabel(subscription.LastCheck)
 			}
 			if subscription.LastSuccess > 0 && subscription.LastSuccess != subscription.LastCheck {
-				detail = appendDetail(detail, "last success "+timeLabel(subscription.LastSuccess))
+				detail = appendDetail(detail, localize.T("last success ")+timeLabel(subscription.LastSuccess))
 			}
 			if subscription.NextDue > 0 {
 				next = timeLabel(subscription.NextDue)
 			}
 			if subscription.HashPrefix != "" {
-				detail = appendDetail(detail, "hash "+subscription.HashPrefix)
+				detail = appendDetail(detail, localize.T("hash ")+subscription.HashPrefix)
 			}
 			if subscription.AppliedHashPrefix != "" {
-				detail = appendDetail(detail, "applied "+subscription.AppliedHashPrefix)
+				detail = appendDetail(detail, localize.T("applied ")+subscription.AppliedHashPrefix)
 			}
 			if subscription.LastFailure != "" {
-				detail = appendDetail(detail, "needs attention")
+				detail = appendDetail(detail, localize.T("needs attention"))
 			}
 			if subscription.Usage != nil {
-				usage = fmt.Sprintf("%d up %d down", subscription.Usage.UploadedBytes, subscription.Usage.DownloadedBytes)
+				usage = fmt.Sprintf(localize.T("%d up %d down"), subscription.Usage.UploadedBytes, subscription.Usage.DownloadedBytes)
 				if subscription.Usage.TotalBytes > 0 {
-					detail = appendDetail(detail, fmt.Sprintf("total %d bytes", subscription.Usage.TotalBytes))
+					detail = appendDetail(detail, fmt.Sprintf(localize.T("total %d bytes"), subscription.Usage.TotalBytes))
 				}
 				if subscription.Usage.ExpiresAt > 0 {
-					detail = appendDetail(detail, "expires "+timeLabel(subscription.Usage.ExpiresAt))
+					detail = appendDetail(detail, localize.T("expires ")+timeLabel(subscription.Usage.ExpiresAt))
 				}
 			}
 			rows = append(rows, Row{ID: "subscription:" + subscription.ID, Title: fallback(subscription.Name, subscription.ID), Detail: detail,
@@ -1652,27 +1612,27 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 		rows := make([]Row, 0, len(snapshot.Filters))
 		for _, filter := range snapshot.Filters {
 			validated, next := yesNo(filter.Validated), ""
-			detail := appendDetail("resource "+filter.ResourceID, "format "+filter.Format)
-			detail = appendDetail(detail, "target "+filter.Target)
+			detail := appendDetail(localize.T("resource")+" "+filter.ResourceID, localize.T("format ")+filter.Format)
+			detail = appendDetail(detail, localize.T("target ")+filter.Target)
 			detail = appendDetail(detail, appendDetail(filter.SourceHost, enabledLabel(filter.Enabled)))
 			if filter.Validated {
-				detail = appendDetail(detail, "validated")
+				detail = appendDetail(detail, localize.T("validated"))
 			}
 			if filter.HashPrefix != "" {
-				detail = appendDetail(detail, "hash "+filter.HashPrefix)
+				detail = appendDetail(detail, localize.T("hash ")+filter.HashPrefix)
 			}
 			if filter.Destination != "" {
-				detail = appendDetail(detail, "provider "+filter.Destination)
+				detail = appendDetail(detail, localize.T("provider ")+filter.Destination)
 			}
 			if filter.LastSuccess > 0 {
-				detail = appendDetail(detail, "success "+timeLabel(filter.LastSuccess))
+				detail = appendDetail(detail, localize.T("success ")+timeLabel(filter.LastSuccess))
 			}
 			if filter.NextDue > 0 {
 				next = timeLabel(filter.NextDue)
-				detail = appendDetail(detail, "next "+next)
+				detail = appendDetail(detail, localize.T("next ")+next)
 			}
 			if filter.LastFailure != "" {
-				detail = appendDetail(detail, "needs attention")
+				detail = appendDetail(detail, localize.T("needs attention"))
 			}
 			rows = append(rows, Row{ID: "filter:" + filter.ID, Title: filter.ID, Detail: detail,
 				Cells: []string{filter.ID, filter.Format, filter.Target, filter.SourceHost, enabledLabel(filter.Enabled), validated, next},
@@ -1693,18 +1653,18 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 		return rows
 	case TabSettings:
 		monitor := snapshot.Monitor
-		binaryDetail := fmt.Sprintf("Desired %s; observed %s; capabilities %s",
-			fallback(snapshot.Binary.Desired, "unspecified"), fallback(snapshot.Binary.ObservedVersion, "unknown"),
-			fallback(strings.Join(snapshot.Binary.Capabilities, ", "), "none verified"))
+		binaryDetail := fmt.Sprintf(localize.T("Desired %s; observed %s; capabilities %s"),
+			fallback(snapshot.Binary.Desired, localize.T("unspecified")), fallback(snapshot.Binary.ObservedVersion, localize.T("unknown")),
+			fallback(strings.Join(snapshot.Binary.Capabilities, ", "), localize.T("none verified")))
 		if snapshot.Binary.LastCompatibilityFailure != "" {
-			binaryDetail += "; compatibility issue reported"
+			binaryDetail += localize.T("; compatibility issue reported")
 		}
-		testURLValue, testURLDetail := "not configured", "No test URL is configured."
+		testURLValue, testURLDetail := localize.T("not configured"), localize.T("No test URL is configured.")
 		if monitor.TestURL != "" {
-			testURLValue, testURLDetail = "configured", "Test URL configured."
+			testURLValue, testURLDetail = localize.T("configured"), localize.T("Test URL configured.")
 		}
 		if strings.HasPrefix(strings.ToLower(monitor.TestURL), "http://") {
-			testURLDetail += " Plain HTTP can be intercepted."
+			testURLDetail += localize.T(" Plain HTTP can be intercepted.")
 		}
 		proxyAction := "system_proxy_enable"
 		if snapshot.SystemProxy.Enabled {
@@ -1715,46 +1675,46 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 			monitorAction = "monitor_disable"
 		}
 		rows := []Row{
-			{ID: "setting:binary", Title: "Mihomo binary", Detail: binaryDetail, Cells: []string{"Mihomo binary", fallback(snapshot.Binary.Desired, "unspecified"), ""}, kind: rowSettingBinary, action: "edit_binary"},
-			{ID: "setting:system-proxy", Title: "System proxy", Detail: fmt.Sprintf("System proxy requested %t; currently active %t.", snapshot.SystemProxy.Enabled, snapshot.SystemProxy.Active), Cells: []string{"System proxy", fmt.Sprintf("requested %t; active %t", snapshot.SystemProxy.Enabled, snapshot.SystemProxy.Active), ""}, action: proxyAction},
-			{ID: "setting:monitor", Title: "Monitor", Detail: enabledLabel(monitor.Enabled), Cells: []string{"Monitor", enabledLabel(monitor.Enabled), ""}, action: monitorAction},
+			{ID: "setting:binary", Title: localize.T("Mihomo binary"), Detail: binaryDetail, Cells: []string{localize.T("Mihomo binary"), fallback(snapshot.Binary.Desired, localize.T("unspecified")), ""}, kind: rowSettingBinary, action: "edit_binary"},
+			{ID: "setting:system-proxy", Title: localize.T("System proxy"), Detail: fmt.Sprintf(localize.T("System proxy requested %s; currently active %s."), localizedBool(snapshot.SystemProxy.Enabled), localizedBool(snapshot.SystemProxy.Active)), Cells: []string{localize.T("System proxy"), fmt.Sprintf(localize.T("requested %s; active %s"), localizedBool(snapshot.SystemProxy.Enabled), localizedBool(snapshot.SystemProxy.Active)), ""}, action: proxyAction},
+			{ID: "setting:monitor", Title: localize.T("Monitor"), Detail: enabledLabel(monitor.Enabled), Cells: []string{localize.T("Monitor"), enabledLabel(monitor.Enabled), ""}, action: monitorAction},
 		}
 		for _, setting := range []struct {
 			id, title, value, action string
 			field                    monitorField
 		}{
-			{"setting:monitor:test-url", "Monitor test URL", testURLValue, "edit_monitor_url", monitorTestURL},
-			{"setting:interval", "Monitor interval", strconv.FormatInt(monitor.IntervalSeconds, 10) + " seconds", "edit_monitor_interval", monitorInterval},
-			{"setting:monitor:timeout", "Monitor timeout", strconv.FormatInt(monitor.TimeoutMillis, 10) + " ms", "edit_monitor_timeout", monitorTimeout},
-			{"setting:monitor:concurrency", "Monitor concurrency", strconv.Itoa(monitor.Concurrency), "edit_monitor_concurrency", monitorConcurrency},
-			{"setting:monitor:threshold", "Monitor threshold", strconv.FormatInt(monitor.ThresholdMillis, 10) + " ms", "edit_monitor_threshold", monitorThreshold},
-			{"setting:alert-threshold", "Alert threshold", strconv.FormatInt(monitor.AlertThresholdMillis, 10) + " ms", "edit_alert_threshold", monitorAlertThreshold},
-			{"setting:monitor:bad-samples", "Consecutive bad samples", strconv.Itoa(monitor.ConsecutiveBadSamples), "edit_monitor_bad_samples", monitorBadSamples},
-			{"setting:monitor:improvement", "Minimum improvement", strconv.FormatInt(monitor.MinImprovementMillis, 10) + " ms", "edit_monitor_improvement", monitorImprovement},
-			{"setting:monitor:cooldown", "Monitor cooldown", strconv.FormatInt(monitor.CooldownSeconds, 10) + " seconds", "edit_monitor_cooldown", monitorCooldown},
-			{"setting:monitor:jitter", "Monitor jitter", strconv.FormatInt(monitor.JitterMillis, 10) + " ms", "edit_monitor_jitter", monitorJitter},
+			{"setting:monitor:test-url", localize.T("Monitor test URL"), testURLValue, "edit_monitor_url", monitorTestURL},
+			{"setting:interval", localize.T("Monitor interval"), strconv.FormatInt(monitor.IntervalSeconds, 10) + " " + localize.T("seconds"), "edit_monitor_interval", monitorInterval},
+			{"setting:monitor:timeout", localize.T("Monitor timeout"), strconv.FormatInt(monitor.TimeoutMillis, 10) + " " + localize.T("ms"), "edit_monitor_timeout", monitorTimeout},
+			{"setting:monitor:concurrency", localize.T("Monitor concurrency"), strconv.Itoa(monitor.Concurrency), "edit_monitor_concurrency", monitorConcurrency},
+			{"setting:monitor:threshold", localize.T("Monitor threshold"), strconv.FormatInt(monitor.ThresholdMillis, 10) + " " + localize.T("ms"), "edit_monitor_threshold", monitorThreshold},
+			{"setting:alert-threshold", localize.T("Alert threshold"), strconv.FormatInt(monitor.AlertThresholdMillis, 10) + " " + localize.T("ms"), "edit_alert_threshold", monitorAlertThreshold},
+			{"setting:monitor:bad-samples", localize.T("Consecutive bad samples"), strconv.Itoa(monitor.ConsecutiveBadSamples), "edit_monitor_bad_samples", monitorBadSamples},
+			{"setting:monitor:improvement", localize.T("Minimum improvement"), strconv.FormatInt(monitor.MinImprovementMillis, 10) + " " + localize.T("ms"), "edit_monitor_improvement", monitorImprovement},
+			{"setting:monitor:cooldown", localize.T("Monitor cooldown"), strconv.FormatInt(monitor.CooldownSeconds, 10) + " " + localize.T("seconds"), "edit_monitor_cooldown", monitorCooldown},
+			{"setting:monitor:jitter", localize.T("Monitor jitter"), strconv.FormatInt(monitor.JitterMillis, 10) + " " + localize.T("ms"), "edit_monitor_jitter", monitorJitter},
 		} {
 			detail := setting.value
 			if setting.field == monitorTestURL {
 				detail = testURLDetail
 			} else if setting.field == monitorAlertThreshold {
-				detail += "; high alert above threshold"
+				detail += localize.T("; high alert above threshold")
 			}
 			rows = append(rows, Row{ID: setting.id, Title: setting.title, Detail: detail,
 				Cells: []string{setting.title, setting.value, ""}, kind: rowSettingMonitor, monitor: setting.field, action: setting.action})
 		}
-		rows = append(rows, Row{ID: "setting:dns-listen", Title: "DNS listener", Detail: snapshot.DNS.Listen,
-			Cells: []string{"DNS listener", snapshot.DNS.Listen, ""}, kind: rowSettingDNSListen, action: "edit_dns_listen"})
+		rows = append(rows, Row{ID: "setting:dns-listen", Title: localize.T("DNS listener"), Detail: snapshot.DNS.Listen,
+			Cells: []string{localize.T("DNS listener"), snapshot.DNS.Listen, ""}, kind: rowSettingDNSListen, action: "edit_dns_listen"})
 		for _, set := range snapshot.DNS.ResolverSets {
-			value := fmt.Sprintf("DNSCrypt %s; %d endpoint(s)", yesNo(set.DNSCrypt), len(set.Endpoints))
-			rows = append(rows, Row{ID: "dns:set:" + set.ID, Title: "DNS resolver set " + set.ID,
-				Detail: value, Cells: []string{"DNS resolver set " + set.ID, value, ""}, kind: rowDNSResolver, dnsID: set.ID, action: "edit_dns_entry"})
+			value := fmt.Sprintf(localize.T("DNSCrypt %s; %d endpoint(s)"), yesNo(set.DNSCrypt), len(set.Endpoints))
+			rows = append(rows, Row{ID: "dns:set:" + set.ID, Title: fmt.Sprintf(localize.T("DNS resolver set %s"), set.ID),
+				Detail: value, Cells: []string{fmt.Sprintf(localize.T("DNS resolver set %s"), set.ID), value, ""}, kind: rowDNSResolver, dnsID: set.ID, action: "edit_dns_entry"})
 		}
 		for _, route := range snapshot.DNS.Routes {
 			matcher, value := dnsRouteMatcherFields(route.Suffix, route.GeoSite, route.Resource)
 			id := dnsRouteIdentity(route.Suffix, route.GeoSite, route.Resource)
-			name := "DNS route " + matcher + " " + value
-			resolver := "resolver " + route.ResolverSet
+			name := fmt.Sprintf(localize.T("DNS route %s %s"), matcher, value)
+			resolver := fmt.Sprintf(localize.T("resolver %s"), route.ResolverSet)
 			rows = append(rows, Row{ID: id, Title: name, Detail: resolver,
 				Cells: []string{name, resolver, ""}, kind: rowDNSRoute, dnsID: id, action: "edit_dns_entry"})
 		}
@@ -1776,20 +1736,20 @@ func shortProxyID(id string) string {
 }
 
 func binaryDetail(desired, observed, failure string, capabilities []string) string {
-	detail := appendDetail("desired "+fallback(desired, "unspecified"), "observed "+fallback(observed, "unknown"))
-	capabilityText := "none verified"
+	detail := appendDetail(localize.T("desired ")+fallback(desired, localize.T("unspecified")), localize.T("observed ")+fallback(observed, localize.T("unknown")))
+	capabilityText := localize.T("none verified")
 	if len(capabilities) > 0 {
 		capabilityText = strings.Join(capabilities, ", ")
 	}
-	detail = appendDetail(detail, "capabilities "+capabilityText)
+	detail = appendDetail(detail, localize.T("capabilities ")+capabilityText)
 	return appendDetail(detail, failure)
 }
 
 func proxyDetail(latency int64, outcome string) string {
 	if latency > 0 {
-		return fmt.Sprintf("%s | %d ms", outcome, latency)
+		return fmt.Sprintf(localize.T("%s | %d ms"), localize.Code("probe.outcome", outcome), latency)
 	}
-	return outcome
+	return localize.Code("probe.outcome", outcome)
 }
 
 func appendDetail(current, addition string) string {
@@ -1802,11 +1762,18 @@ func appendDetail(current, addition string) string {
 	return current + " | " + addition
 }
 
+func localizedBool(value bool) string {
+	if value {
+		return localize.T("true")
+	}
+	return localize.T("false")
+}
+
 func enabledLabel(enabled bool) string {
 	if enabled {
-		return "enabled"
+		return localize.T("enabled")
 	}
-	return "disabled"
+	return localize.T("disabled")
 }
 
 func fallback(value, replacement string) string {

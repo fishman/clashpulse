@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/fishman/clashpulse/localize"
 	"strings"
 	"testing"
 )
@@ -74,5 +75,17 @@ func TestConfigOverrideDescriptionNamesManagedReason(t *testing.T) {
 	}
 	if got := (ConfigOverrideSnapshot{Key: "password=private", Change: "added"}).Description(); got != "" {
 		t.Fatalf("untrusted key received display text: %q", got)
+	}
+}
+
+func TestConfigOverrideDescriptionUsesSharedMainlandCatalog(t *testing.T) {
+	localize.SetLanguage("zh-CN")
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	entry := ConfigOverrideSnapshot{Key: "dns.listen", Change: "replaced"}
+	if got := entry.Description(); got != "\u4ec5\u5728\u672c\u673a\u76d1\u542c DNS" {
+		t.Fatalf("Chinese DNS reason = %q", got)
+	}
+	if got := (ConfigOverrideSnapshot{Key: "password=private", Change: "added"}).Description(); got != "" {
+		t.Fatalf("untrusted reason = %q", got)
 	}
 }

@@ -1,0 +1,47 @@
+["override.dns.listen"]
+other = "loopback DNS listener"
+
+["override.mixed-port"]
+other = "app-owned proxy listener"
+
+["override.port"]
+other = "app-owned proxy listener"
+
+["override.socks-port"]
+other = "app-owned proxy listener"
+
+["override.external-controller"]
+other = "local controller endpoint"
+
+["override.secret"]
+other = "private controller authentication"
+
+["override.allow-lan"]
+other = "loopback-only proxy binding"
+
+["override.bind-address"]
+other = "loopback-only proxy binding"
+
+["override.dns.nameserver-policy"]
+other = "explicit DNS routing policy"
+
+["override.external-controller-tls"]
+other = "controller isolation"
+
+["override.external-controller-cors"]
+other = "controller isolation"
+
+["override.external-ui"]
+other = "controller isolation"
+
+["override.rule-providers"]
+other = "validated managed rule providers"
+
+["override.proxy-groups"]
+other = "configured url-test delay settings"
+
+["override.rules"]
+other = "managed filter rules"
+
+["control.enable"]
+other = "Enabled"

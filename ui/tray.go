@@ -3,12 +3,12 @@ package ui
 import (
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 
 	"fyne.io/fyne/v2"
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
+	"github.com/fishman/clashpulse/localize"
 )
 
 // Profile latency is the median of last successful selected-proxy measurements
@@ -44,22 +44,21 @@ func selectedProfileLatency(snapshot core.Snapshot) (int64, bool) {
 
 func profileTrayTitle(snapshot core.Snapshot) string {
 	if snapshot.ActiveSource == "local" {
-		return "Active local profile"
+		return localize.T("Active local profile")
 	}
 	if snapshot.ActiveSource == "none" {
-		return "No active profile"
+		return localize.T("No active profile")
 	}
 	for _, subscription := range snapshot.Subscriptions {
 		if !subscription.Active {
 			continue
 		}
-		label := "Profile " + subscription.ID + ": "
 		if latency, ok := selectedProfileLatency(snapshot); ok {
-			return label + "last selected median " + strconv.FormatInt(latency, 10) + " ms"
+			return fmt.Sprintf(localize.T("Profile %s: last selected median %d ms"), subscription.ID, latency)
 		}
-		return label + "not measured"
+		return fmt.Sprintf(localize.T("Profile %s: not measured"), subscription.ID)
 	}
-	return "No active profile"
+	return localize.T("No active profile")
 }
 
 const (
@@ -83,18 +82,18 @@ func trayProxyMeasurementOf(snapshot core.Snapshot, groupID, proxyID string) tra
 			continue
 		}
 		if proxy.Outcome == "success" && proxy.LatencyMillis > 0 {
-			return trayProxyMeasurement{text: strconv.FormatInt(proxy.LatencyMillis, 10) + " ms", latency: proxy.LatencyMillis, rank: trayRankMeasured}
+			return trayProxyMeasurement{text: fmt.Sprintf(localize.T("%d ms"), proxy.LatencyMillis), latency: proxy.LatencyMillis, rank: trayRankMeasured}
 		}
 		if proxy.Outcome == "timeout" || proxy.Outcome == "error" {
-			return trayProxyMeasurement{text: "unavailable", rank: trayRankUnavailable}
+			return trayProxyMeasurement{text: localize.T("unavailable"), rank: trayRankUnavailable}
 		}
 		if proxy.MihomoMillis > 0 {
 			// Reported by mihomo, not measured here, so it never reorders the menu.
-			return trayProxyMeasurement{text: strconv.FormatInt(proxy.MihomoMillis, 10) + " ms (mihomo)", rank: trayRankUnmeasured}
+			return trayProxyMeasurement{text: fmt.Sprintf(localize.T("%d ms (mihomo)"), proxy.MihomoMillis), rank: trayRankUnmeasured}
 		}
 		break
 	}
-	return trayProxyMeasurement{text: "not measured", rank: trayRankUnmeasured}
+	return trayProxyMeasurement{text: localize.T("not measured"), rank: trayRankUnmeasured}
 }
 
 func trayProxyLatency(snapshot core.Snapshot, groupID, proxyID string) string {
@@ -109,18 +108,18 @@ type trayProxyChoice struct {
 
 func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 	if !d.connected {
-		status := fyne.NewMenuItem("Disconnected - state unavailable", nil)
+		status := fyne.NewMenuItem(localize.T("Disconnected - state unavailable"), nil)
 		status.Disabled = true
-		return fyne.NewMenu("ClashPulse", status, fyne.NewMenuItemSeparator(), fyne.NewMenuItem("Show ClashPulse", d.window.Show), fyne.NewMenuItem("Quit", d.quit))
+		return fyne.NewMenu("ClashPulse", status, fyne.NewMenuItemSeparator(), fyne.NewMenuItem(localize.T("Show ClashPulse"), d.window.Show), fyne.NewMenuItem(localize.T("Quit"), d.quit))
 	}
 	status := fyne.NewMenuItem(profileTrayTitle(snapshot), nil)
 	status.Disabled = true
 	profiles := make([]*fyne.MenuItem, 0, len(snapshot.Subscriptions))
 	for _, subscription := range snapshot.Subscriptions {
 		id := subscription.ID
-		label := id + " (" + sourceHostLabel(subscription.SourceHost) + ")"
+		label := fmt.Sprintf(localize.T("%s (%s)"), id, sourceHostLabel(subscription.SourceHost))
 		if subscription.PendingActivation {
-			label += " - update ready"
+			label += localize.T(" - update ready")
 		}
 		item := fyne.NewMenuItem(label, func() { d.enqueue(ipc.Command{Kind: ipc.CommandActivateSubscription, SubscriptionID: id}) })
 		item.Checked = subscription.Active
@@ -128,12 +127,12 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 		profiles = append(profiles, item)
 	}
 	if len(profiles) == 0 {
-		empty := fyne.NewMenuItem("No downloaded profiles", nil)
+		empty := fyne.NewMenuItem(localize.T("No downloaded profiles"), nil)
 		empty.Disabled = true
 		profiles = append(profiles, empty)
 	}
-	profileMenu := fyne.NewMenuItem("Profiles", nil)
-	profileMenu.ChildMenu = fyne.NewMenu("Profiles", profiles...)
+	profileMenu := fyne.NewMenuItem(localize.T("Profiles"), nil)
+	profileMenu.ChildMenu = fyne.NewMenu(localize.T("Profiles"), profiles...)
 
 	groups := make([]*fyne.MenuItem, 0, len(snapshot.Groups))
 	for _, group := range snapshot.Groups {
@@ -147,7 +146,7 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 			id := proxyID
 			// The numbered fallback keeps the profile's own position, so a label
 			// stays stable as the latency order changes around it.
-			name := fmt.Sprintf("Proxy %d [%s]", i+1, shortID(id))
+			name := fmt.Sprintf(localize.T("Proxy %d [%s]"), i+1, shortID(id))
 			for _, proxy := range snapshot.Proxies {
 				if proxy.GroupID == groupID && proxy.ID == id && proxy.Label != "" {
 					name = proxy.Label
@@ -155,7 +154,7 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 				}
 			}
 			measurement := trayProxyMeasurementOf(snapshot, groupID, id)
-			item := fyne.NewMenuItem(name+" - "+measurement.text, func() { d.enqueue(ipc.Command{Kind: ipc.CommandSelectGroup, GroupID: groupID, ChoiceID: id}) })
+			item := fyne.NewMenuItem(fmt.Sprintf(localize.T("%s - %s"), name, measurement.text), func() { d.enqueue(ipc.Command{Kind: ipc.CommandSelectGroup, GroupID: groupID, ChoiceID: id}) })
 			item.Checked = id == group.Selected
 			ordered = append(ordered, trayProxyChoice{item: item, rank: measurement.rank, latency: measurement.latency})
 		}
@@ -174,20 +173,20 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 		}
 		name := group.Label
 		if name == "" {
-			name = "Group " + shortID(groupID)
+			name = fmt.Sprintf(localize.T("Group %s"), shortID(groupID))
 		}
 		item := fyne.NewMenuItem(name, nil)
 		item.ChildMenu = fyne.NewMenu(name, choices...)
 		groups = append(groups, item)
 	}
 	if len(groups) == 0 {
-		empty := fyne.NewMenuItem("No managed select groups", nil)
+		empty := fyne.NewMenuItem(localize.T("No managed select groups"), nil)
 		empty.Disabled = true
 		groups = append(groups, empty)
 	}
-	proxyMenu := fyne.NewMenuItem("Proxies", nil)
-	proxyMenu.ChildMenu = fyne.NewMenu("Proxies", groups...)
-	service := fyne.NewMenuItem("Service", func() {
+	proxyMenu := fyne.NewMenuItem(localize.T("Proxies"), nil)
+	proxyMenu.ChildMenu = fyne.NewMenu(localize.T("Proxies"), groups...)
+	service := fyne.NewMenuItem(localize.T("Service"), func() {
 		kind := ipc.CommandStart
 		if snapshot.ServiceRunning {
 			kind = ipc.CommandStop
@@ -195,7 +194,7 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 		d.enqueue(ipc.Command{Kind: kind})
 	})
 	service.Checked = snapshot.ServiceRunning
-	systemProxy := fyne.NewMenuItem("System Proxy", func() {
+	systemProxy := fyne.NewMenuItem(localize.T("System Proxy"), func() {
 		enabled := !snapshot.SystemProxy.Enabled
 		if snapshot.SystemProxy.Active && !snapshot.SystemProxy.Enabled {
 			enabled = false
@@ -204,11 +203,11 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 	})
 	systemProxy.Checked = snapshot.SystemProxy.Enabled
 	if snapshot.SystemProxy.Enabled && !snapshot.SystemProxy.Active {
-		systemProxy.Label = "System Proxy (requested, inactive)"
+		systemProxy.Label = localize.T("System Proxy (requested, inactive)")
 	} else if !snapshot.SystemProxy.Enabled && snapshot.SystemProxy.Active {
-		systemProxy.Label = "System Proxy (restore needed)"
+		systemProxy.Label = localize.T("System Proxy (restore needed)")
 	}
-	return fyne.NewMenu("ClashPulse", status, profileMenu, proxyMenu, service, systemProxy, fyne.NewMenuItemSeparator(), fyne.NewMenuItem("Show ClashPulse", d.window.Show), fyne.NewMenuItem("Quit", d.quit))
+	return fyne.NewMenu("ClashPulse", status, profileMenu, proxyMenu, service, systemProxy, fyne.NewMenuItemSeparator(), fyne.NewMenuItem(localize.T("Show ClashPulse"), d.window.Show), fyne.NewMenuItem(localize.T("Quit"), d.quit))
 }
 
 func trayStateSignature(snapshot core.Snapshot, connected bool) string {
