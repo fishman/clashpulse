@@ -158,7 +158,7 @@ func validateSnapshot(s Snapshot) error {
 	geoDestinations := map[ResourceKind]string{}
 
 	for _, item := range s.Subscriptions {
-		if !validStableID(item.ID) {
+		if !ValidStableID(item.ID) {
 			return fmt.Errorf("subscriptions.toml: subscription.id: invalid stable ID %q", item.ID)
 		}
 		if item.URL == "" {
@@ -178,7 +178,7 @@ func validateSnapshot(s Snapshot) error {
 		}
 	}
 	for _, item := range s.Resources {
-		if !validStableID(item.ID) {
+		if !ValidStableID(item.ID) {
 			return fmt.Errorf("resources.toml: resource.id: invalid stable ID %q", item.ID)
 		}
 		if item.URL == "" {
@@ -216,7 +216,7 @@ func validateSnapshot(s Snapshot) error {
 		resourcesByID[item.ID] = item
 	}
 	for _, set := range s.DNS.ResolverSets {
-		if !validStableID(set.ID) {
+		if !ValidStableID(set.ID) {
 			return fmt.Errorf("resources.toml: resolver_set.id: invalid stable ID %q", set.ID)
 		}
 		if len(set.Endpoints) == 0 {
@@ -257,13 +257,13 @@ func validateSnapshot(s Snapshot) error {
 		matchers := 0
 		if route.Suffix != "" {
 			matchers++
-			if !validDomain(route.Suffix) {
+			if !ValidDomain(route.Suffix) {
 				return fmt.Errorf("resources.toml: dns_route.suffix: invalid domain %q", route.Suffix)
 			}
 		}
 		if route.GeoSite != "" {
 			matchers++
-			if !validRuleToken(route.GeoSite) {
+			if !ValidRuleToken(route.GeoSite) {
 				return fmt.Errorf("resources.toml: dns_route.geosite: invalid selector %q", route.GeoSite)
 			}
 		}
@@ -282,7 +282,7 @@ func validateSnapshot(s Snapshot) error {
 		}
 	}
 	for _, filter := range s.Filters {
-		if !validStableID(filter.ID) {
+		if !ValidStableID(filter.ID) {
 			return fmt.Errorf("filters.toml: filter.id: invalid stable ID %q", filter.ID)
 		}
 		if filter.Resource == "" {
@@ -416,7 +416,8 @@ func validateResourceFormat(resource Resource) error {
 	return nil
 }
 
-func validStableID(id string) bool {
+// ValidStableID reports whether id uses the backend stable-ID grammar.
+func ValidStableID(id string) bool {
 	if len(id) == 0 || len(id) > 64 || id == "." || id == ".." {
 		return false
 	}
@@ -429,7 +430,8 @@ func validStableID(id string) bool {
 	return true
 }
 
-func validRuleToken(value string) bool {
+// ValidRuleToken reports whether value uses the DNS rule-token grammar.
+func ValidRuleToken(value string) bool {
 	if value == "" {
 		return false
 	}
@@ -442,7 +444,8 @@ func validRuleToken(value string) bool {
 	return true
 }
 
-func validDomain(value string) bool {
+// ValidDomain reports whether value uses the backend DNS domain grammar.
+func ValidDomain(value string) bool {
 	value = strings.TrimSuffix(strings.TrimPrefix(value, "."), ".")
 	if len(value) == 0 || len(value) > 253 {
 		return false

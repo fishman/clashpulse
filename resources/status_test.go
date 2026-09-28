@@ -15,13 +15,7 @@ func TestStatusReportsValidAndUnavailableResourcesIndependently(t *testing.T) {
 		_, _ = w.Write([]byte("payload:\n  - +.example.com\n"))
 	}))
 	defer server.Close()
-	client := download.NewClient(func(download.Route) (http.RoundTripper, error) {
-		return server.Client().Transport, nil
-	})
-	registry, err := NewRegistry(t.TempDir(), client)
-	if err != nil {
-		t.Fatal(err)
-	}
+	registry := newTestRegistry(t, server)
 	valid := config.Resource{ID: "present", Kind: config.ResourceRuleSet, Format: config.FormatYAML, RuleType: config.RuleDomain, URL: server.URL, Enabled: true}
 	plan, err := registry.Stage(context.Background(), config.Snapshot{Resources: []config.Resource{valid}}, download.Direct)
 	if err != nil {

@@ -38,18 +38,12 @@ func TestUnchangedRefreshKeepsStableResourceBytes(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	client := download.NewClient(func(download.Route) (http.RoundTripper, error) {
-		return server.Client().Transport, nil
-	})
+	registry := newTestRegistry(t, server)
 	resource := config.Resource{
 		ID: "domains", Kind: config.ResourceRuleSet, Format: config.FormatYAML,
 		RuleType: config.RuleDomain, URL: server.URL, Enabled: true,
 	}
 	snapshot := config.Snapshot{Resources: []config.Resource{resource}}
-	registry, err := NewRegistry(t.TempDir(), client)
-	if err != nil {
-		t.Fatal(err)
-	}
 	first, err := registry.Stage(context.Background(), snapshot, download.Direct)
 	if err != nil {
 		t.Fatal(err)

@@ -20,31 +20,24 @@ const (
 	ActivationRollback               ActivationStage = "rollback"
 )
 
+var activationMessages = map[ActivationStage]string{
+	ActivationFileInput:              "local profile file is unavailable or invalid",
+	ActivationBinary:                 "selected Mihomo binary is incompatible or unavailable",
+	ActivationResources:              "managed resources could not be validated",
+	ActivationConfigValidation:       "generated Mihomo configuration was rejected",
+	ActivationProcessStart:           "Mihomo process could not start",
+	ActivationControllerReadiness:    "Mihomo controller did not become ready",
+	ActivationSystemProxy:            "System Proxy could not be applied",
+	ActivationSystemProxyUnsupported: "system proxy is unsupported in this desktop environment",
+	ActivationStateCommit:            "private activation state could not be committed",
+	ActivationRollback:               "activation rollback failed; prior runtime needs attention",
+}
+
 func (stage ActivationStage) Message() string {
-	switch stage {
-	case ActivationFileInput:
-		return "local profile file is unavailable or invalid"
-	case ActivationBinary:
-		return "selected Mihomo binary is incompatible or unavailable"
-	case ActivationResources:
-		return "managed resources could not be validated"
-	case ActivationConfigValidation:
-		return "generated Mihomo configuration was rejected"
-	case ActivationProcessStart:
-		return "Mihomo process could not start"
-	case ActivationControllerReadiness:
-		return "Mihomo controller did not become ready"
-	case ActivationSystemProxy:
-		return "System Proxy could not be applied"
-	case ActivationSystemProxyUnsupported:
-		return "system proxy is unsupported in this desktop environment"
-	case ActivationStateCommit:
-		return "private activation state could not be committed"
-	case ActivationRollback:
-		return "activation rollback failed; prior runtime needs attention"
-	default:
-		return "activation failed"
+	if message, ok := activationMessages[stage]; ok {
+		return message
 	}
+	return "activation failed"
 }
 
 type ActivationError struct {

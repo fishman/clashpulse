@@ -42,7 +42,7 @@ func Validate(resource config.Resource, data []byte) error {
 
 // ValidateDeclaration checks whether a resource's kind, format, and rule behavior are supported.
 func ValidateDeclaration(resource config.Resource) error {
-	if !validID(resource.ID) {
+	if !config.ValidStableID(resource.ID) {
 		return fmt.Errorf("invalid resource ID %q", resource.ID)
 	}
 	switch resource.Kind {
@@ -158,18 +158,8 @@ func validateRuleLine(ruleType config.RuleType, line string) error {
 }
 
 func validateDomain(domain string) error {
-	if len(domain) == 0 || len(domain) > 253 {
+	if len(domain) > 253 || strings.HasPrefix(domain, ".") || !config.ValidDomain(domain) {
 		return fmt.Errorf("invalid domain")
-	}
-	for _, label := range strings.Split(strings.TrimSuffix(domain, "."), ".") {
-		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
-			return fmt.Errorf("invalid domain")
-		}
-		for _, r := range label {
-			if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-') {
-				return fmt.Errorf("invalid domain")
-			}
-		}
 	}
 	return nil
 }
@@ -273,17 +263,4 @@ func newPort(value string) int {
 		}
 	}
 	return n
-}
-
-func validID(id string) bool {
-	if len(id) == 0 || len(id) > 64 || id == "." || id == ".." {
-		return false
-	}
-	for i, r := range id {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || (i > 0 && (r == '-' || r == '_' || r == '.')) {
-			continue
-		}
-		return false
-	}
-	return true
 }

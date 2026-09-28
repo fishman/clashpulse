@@ -372,7 +372,7 @@ func validateStateDocument(document stateDocument) error {
 		}
 	}
 	for id, state := range document.Resources {
-		if !validID(id) || len(state.SHA256) != sha256.Size*2 || (state.SourceHash != "" && len(state.SourceHash) != sha256.Size*2) || len(state.ETag) > 4096 || len(state.LastModified) > 4096 {
+		if !config.ValidStableID(id) || len(state.SHA256) != sha256.Size*2 || (state.SourceHash != "" && len(state.SourceHash) != sha256.Size*2) || len(state.ETag) > 4096 || len(state.LastModified) > 4096 {
 			return fmt.Errorf("resources: invalid metadata entry")
 		}
 		if _, err := hex.DecodeString(state.SHA256); err != nil {

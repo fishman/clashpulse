@@ -58,16 +58,7 @@ func TestRunAtRefreshActivateSelectAndStop(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() { done <- RunAt(ctx, configDir, filepath.Join(root, "state"), endpoint) }()
-	var client *ipc.Client
-	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
-		attempt, stop := context.WithTimeout(ctx, 100*time.Millisecond)
-		client, _ = ipc.Dial(attempt, endpoint)
-		stop()
-		if client != nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	client := dialAppClient(ctx, endpoint)
 	if client == nil {
 		cancel()
 		t.Fatalf("service did not start: %v", <-done)
@@ -244,16 +235,7 @@ func TestRunAtRefreshActivateSelectAndStop(t *testing.T) {
 	defer restartCancel()
 	restartedDone := make(chan error, 1)
 	go func() { restartedDone <- RunAt(restartCtx, configDir, filepath.Join(root, "state"), endpoint) }()
-	var restarted *ipc.Client
-	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
-		attempt, stop := context.WithTimeout(restartCtx, 100*time.Millisecond)
-		restarted, _ = ipc.Dial(attempt, endpoint)
-		stop()
-		if restarted != nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	restarted := dialAppClient(restartCtx, endpoint)
 	if restarted == nil {
 		restartCancel()
 		t.Fatalf("restarted service did not listen: %v", <-restartedDone)
@@ -334,16 +316,7 @@ func TestDownloadedProfileActivatesAfterDesktopStarts(t *testing.T) {
 			t.Error("desktop service did not stop")
 		}
 	}()
-	var client *ipc.Client
-	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
-		attempt, stop := context.WithTimeout(ctx, 100*time.Millisecond)
-		client, _ = ipc.Dial(attempt, endpoint)
-		stop()
-		if client != nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	client := dialAppClient(ctx, endpoint)
 	if client == nil {
 		t.Fatal("desktop service did not become ready")
 	}
@@ -360,6 +333,20 @@ func TestDownloadedProfileActivatesAfterDesktopStarts(t *testing.T) {
 	if state.Groups[0].Label != "select-main" {
 		t.Fatalf("activated group missing: %+v", state.Groups)
 	}
+}
+
+func dialAppClient(ctx context.Context, endpoint string) *ipc.Client {
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		attempt, stop := context.WithTimeout(ctx, 100*time.Millisecond)
+		client, _ := ipc.Dial(attempt, endpoint)
+		stop()
+		if client != nil {
+			return client
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return nil
 }
 
 func waitAppSnapshot(t *testing.T, ctx context.Context, client *ipc.Client, ready func(core.Snapshot) bool) core.Snapshot {

@@ -1,12 +1,9 @@
 package config
 
 import (
-	"bytes"
 	"os"
 	"reflect"
 	"slices"
-
-	"github.com/BurntSushi/toml"
 )
 
 type FilterEdit struct {
@@ -55,7 +52,7 @@ func PatchFilter(path string, current Snapshot, id string, patch FilterEdit) err
 	if reflect.DeepEqual(next, current) {
 		return nil
 	}
-	return writeFilters(path, document)
+	return writeTOML(path, document)
 }
 
 func DeleteFilter(path string, current Snapshot, id string) error {
@@ -79,7 +76,7 @@ func DeleteFilter(path string, current Snapshot, id string) error {
 	if err := validateSnapshot(next); err != nil {
 		return err
 	}
-	return writeFilters(path, document)
+	return writeTOML(path, document)
 }
 
 func syncFilterSnapshot(snapshot *Snapshot, document filtersDoc) {
@@ -89,12 +86,4 @@ func syncFilterSnapshot(snapshot *Snapshot, document filtersDoc) {
 			ID: item.ID, Resource: item.Resource, Format: ResourceFormat(item.Format), Target: item.Target, Enabled: item.Enabled,
 		})
 	}
-}
-
-func writeFilters(path string, document filtersDoc) error {
-	var encoded bytes.Buffer
-	if err := toml.NewEncoder(&encoded).Encode(document); err != nil {
-		return err
-	}
-	return Write(path, encoded.Bytes())
 }

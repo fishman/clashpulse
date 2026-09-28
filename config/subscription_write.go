@@ -1,14 +1,11 @@
 package config
 
 import (
-	"bytes"
 	"errors"
 	"os"
 	"reflect"
 	"slices"
 	"time"
-
-	"github.com/BurntSushi/toml"
 )
 
 type SubscriptionEdit struct {
@@ -86,7 +83,7 @@ func PatchSubscription(path string, current Snapshot, id string, patch Subscript
 	if reflect.DeepEqual(next, current) {
 		return nil
 	}
-	return writeSubscriptions(path, document)
+	return writeTOML(path, document)
 }
 
 func DeleteSubscription(path string, current Snapshot, id string) error {
@@ -110,13 +107,5 @@ func DeleteSubscription(path string, current Snapshot, id string) error {
 	if err := validateSnapshot(next); err != nil {
 		return err
 	}
-	return writeSubscriptions(path, document)
-}
-
-func writeSubscriptions(path string, document subscriptionsDoc) error {
-	var encoded bytes.Buffer
-	if err := toml.NewEncoder(&encoded).Encode(document); err != nil {
-		return err
-	}
-	return Write(path, encoded.Bytes())
+	return writeTOML(path, document)
 }

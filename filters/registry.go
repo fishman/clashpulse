@@ -42,7 +42,7 @@ func Build(snapshot config.Snapshot, managedPaths map[string]string) (*Registry,
 	resources := make(map[string]config.Resource, len(snapshot.Resources))
 	managedHome := ""
 	for _, resource := range snapshot.Resources {
-		if !validID(resource.ID) {
+		if !config.ValidStableID(resource.ID) {
 			return nil, fmt.Errorf("filters: invalid resource ID %q", resource.ID)
 		}
 		if _, exists := resources[resource.ID]; exists {
@@ -74,7 +74,7 @@ func Build(snapshot config.Snapshot, managedPaths map[string]string) (*Registry,
 	}
 	seenFilters := make(map[string]struct{}, len(snapshot.Filters))
 	for _, filter := range snapshot.Filters {
-		if !validID(filter.ID) {
+		if !config.ValidStableID(filter.ID) {
 			return nil, fmt.Errorf("filters: invalid filter ID %q", filter.ID)
 		}
 		if _, exists := seenFilters[filter.ID]; exists {
@@ -104,7 +104,7 @@ func Build(snapshot config.Snapshot, managedPaths map[string]string) (*Registry,
 // ID. The ID is included verbatim only after it passes the narrow identifier
 // grammar used by config validation.
 func Name(resourceID string) string {
-	if !validID(resourceID) {
+	if !config.ValidStableID(resourceID) {
 		return ""
 	}
 	return "managed-" + resourceID
@@ -158,17 +158,4 @@ func ManagedFilename(resource config.Resource) string {
 
 func validTarget(target string) bool {
 	return target != "" && strings.TrimSpace(target) == target && !strings.ContainsAny(target, ",\r\n\t\x00")
-}
-
-func validID(id string) bool {
-	if len(id) == 0 || len(id) > 64 || id == "." || id == ".." {
-		return false
-	}
-	for i, r := range id {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || (i > 0 && (r == '-' || r == '_' || r == '.')) {
-			continue
-		}
-		return false
-	}
-	return !strings.HasPrefix(id, ".")
 }

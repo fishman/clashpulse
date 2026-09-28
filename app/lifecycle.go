@@ -953,8 +953,6 @@ func proxyDisplayLabel(name, fallback string, position int) string {
 	return nodeNameHost.ReplaceAllString(name, "[redacted]")
 }
 
-// uniqueLabel numbers a label repeated inside one group so two nodes sharing a
-// profile name stay distinguishable.
 func uniqueLabel(label string, seen map[string]int) string {
 	seen[label]++
 	if count := seen[label]; count > 1 {

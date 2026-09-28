@@ -165,7 +165,7 @@ func PatchSettings(path string, current Snapshot, patch SettingsPatch) error {
 	if err := validateSnapshot(next); err != nil {
 		return err
 	}
-	return writeConfigDocument(path, document)
+	return writeTOML(path, document)
 }
 
 // PatchAutomation persists explicit opt-in for a stable opaque group identity.
@@ -192,10 +192,10 @@ func PatchAutomation(path string, current Snapshot, groupID string, enabled bool
 		return err
 	}
 	document.Monitor.AutomatedGroups = groups
-	return writeConfigDocument(path, document)
+	return writeTOML(path, document)
 }
 
-func writeConfigDocument(path string, document configDoc) error {
+func writeTOML(path string, document any) error {
 	var encoded bytes.Buffer
 	if err := toml.NewEncoder(&encoded).Encode(document); err != nil {
 		return err

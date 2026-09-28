@@ -16,14 +16,8 @@ import (
 	"github.com/fishman/clashpulse/download"
 )
 
-func TestPinnedResourceMismatchRetainsPreviousGeneration(t *testing.T) {
-	knownGood := []byte("payload:\n  - +.example.com\n")
-	badUpdate := []byte("payload:\n  - +.other.example\n")
-	body := knownGood
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write(body)
-	}))
-	defer server.Close()
+func newTestRegistry(t *testing.T, server *httptest.Server) *Registry {
+	t.Helper()
 	transport := server.Client().Transport
 	client := download.NewClient(func(download.Route) (http.RoundTripper, error) {
 		return transport, nil
@@ -32,6 +26,18 @@ func TestPinnedResourceMismatchRetainsPreviousGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return registry
+}
+
+func TestPinnedResourceMismatchRetainsPreviousGeneration(t *testing.T) {
+	knownGood := []byte("payload:\n  - +.example.com\n")
+	badUpdate := []byte("payload:\n  - +.other.example\n")
+	body := knownGood
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(body)
+	}))
+	defer server.Close()
+	registry := newTestRegistry(t, server)
 	goodHash := sha256.Sum256(knownGood)
 	resource := config.Resource{
 		ID: "domain-list", Kind: config.ResourceRuleSet, Format: config.FormatYAML,
@@ -119,16 +125,12 @@ func TestStageDueAttemptsEveryResourceBeforeReturningFailure(t *testing.T) {
 		_, _ = w.Write([]byte("payload:\n  - +.example.com\n"))
 	}))
 	defer server.Close()
-	client := download.NewClient(func(download.Route) (http.RoundTripper, error) { return server.Client().Transport, nil })
-	registry, err := NewRegistry(t.TempDir(), client)
-	if err != nil {
-		t.Fatal(err)
-	}
+	registry := newTestRegistry(t, server)
 	snapshot := config.Snapshot{Resources: []config.Resource{
 		{ID: "bad", Kind: config.ResourceRuleSet, Format: config.FormatYAML, RuleType: config.RuleDomain, URL: server.URL + "/bad", Enabled: true},
 		{ID: "good", Kind: config.ResourceRuleSet, Format: config.FormatYAML, RuleType: config.RuleDomain, URL: server.URL + "/good", Enabled: true},
 	}}
-	_, err = registry.StageDue(context.Background(), snapshot, download.Direct, []string{"bad", "good"})
+	_, err := registry.StageDue(context.Background(), snapshot, download.Direct, []string{"bad", "good"})
 	if err == nil || !strings.Contains(err.Error(), "HTTP 429") || len(paths) != 2 || paths[0] != "/bad" || paths[1] != "/good" {
 		t.Fatalf("resource batch paths=%v error=%v", paths, err)
 	}
@@ -143,13 +145,7 @@ func TestChangedSourceDoesNotValidatePreviousGeneration(t *testing.T) {
 		_, _ = w.Write(knownGood)
 	}))
 	defer server.Close()
-	client := download.NewClient(func(download.Route) (http.RoundTripper, error) {
-		return server.Client().Transport, nil
-	})
-	registry, err := NewRegistry(t.TempDir(), client)
-	if err != nil {
-		t.Fatal(err)
-	}
+	registry := newTestRegistry(t, server)
 	resource := config.Resource{
 		ID: "domains", Kind: config.ResourceRuleSet, Format: config.FormatYAML,
 		RuleType: config.RuleDomain, URL: server.URL, Enabled: true,
@@ -197,11 +193,7 @@ func TestCandidateValidationFailurePreservesCommittedGeneration(t *testing.T) {
 	body := []byte("payload:\n  - +.example.com\n")
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(body) }))
 	defer server.Close()
-	client := download.NewClient(func(download.Route) (http.RoundTripper, error) { return server.Client().Transport, nil })
-	registry, err := NewRegistry(t.TempDir(), client)
-	if err != nil {
-		t.Fatal(err)
-	}
+	registry := newTestRegistry(t, server)
 	resource := config.Resource{ID: "domains", Kind: config.ResourceRuleSet, Format: config.FormatYAML, RuleType: config.RuleDomain, URL: server.URL, Enabled: true}
 	snapshot := config.Snapshot{Resources: []config.Resource{resource}}
 	first, err := registry.Stage(context.Background(), snapshot, download.Direct)
@@ -243,11 +235,7 @@ func TestRollbackRestoresPreviousGenerationAfterReadinessFailure(t *testing.T) {
 	body := []byte("payload:\n  - +.example.com\n")
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(body) }))
 	defer server.Close()
-	client := download.NewClient(func(download.Route) (http.RoundTripper, error) { return server.Client().Transport, nil })
-	registry, err := NewRegistry(t.TempDir(), client)
-	if err != nil {
-		t.Fatal(err)
-	}
+	registry := newTestRegistry(t, server)
 	resource := config.Resource{ID: "domains", Kind: config.ResourceRuleSet, Format: config.FormatYAML, RuleType: config.RuleDomain, URL: server.URL, Enabled: true}
 	snapshot := config.Snapshot{Resources: []config.Resource{resource}}
 	first, err := registry.Stage(context.Background(), snapshot, download.Direct)
@@ -296,11 +284,7 @@ func TestStaticPromotionsKeepStablePathsAndRollbackBytes(t *testing.T) {
 	body := bodies[0]
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(body) }))
 	defer server.Close()
-	client := download.NewClient(func(download.Route) (http.RoundTripper, error) { return server.Client().Transport, nil })
-	registry, err := NewRegistry(t.TempDir(), client)
-	if err != nil {
-		t.Fatal(err)
-	}
+	registry := newTestRegistry(t, server)
 	foreignDirectory := filepath.Join(registry.home, "leave-alone")
 	if err := os.Mkdir(foreignDirectory, 0o700); err != nil {
 		t.Fatal(err)

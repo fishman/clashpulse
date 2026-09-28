@@ -61,16 +61,7 @@ func TestFailedMixedReloadPreservesInactiveSubscriptionSnapshot(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() { done <- RunAt(ctx, configDir, stateDir, endpoint) }()
-	var client *ipc.Client
-	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
-		attempt, stop := context.WithTimeout(ctx, 100*time.Millisecond)
-		client, _ = ipc.Dial(attempt, endpoint)
-		stop()
-		if client != nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	client := dialAppClient(ctx, endpoint)
 	if client == nil {
 		cancel()
 		t.Fatalf("service did not start: %v", <-done)
@@ -204,16 +195,7 @@ func TestFailedPostRestartRefreshRestoresRuntimeState(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() { done <- RunAt(ctx, configDir, stateDir, endpoint) }()
-	var client *ipc.Client
-	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
-		attempt, stop := context.WithTimeout(ctx, 100*time.Millisecond)
-		client, _ = ipc.Dial(attempt, endpoint)
-		stop()
-		if client != nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	client := dialAppClient(ctx, endpoint)
 	if client == nil {
 		cancel()
 		t.Fatalf("service did not start: %v", <-done)

@@ -28,13 +28,7 @@ func TestStageDueRefreshesOnlyDueResourcesAndCopiesOthers(t *testing.T) {
 		_, _ = w.Write([]byte(bodies[r.URL.Path]))
 	}))
 	defer server.Close()
-	client := download.NewClient(func(download.Route) (http.RoundTripper, error) {
-		return server.Client().Transport, nil
-	})
-	registry, err := NewRegistry(t.TempDir(), client)
-	if err != nil {
-		t.Fatal(err)
-	}
+	registry := newTestRegistry(t, server)
 	snapshot := config.Snapshot{Resources: []config.Resource{
 		{ID: "one", Kind: config.ResourceRuleProvider, Format: config.FormatText, RuleType: config.RuleDomain, URL: server.URL + "/one", Enabled: true},
 		{ID: "two", Kind: config.ResourceRuleProvider, Format: config.FormatText, RuleType: config.RuleDomain, URL: server.URL + "/two", Enabled: true},

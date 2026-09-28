@@ -1,14 +1,11 @@
 package config
 
 import (
-	"bytes"
 	"errors"
 	"os"
 	"reflect"
 	"slices"
 	"time"
-
-	"github.com/BurntSushi/toml"
 )
 
 type ResourceEdit struct {
@@ -87,7 +84,7 @@ func PatchResource(path string, current Snapshot, id string, patch ResourceEdit)
 	if reflect.DeepEqual(next, current) {
 		return nil
 	}
-	return writeResources(path, document)
+	return writeTOML(path, document)
 }
 
 func DeleteResource(path string, current Snapshot, id string) error {
@@ -111,13 +108,5 @@ func DeleteResource(path string, current Snapshot, id string) error {
 	if err := validateSnapshot(next); err != nil {
 		return err
 	}
-	return writeResources(path, document)
-}
-
-func writeResources(path string, document resourcesDoc) error {
-	var encoded bytes.Buffer
-	if err := toml.NewEncoder(&encoded).Encode(document); err != nil {
-		return err
-	}
-	return Write(path, encoded.Bytes())
+	return writeTOML(path, document)
 }

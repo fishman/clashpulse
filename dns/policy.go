@@ -32,7 +32,7 @@ func Build(snapshot config.Snapshot) (Policy, error) {
 	}
 	sets := make(map[string][]string, len(snapshot.DNS.ResolverSets))
 	for _, set := range snapshot.DNS.ResolverSets {
-		if !validID(set.ID) || len(set.Endpoints) == 0 {
+		if !config.ValidStableID(set.ID) || len(set.Endpoints) == 0 {
 			return nil, fmt.Errorf("dns: invalid or empty resolver set %q", set.ID)
 		}
 		if _, duplicate := sets[set.ID]; duplicate {
@@ -51,7 +51,7 @@ func Build(snapshot config.Snapshot) (Policy, error) {
 	}
 	resources := make(map[string]config.Resource, len(snapshot.Resources))
 	for _, resource := range snapshot.Resources {
-		if !validID(resource.ID) {
+		if !config.ValidStableID(resource.ID) {
 			return nil, fmt.Errorf("dns: invalid resource ID %q", resource.ID)
 		}
 		if _, duplicate := resources[resource.ID]; duplicate {
@@ -78,7 +78,7 @@ func Build(snapshot config.Snapshot) (Policy, error) {
 	}
 	policy := make(Policy, len(snapshot.DNS.Routes))
 	for _, route := range snapshot.DNS.Routes {
-		if !validID(route.ResolverSet) {
+		if !config.ValidStableID(route.ResolverSet) {
 			return nil, fmt.Errorf("dns: route has no valid resolver set")
 		}
 		endpoints, ok := sets[route.ResolverSet]
@@ -89,14 +89,14 @@ func Build(snapshot config.Snapshot) (Policy, error) {
 		key := ""
 		if route.Suffix != "" {
 			matchers++
-			if !validDomain(route.Suffix) {
+			if !config.ValidDomain(route.Suffix) {
 				return nil, fmt.Errorf("dns: invalid suffix %q", route.Suffix)
 			}
 			key = "+." + strings.TrimPrefix(strings.TrimSuffix(route.Suffix, "."), ".")
 		}
 		if route.GeoSite != "" {
 			matchers++
-			if !validToken(route.GeoSite) {
+			if !config.ValidRuleToken(route.GeoSite) {
 				return nil, fmt.Errorf("dns: invalid GeoSite selector %q", route.GeoSite)
 			}
 			key = "geosite:" + route.GeoSite
@@ -338,50 +338,6 @@ func validateListen(address string) error {
 func validPort(port string) bool {
 	n, err := strconv.Atoi(port)
 	return err == nil && n > 0 && n <= 65535
-}
-
-func validID(value string) bool {
-	if len(value) == 0 || len(value) > 64 || value == "." || value == ".." || strings.HasPrefix(value, ".") {
-		return false
-	}
-	for i, r := range value {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || (i > 0 && (r == '-' || r == '_' || r == '.')) {
-			continue
-		}
-		return false
-	}
-	return true
-}
-
-func validToken(value string) bool {
-	if value == "" {
-		return false
-	}
-	for _, r := range value {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
-			continue
-		}
-		return false
-	}
-	return true
-}
-
-func validDomain(value string) bool {
-	value = strings.TrimSuffix(strings.TrimPrefix(value, "."), ".")
-	if len(value) == 0 || len(value) > 253 {
-		return false
-	}
-	for _, label := range strings.Split(value, ".") {
-		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
-			return false
-		}
-		for _, r := range label {
-			if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-') {
-				return false
-			}
-		}
-	}
-	return true
 }
 
 func isLoopback(host string) bool {

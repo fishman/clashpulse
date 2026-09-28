@@ -64,7 +64,7 @@ func (r *Registry) StageDue(ctx context.Context, snapshot config.Snapshot, route
 	}
 	due := make(map[string]struct{}, len(dueIDs))
 	for _, id := range dueIDs {
-		if !validID(id) {
+		if !config.ValidStableID(id) {
 			return nil, fmt.Errorf("resources: invalid due resource ID %q", id)
 		}
 		due[id] = struct{}{}
