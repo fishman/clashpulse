@@ -1,21 +1,3 @@
-["gui.view.Overview"]
-other = "概览"
-
-["gui.view.Proxies"]
-other = "代理"
-
-["gui.view.Subscriptions"]
-other = "订阅"
-
-["gui.view.Filter Lists"]
-other = "过滤列表"
-
-["gui.view.Data Resources"]
-other = "数据资源"
-
-["gui.view.Settings"]
-other = "设置"
-
 ["gui.settings.section.Mihomo binary"]
 other = "Mihomo 内核"
 
@@ -144,9 +126,6 @@ other = "启用"
 
 ["Delete"]
 other = "删除"
-
-["Delete subscription"]
-other = "删除订阅"
 
 ["Delete subscription %s and its private snapshot?"]
 other = "确定删除订阅 %s 及其私有快照？"

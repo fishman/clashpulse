@@ -16,6 +16,9 @@ other = "数据资源"
 ["Settings"]
 other = "设置"
 
+["Delete subscription"]
+other = "删除订阅"
+
 ["Mihomo binary"]
 other = "Mihomo 内核"
 

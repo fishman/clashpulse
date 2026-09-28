@@ -156,10 +156,18 @@ func commandHasPrivateSource(command ipc.Command) bool {
 	return command.SubscriptionID != "" || command.ResourceID != "" || command.FilterID != "" || command.Subscription != nil || command.Resource != nil || command.Filter != nil
 }
 
+var tabTitles = map[Tab]string{
+	TabOverview:      "Overview",
+	TabProxies:       "Proxies",
+	TabSubscriptions: "Subscriptions",
+	TabFilters:       "Filter Lists",
+	TabResources:     "Data Resources",
+	TabSettings:      "Settings",
+}
+
 func viewTitle(tab Tab) string {
-	id := "tui.tab." + string(tab)
-	if title := localize.T(id); title != id {
-		return title
+	if title, ok := tabTitles[tab]; ok {
+		return localize.T(title)
 	}
 	return string(tab)
 }

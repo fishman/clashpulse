@@ -1,26 +1,5 @@
-["tui.tab.overview"]
-other = "Overview"
-
-["tui.tab.proxies"]
-other = "Proxies"
-
-["tui.tab.subscriptions"]
-other = "Subscriptions"
-
-["tui.tab.filters"]
-other = "Filter Lists"
-
-["tui.tab.resources"]
-other = "Data Resources"
-
-["tui.tab.settings"]
-other = "Settings"
-
 ["tui.modal.title.binary"]
 other = "binary settings"
-
-["tui.modal.title.delete_subscription"]
-other = "Delete subscription"
 
 ["tui.modal.title.subscription"]
 other = "subscription settings"

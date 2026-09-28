@@ -1,26 +1,5 @@
-["tui.tab.overview"]
-other = "概览"
-
-["tui.tab.proxies"]
-other = "代理"
-
-["tui.tab.subscriptions"]
-other = "订阅"
-
-["tui.tab.filters"]
-other = "过滤列表"
-
-["tui.tab.resources"]
-other = "数据资源"
-
-["tui.tab.settings"]
-other = "设置"
-
 ["tui.modal.title.binary"]
 other = "Mihomo 内核设置"
-
-["tui.modal.title.delete_subscription"]
-other = "删除订阅"
 
 ["tui.modal.title.subscription"]
 other = "订阅设置"

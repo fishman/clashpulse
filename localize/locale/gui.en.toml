@@ -1,21 +1,3 @@
-["gui.view.Overview"]
-other = "Overview"
-
-["gui.view.Proxies"]
-other = "Proxies"
-
-["gui.view.Subscriptions"]
-other = "Subscriptions"
-
-["gui.view.Filter Lists"]
-other = "Filter Lists"
-
-["gui.view.Data Resources"]
-other = "Data Resources"
-
-["gui.view.Settings"]
-other = "Settings"
-
 ["gui.settings.section.Mihomo binary"]
 other = "Mihomo binary"
 

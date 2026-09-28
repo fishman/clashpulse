@@ -133,7 +133,7 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 	countCells := make([]fyne.CanvasObject, 0, 6)
 	viewNames := make([]string, len(viewIDs))
 	for i, name := range viewIDs {
-		viewNames[i] = localize.T("gui.view." + name)
+		viewNames[i] = localize.T(name)
 	}
 	for _, label := range []string{localize.T("Proxy groups"), localize.T("Subscriptions"), localize.T("Data resources"), localize.T("Filter lists"), localize.T("Jobs"), localize.T("Reported issues")} {
 		value := widget.NewLabel("0")
@@ -189,8 +189,6 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 	return d
 }
 
-// installKeys binds the window keys Fyne leaves free: Control+Q quits and Escape
-// dismisses the top dialog.
 func (d *desktopUI) installKeys() {
 	d.window.Canvas().AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyQ, Modifier: fyne.KeyModifierControl}, func(fyne.Shortcut) {
 		if d.quit != nil {
@@ -221,7 +219,7 @@ func (d *desktopUI) showView(name string) {
 	if !ok {
 		return
 	}
-	label := localize.T("gui.view." + name)
+	label := localize.T(name)
 	if d.viewSelect.Selected != label {
 		d.viewSelect.Selected = label
 		d.viewSelect.Refresh()
