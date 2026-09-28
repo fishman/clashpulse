@@ -53,7 +53,14 @@ func (s *runtimeService) execute(ctx context.Context, cmd ipc.Command) error {
 		}
 		return s.start(ctx)
 	case ipc.CommandStop:
-		return s.stop(ctx)
+		if err := s.stop(ctx); err != nil {
+			return err
+		}
+		if !s.store.Snapshot().App.SystemProxy.Enabled {
+			return nil
+		}
+		enabled := false
+		return s.patchSettings(ctx, &ipc.ConfigPatch{SystemProxyEnabled: &enabled})
 	case ipc.CommandRestart:
 		s.forceRestart = true
 		defer func() { s.forceRestart = false }()
