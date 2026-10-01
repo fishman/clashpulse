@@ -6,9 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -23,13 +21,7 @@ import (
 )
 
 func TestRunSubscriptionRefreshDoesNotBlockStop(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("fake Mihomo executable requires POSIX shell")
-	}
-	python, err := exec.LookPath("python3")
-	if err != nil {
-		t.Skip("python3 unavailable for fake controller")
-	}
+	python := requireFakeMihomo(t)
 
 	var blockSubscription atomic.Bool
 	subscriptionStarted := make(chan struct{}, 1)
@@ -48,7 +40,7 @@ func TestRunSubscriptionRefreshDoesNotBlockStop(t *testing.T) {
 			}
 			<-releaseSubscription
 		}
-		_, _ = w.Write([]byte("proxies:\n  - name: node-a\n    type: direct\n  - name: node-b\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a, node-b]\n"))
+		_, _ = w.Write([]byte(twoNodeProfile))
 	}))
 	defer server.Close()
 	defer releaseSubscriptionNow()
@@ -59,7 +51,7 @@ func TestRunSubscriptionRefreshDoesNotBlockStop(t *testing.T) {
 	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\n[monitor]\nenabled = false\n", binary))); err != nil {
 		t.Fatal(err)
 	}
-	if err := config.Write(filepath.Join(configDir, "subscriptions.toml"), []byte(fmt.Sprintf("[[subscription]]\nid = \"daily\"\nurl = %q\nenabled = true\nallow_http = true\n", server.URL+"/subscription"))); err != nil {
+	if err := config.Write(filepath.Join(configDir, "subscriptions.toml"), []byte(fmt.Sprintf(dailySubscriptionTOML, server.URL+"/subscription"))); err != nil {
 		t.Fatal(err)
 	}
 	if err := config.Write(filepath.Join(configDir, "resources.toml"), []byte("# no resources in this lifecycle test\n")); err != nil {

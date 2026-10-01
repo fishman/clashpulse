@@ -91,7 +91,7 @@ func localOwnerFixture(t *testing.T) (string, string, string, string) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(root, "my profile.yaml")
-	if err := os.WriteFile(path, []byte("proxies:\n  - name: node-a\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a]\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(oneNodeProfile), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return configDir, stateDir, filepath.Join(root, "socket", "service.sock"), path

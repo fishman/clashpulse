@@ -6,10 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"testing"
 	"time"
 
@@ -20,16 +18,10 @@ import (
 )
 
 func TestFailedMixedReloadPreservesInactiveSubscriptionSnapshot(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("fake Mihomo executable requires POSIX shell")
-	}
-	python, err := exec.LookPath("python3")
-	if err != nil {
-		t.Skip("python3 unavailable for fake controller")
-	}
+	python := requireFakeMihomo(t)
 	root := t.TempDir()
 	binary := fakeAppMihomo(t, root, python)
-	profile := []byte("proxies:\n  - name: node-a\n    type: direct\n  - name: node-b\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a, node-b]\n")
+	profile := []byte(twoNodeProfile)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(profile) }))
 	defer server.Close()
 	configDir, stateDir := filepath.Join(root, "config"), filepath.Join(root, "state")
@@ -43,7 +35,7 @@ func TestFailedMixedReloadPreservesInactiveSubscriptionSnapshot(t *testing.T) {
 	}
 	writeSubscriptions := func(includeRetired bool) {
 		t.Helper()
-		value := fmt.Sprintf("[[subscription]]\nid = \"daily\"\nurl = %q\nenabled = true\nallow_http = true\n", server.URL+"/daily")
+		value := fmt.Sprintf(dailySubscriptionTOML, server.URL+"/daily")
 		if includeRetired {
 			value += fmt.Sprintf("\n[[subscription]]\nid = \"retired\"\nurl = %q\nenabled = false\nallow_http = true\n", server.URL+"/retired")
 		}
@@ -162,13 +154,7 @@ func TestFailedMixedReloadPreservesInactiveSubscriptionSnapshot(t *testing.T) {
 }
 
 func TestFailedPostRestartRefreshRestoresRuntimeState(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("fake Mihomo executable requires POSIX shell")
-	}
-	python, err := exec.LookPath("python3")
-	if err != nil {
-		t.Skip("python3 unavailable for fake controller")
-	}
+	python := requireFakeMihomo(t)
 	root := t.TempDir()
 	marker := filepath.Join(root, "fail-third-proxy-read")
 	binary := fakeAppMihomoFailingThirdProxyRead(t, root, python, marker)
@@ -176,7 +162,7 @@ func TestFailedPostRestartRefreshRestoresRuntimeState(t *testing.T) {
 	if err := os.WriteFile(candidateBinary, []byte(fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = -v ]; then echo 'Mihomo Meta v1.19.32 linux amd64'; exit 0; fi\nexec %q \"$@\"\n", binary)), 0700); err != nil {
 		t.Fatal(err)
 	}
-	profile := []byte("proxies:\n  - name: node-a\n    type: direct\n  - name: node-b\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a, node-b]\n")
+	profile := []byte(twoNodeProfile)
 	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(profile) }))
 	defer source.Close()
 	configDir, stateDir := filepath.Join(root, "config"), filepath.Join(root, "state")
@@ -184,7 +170,7 @@ func TestFailedPostRestartRefreshRestoresRuntimeState(t *testing.T) {
 	if err := config.Write(configPath, []byte(fmt.Sprintf("[mihomo]\nbinary = %q\n[monitor]\nenabled = true\n", binary))); err != nil {
 		t.Fatal(err)
 	}
-	if err := config.Write(filepath.Join(configDir, "subscriptions.toml"), []byte(fmt.Sprintf("[[subscription]]\nid = \"daily\"\nurl = %q\nenabled = true\nallow_http = true\n", source.URL))); err != nil {
+	if err := config.Write(filepath.Join(configDir, "subscriptions.toml"), []byte(fmt.Sprintf(dailySubscriptionTOML, source.URL))); err != nil {
 		t.Fatal(err)
 	}
 	if err := config.Write(filepath.Join(configDir, "resources.toml"), []byte("# no resources in runtime transaction test\n")); err != nil {

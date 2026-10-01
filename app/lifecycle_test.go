@@ -20,17 +20,11 @@ import (
 )
 
 func TestRunAtRefreshActivateSelectAndStop(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("fake Mihomo executable requires POSIX shell")
-	}
-	python, err := exec.LookPath("python3")
-	if err != nil {
-		t.Skip("python3 unavailable for fake controller")
-	}
+	python := requireFakeMihomo(t)
 	root := t.TempDir()
 	binary := fakeAppMihomo(t, root, python)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("proxies:\n  - name: node-a\n    type: direct\n  - name: node-b\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a, node-b]\n"))
+		_, _ = w.Write([]byte(twoNodeProfile))
 	}))
 	defer server.Close()
 	configDir := filepath.Join(root, "config")
@@ -38,7 +32,7 @@ func TestRunAtRefreshActivateSelectAndStop(t *testing.T) {
 		t.Fatal(err)
 	}
 	secretURL := server.URL + "/subscription?token=short-lived-secret"
-	subscriptionsTOML := fmt.Sprintf("[[subscription]]\nid = \"daily\"\nurl = %q\nenabled = true\nallow_http = true\n", secretURL)
+	subscriptionsTOML := fmt.Sprintf(dailySubscriptionTOML, secretURL)
 	if err := config.Write(filepath.Join(configDir, "subscriptions.toml"), []byte(subscriptionsTOML)); err != nil {
 		t.Fatal(err)
 	}
@@ -265,24 +259,18 @@ func TestRunAtRefreshActivateSelectAndStop(t *testing.T) {
 }
 
 func TestDownloadedProfileActivatesAfterDesktopStarts(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("fake Mihomo executable requires POSIX shell")
-	}
-	python, err := exec.LookPath("python3")
-	if err != nil {
-		t.Skip("python3 unavailable for fake controller")
-	}
+	python := requireFakeMihomo(t)
 	root := t.TempDir()
 	binary := fakeAppMihomo(t, root, python)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("proxies:\n  - name: node-a\n    type: direct\n  - name: node-b\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a, node-b]\n"))
+		_, _ = w.Write([]byte(twoNodeProfile))
 	}))
 	defer server.Close()
 	configDir, stateDir := filepath.Join(root, "config"), filepath.Join(root, "state")
 	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\n", binary))); err != nil {
 		t.Fatal(err)
 	}
-	if err := config.Write(filepath.Join(configDir, "subscriptions.toml"), []byte(fmt.Sprintf("[[subscription]]\nid = \"daily\"\nurl = %q\nenabled = true\nallow_http = true\n", server.URL+"/profile?token=private"))); err != nil {
+	if err := config.Write(filepath.Join(configDir, "subscriptions.toml"), []byte(fmt.Sprintf(dailySubscriptionTOML, server.URL+"/profile?token=private"))); err != nil {
 		t.Fatal(err)
 	}
 	resourceFile := filepath.Join(root, "ads.yaml")
@@ -322,7 +310,7 @@ func TestDownloadedProfileActivatesAfterDesktopStarts(t *testing.T) {
 	}
 	defer client.Close()
 	request, stop := context.WithTimeout(ctx, time.Second)
-	_, err = client.Send(request, ipc.Command{Kind: ipc.CommandActivateSubscription, SubscriptionID: "daily"})
+	_, err := client.Send(request, ipc.Command{Kind: ipc.CommandActivateSubscription, SubscriptionID: "daily"})
 	stop()
 	if err != nil {
 		t.Fatal(err)
@@ -333,6 +321,24 @@ func TestDownloadedProfileActivatesAfterDesktopStarts(t *testing.T) {
 	if state.Groups[0].Label != "select-main" {
 		t.Fatalf("activated group missing: %+v", state.Groups)
 	}
+}
+
+const (
+	twoNodeProfile        = "proxies:\n  - name: node-a\n    type: direct\n  - name: node-b\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a, node-b]\n"
+	oneNodeProfile        = "proxies:\n  - name: node-a\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a]\n"
+	dailySubscriptionTOML = "[[subscription]]\nid = \"daily\"\nurl = %q\nenabled = true\nallow_http = true\n"
+)
+
+func requireFakeMihomo(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skip("fake Mihomo executable requires POSIX shell")
+	}
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 unavailable for fake controller")
+	}
+	return python
 }
 
 func dialAppClient(ctx context.Context, endpoint string) *ipc.Client {
