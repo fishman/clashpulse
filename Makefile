@@ -14,10 +14,13 @@ test:
 vet:
 	go vet -tags ci ./...
 
+format:
+	go fmt ./...
+
 run: build
 	./clashpulse
 
 tui: build
 	./clashpulse tui
 
-.PHONY: build install test vet run tui
+.PHONY: build install test vet format run tui

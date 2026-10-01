@@ -31,7 +31,7 @@ func TestManagedProxyGroupSelectionSendsIntent(t *testing.T) {
 	var sent []ipc.Command
 	page := newProxyPage(func(command ipc.Command) { sent = append(sent, command) })
 	page.update(core.Snapshot{
-		Groups: []core.GroupSnapshot{{ID: "managed", Label: "select-main", Type: "Selector", Selected: "alpha", Proxies: []string{"alpha", "beta"}}},
+		Groups:  []core.GroupSnapshot{{ID: "managed", Label: "select-main", Type: "Selector", Selected: "alpha", Proxies: []string{"alpha", "beta"}}},
 		Proxies: []core.ProxySnapshot{{GroupID: "managed", ID: "alpha", Label: "node-a"}, {GroupID: "managed", ID: "beta", Label: "node-b"}},
 	})
 	if page.groupSelect.Selected != "select-main (Selector)" || page.list.Hidden || page.probe.Disabled() {

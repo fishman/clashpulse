@@ -202,24 +202,24 @@ func loadConfig(path string) (App, Mihomo, Monitor, DNS, error) {
 		switchPolicy = *doc.Monitor.SwitchPolicy
 	}
 	return App{SystemProxy: SystemProxy{Enabled: doc.SystemProxy.Enabled}}, Mihomo{
-		Binary:           doc.Mihomo.Binary,
-		URLTestInterval:  urlTestInterval,
-		URLTestTolerance: urlTestTolerance,
-	}, Monitor{
-		Enabled:               enabled,
-		TestURL:               testURL,
-		SwitchPolicy:          switchPolicy,
-		Interval:              interval,
-		Timeout:               timeout,
-		Concurrency:           concurrency,
-		Threshold:             threshold,
-		AlertThreshold:        alertThreshold,
-		ConsecutiveBadSamples: badSamples,
-		MinImprovement:        minImprovement,
-		Cooldown:              cooldown,
-		Jitter:                jitter,
-		AutomatedGroups:       append([]string(nil), doc.Monitor.AutomatedGroups...),
-	}, DNS{Listen: doc.DNS.Listen}, nil
+			Binary:           doc.Mihomo.Binary,
+			URLTestInterval:  urlTestInterval,
+			URLTestTolerance: urlTestTolerance,
+		}, Monitor{
+			Enabled:               enabled,
+			TestURL:               testURL,
+			SwitchPolicy:          switchPolicy,
+			Interval:              interval,
+			Timeout:               timeout,
+			Concurrency:           concurrency,
+			Threshold:             threshold,
+			AlertThreshold:        alertThreshold,
+			ConsecutiveBadSamples: badSamples,
+			MinImprovement:        minImprovement,
+			Cooldown:              cooldown,
+			Jitter:                jitter,
+			AutomatedGroups:       append([]string(nil), doc.Monitor.AutomatedGroups...),
+		}, DNS{Listen: doc.DNS.Listen}, nil
 }
 
 func loadSubscriptions(path string) ([]Subscription, error) {
