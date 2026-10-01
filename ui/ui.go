@@ -70,7 +70,12 @@ func Run(ctx context.Context, endpoint string) error {
 	go func() {
 		select {
 		case <-runCtx.Done():
-			fyne.Do(a.Quit)
+			select {
+			case <-done:
+			default:
+				<-ipcDone
+				fyne.Do(a.Quit)
+			}
 		case <-done:
 		}
 	}()
@@ -78,9 +83,9 @@ func Run(ctx context.Context, endpoint string) error {
 	w.Show()
 	a.Run()
 	desktopUI.stopped.Store(true)
+	close(done)
 	cancel()
 	<-ipcDone
-	close(done)
 	return nil
 }
 
