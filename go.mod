@@ -70,3 +70,5 @@ require (
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
 )
+
+replace fyne.io/fyne/v2 => github.com/fishing-agents/fyne/v2 v2.8.2-0.20261001232054-d7b412429937
