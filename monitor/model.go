@@ -20,11 +20,12 @@ type Sample struct {
 }
 
 type Decision struct {
-	Switch   bool
-	Old      string
-	New      string
-	Reason   string
-	Evidence []Sample
+	Switch       bool
+	LowerLatency bool
+	Old          string
+	New          string
+	Reason       string
+	Evidence     []Sample
 }
 
 type GroupState struct {

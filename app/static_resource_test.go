@@ -23,6 +23,7 @@ import (
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/download"
 	"github.com/fishman/clashpulse/ipc"
+	"github.com/fishman/clashpulse/monitor"
 	"github.com/fishman/clashpulse/resources"
 	"github.com/fishman/clashpulse/subscriptions"
 )
@@ -129,7 +130,7 @@ elif args[0] in ('set', 'reset'):
 	if err := config.Write(filepath.Join(configDir, "filters.toml"), []byte(filtersTOML)); err != nil {
 		t.Fatal(err)
 	}
-	profile := []byte("proxies:\n  - name: node-a\n    type: direct\n  - name: node-b\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a, node-b]\n")
+	profile := []byte(twoNodeProfile)
 	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(profile) }))
 	t.Cleanup(source.Close)
 	subscription := config.Subscription{ID: "daily", URL: source.URL, Enabled: true, AllowHTTP: true, Timeout: 2 * time.Second}
@@ -365,6 +366,40 @@ func TestExplicitStopDisablesSystemProxyForNextStart(t *testing.T) {
 	}
 }
 
+func TestAutomaticLowerLatencySwitchQueuesNotificationAfterSelection(t *testing.T) {
+	h := newStaticRuntime(t)
+	h.activate(t)
+	groupID := opaqueID("select-main")
+	h.service.automation[groupID] = true
+	decision := monitor.Decision{
+		Switch: true, LowerLatency: true, Old: "node-a", New: "node-b", Reason: monitor.ReasonSwitchCandidate,
+		Evidence: []monitor.Sample{
+			{Group: "select-main", Proxy: "node-a", Latency: 900 * time.Millisecond, Outcome: monitor.OutcomeSuccess},
+			{Group: "select-main", Proxy: "node-b", Latency: 500 * time.Millisecond, Outcome: monitor.OutcomeSuccess},
+		},
+	}
+	h.service.acceptBatch(h.ctx, monitor.Batch{Decisions: []monitor.Decision{decision}})
+	if selected := h.service.groups[groupID].Selected; selected != "node-b" {
+		t.Fatalf("controller selection = %q, want lower-latency candidate", selected)
+	}
+	select {
+	case <-h.service.improvementNotifications:
+	default:
+		t.Fatal("successful lower-latency switch did not queue notification")
+	}
+	decision.LowerLatency = false
+	decision.Old, decision.New = "node-b", "node-a"
+	h.service.acceptBatch(h.ctx, monitor.Batch{Decisions: []monitor.Decision{decision}})
+	if h.service.groups[groupID].Selected != "node-a" {
+		t.Fatal("valid non-improvement switch was not applied")
+	}
+	select {
+	case <-h.service.improvementNotifications:
+		t.Fatal("switch without measured improvement queued notification")
+	default:
+	}
+}
+
 func TestStaticSystemProxyApplyFailureReportsSafeStage(t *testing.T) {
 	h := newStaticRuntime(t)
 	marker := filepath.Join(h.root, "fail-proxy-once")
@@ -410,7 +445,7 @@ func TestStaticUnsupportedSystemProxyEnvironmentReportsEnvironment(t *testing.T)
 func TestLocalProfileResourceFailureReportsStableID(t *testing.T) {
 	h := newStaticRuntime(t)
 	profile := filepath.Join(h.root, "source with password=private.yaml")
-	if err := os.WriteFile(profile, []byte("proxies:\n  - name: node-a\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a]\n"), 0o600); err != nil {
+	if err := os.WriteFile(profile, []byte(oneNodeProfile), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Remove(h.resourceFiles["list-a"]); err != nil {
@@ -425,7 +460,7 @@ func TestLocalProfileResourceFailureReportsStableID(t *testing.T) {
 func TestLocalActiveSourceDoesNotMarkSavedSubscriptionRunning(t *testing.T) {
 	h := newStaticRuntime(t)
 	h.activate(t)
-	h.service.localProfile = []byte("proxies:\n  - name: node-a\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a]\n")
+	h.service.localProfile = []byte(oneNodeProfile)
 	state := h.service.stateSnapshot()
 	if state.ActiveSource != "local" || len(state.Subscriptions) != 1 || state.Subscriptions[0].Active {
 		t.Fatalf("local source was shown as active subscription: %+v", state.Subscriptions)
@@ -435,7 +470,7 @@ func TestLocalActiveSourceDoesNotMarkSavedSubscriptionRunning(t *testing.T) {
 func TestLocalProfileSystemProxyResetOnCancel(t *testing.T) {
 	h := newStaticRuntime(t)
 	profile := filepath.Join(h.root, "local.yaml")
-	if err := os.WriteFile(profile, []byte("proxies:\n  - name: node-a\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a]\n"), 0o600); err != nil {
+	if err := os.WriteFile(profile, []byte(oneNodeProfile), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	before := readJSONFile(t, h.proxyState)
@@ -472,7 +507,7 @@ func TestLocalProfileSystemProxyResetOnCancel(t *testing.T) {
 func TestLocalReadinessAndProxyRollbackFailureReportsRollback(t *testing.T) {
 	h := newStaticRuntime(t)
 	profile := filepath.Join(h.root, "local.yaml")
-	if err := os.WriteFile(profile, []byte("proxies:\n  - name: node-a\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a]\n"), 0o600); err != nil {
+	if err := os.WriteFile(profile, []byte(oneNodeProfile), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	marker := filepath.Join(h.root, "fail-restore-once")
@@ -538,7 +573,7 @@ func TestLocalProfileResourceRefresh(t *testing.T) {
 
 func TestConfigOverrideHiddenDuringPendingAndFailedRollback(t *testing.T) {
 	h := localStaticRuntime(t)
-	other := []byte("proxies:\n  - name: node-a\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a]\n")
+	other := []byte(oneNodeProfile)
 	if err := h.service.applyGenerated(h.ctx, other); err != nil {
 		t.Fatalf("candidate apply: %v", err)
 	}
@@ -638,7 +673,7 @@ func TestLocalResourceActivationRollbackRestoresDurableConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	profile := []byte("proxies:\n  - name: node-a\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a]\n")
+	profile := []byte(oneNodeProfile)
 	if err := plan.Validate(func(home string, paths map[string]string) error {
 		_, err := h.service.validatedCandidate(h.ctx, profile, intent, home, paths, h.service.cap)
 		return err

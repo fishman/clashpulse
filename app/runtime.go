@@ -89,6 +89,8 @@ type runtimeService struct {
 	lastSwitch                map[string]time.Time
 	manualOverride            map[string]bool
 	notifications             chan time.Duration
+	improvementNotifications  chan struct{}
+	notify                    func(desktopNotification) error
 	notificationDone          chan struct{}
 }
 

@@ -184,6 +184,7 @@ func Decide(policy Policy, state GroupState, samples []Sample, now time.Time) De
 		decision.Reason = ReasonNoBetterCandidate
 		return decision
 	}
+	decision.LowerLatency = !selectedOffline && selectedCount >= policy.MinCandidateSamples && !sampleFailed(comparable[len(comparable)-1])
 	decision.Switch = true
 	decision.New = bestName
 	decision.Reason = ReasonSwitchCandidate

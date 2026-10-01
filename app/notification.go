@@ -4,11 +4,26 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/fishman/clashpulse/localize"
 	"github.com/gen2brain/beeep"
 )
 
-// notifySlowConnections emits only aggregate latency, never proxy names or URLs.
-func notifySlowConnections(threshold time.Duration) error {
+type desktopNotification struct {
+	title, message string
+}
+
+func slowConnectionsNotification(threshold time.Duration) desktopNotification {
+	return desktopNotification{
+		title:   "ClashPulse connection health",
+		message: fmt.Sprintf("All measured connections are slower than %d ms", threshold.Milliseconds()),
+	}
+}
+
+func lowerLatencyNotification() desktopNotification {
+	return desktopNotification{title: localize.T("Connection improved"), message: localize.T("Switched to a lower-latency connection")}
+}
+
+func notifyDesktop(notification desktopNotification) error {
 	beeep.AppName = "ClashPulse"
-	return beeep.Notify("ClashPulse connection health", fmt.Sprintf("All measured connections are slower than %d ms", threshold.Milliseconds()), "")
+	return beeep.Notify(notification.title, notification.message, "")
 }

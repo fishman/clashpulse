@@ -210,6 +210,50 @@ func TestDecideOfflineSelectedUsesConsecutiveFailureEvidence(t *testing.T) {
 	}
 }
 
+func TestDecideMarksOnlyProvenLowerLatencySwitches(t *testing.T) {
+	policy := testPolicy()
+	samples := make([]Sample, 0, 6)
+	for i := int64(1); i <= 3; i++ {
+		samples = append(samples,
+			testSample(policy, "auto", "alpha", 900*time.Millisecond, i),
+			testSample(policy, "auto", "beta", 500*time.Millisecond, i),
+		)
+	}
+	decision := Decide(policy, testGroup(), samples, time.Unix(4, 0))
+	if !decision.Switch || !decision.LowerLatency {
+		t.Fatalf("measured median improvement not marked: %+v", decision)
+	}
+	for i := 0; i < len(samples); i += 2 {
+		samples[i].Outcome, samples[i].Latency = OutcomeTimeout, 0
+	}
+	decision = Decide(policy, testGroup(), samples, time.Unix(4, 0))
+	if !decision.Switch || decision.LowerLatency {
+		t.Fatalf("offline failover claimed lower latency: %+v", decision)
+	}
+	samples[0] = testSample(policy, "auto", "alpha", 900*time.Millisecond, 1)
+	decision = Decide(policy, testGroup(), samples, time.Unix(4, 0))
+	if !decision.Switch || decision.LowerLatency {
+		t.Fatalf("single successful selected sample claimed robust improvement: %+v", decision)
+	}
+}
+
+func TestDecideLatestSelectedTimeoutIsNotLowerLatency(t *testing.T) {
+	policy := testPolicy()
+	policy.MinCandidateSamples = 2
+	samples := []Sample{
+		testSample(policy, "auto", "alpha", 900*time.Millisecond, 1),
+		testSample(policy, "auto", "alpha", 900*time.Millisecond, 2),
+		{Group: "auto", Proxy: "alpha", URL: policy.TestURL, FinishedAt: time.Unix(3, 0), Outcome: OutcomeTimeout},
+	}
+	for i := int64(1); i <= 3; i++ {
+		samples = append(samples, testSample(policy, "auto", "beta", 500*time.Millisecond, i))
+	}
+	decision := Decide(policy, testGroup(), samples, time.Unix(4, 0))
+	if !decision.Switch || decision.New != "beta" || decision.LowerLatency {
+		t.Fatalf("latest selected timeout claimed lower latency: %+v", decision)
+	}
+}
+
 func TestLatencyAlertRecoversWithOneFastProxyDespiteOtherTimeout(t *testing.T) {
 	policy := testPolicy()
 	state := testGroup()
@@ -234,7 +278,7 @@ func TestDecideLowestLatencySwitchesWhileSelectedIsHealthy(t *testing.T) {
 		)
 	}
 	decision := Decide(policy, testGroup(), samples, time.Unix(4, 0))
-	if !decision.Switch || decision.New != "beta" {
+	if !decision.Switch || !decision.LowerLatency || decision.New != "beta" {
 		t.Fatalf("fastest node was not selected while the current one stayed healthy: %+v", decision)
 	}
 

@@ -45,3 +45,9 @@ other = "managed filter rules"
 
 ["control.enable"]
 other = "Enabled"
+
+["Connection improved"]
+other = "Connection improved"
+
+["Switched to a lower-latency connection"]
+other = "Automatically switched to a lower-latency connection"

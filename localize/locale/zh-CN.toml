@@ -276,3 +276,9 @@ other = "操作失败"
 
 ["recovered"]
 other = "已恢复"
+
+["Connection improved"]
+other = "连接已改善"
+
+["Switched to a lower-latency connection"]
+other = "已自动切换到延迟更低的连接"

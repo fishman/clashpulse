@@ -1,10 +1,13 @@
 package app
 
 import (
+	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/localize"
 )
 
 func TestAllMeasuredSlowRequiresEveryRecentSuccessfulProxy(t *testing.T) {
@@ -35,4 +38,31 @@ func TestAllMeasuredSlowRequiresEveryRecentSuccessfulProxy(t *testing.T) {
 	if high, _ := allMeasuredSlow(groups, proxies, 250*time.Millisecond, now, 5*time.Minute); high {
 		t.Fatal("stale URLTest sample claimed all connections were slow")
 	}
+}
+
+func TestRunNotificationsDeliversLocalizedLowerLatencyMessage(t *testing.T) {
+	localize.SetLanguage("zh-CN")
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	delivered := make(chan desktopNotification, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	service := &runtimeService{
+		notifications: make(chan time.Duration, 1), improvementNotifications: make(chan struct{}, 1),
+		notificationErrors: make(chan error, 1), notificationDone: make(chan struct{}),
+		notify: func(notification desktopNotification) error { delivered <- notification; return nil },
+	}
+	go service.runNotifications(ctx)
+	t.Cleanup(func() { cancel(); <-service.notificationDone })
+	service.improvementNotifications <- struct{}{}
+	select {
+	case notification := <-delivered:
+		if notification.title != "连接已改善" || notification.message != "已自动切换到延迟更低的连接" {
+			t.Fatalf("lower-latency notification = %+v", notification)
+		}
+		if strings.Contains(notification.title+notification.message, "node-") || strings.Contains(notification.title+notification.message, "http") {
+			t.Fatalf("notification exposed connection details: %+v", notification)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("notification worker did not deliver lower-latency switch")
+	}
+
 }

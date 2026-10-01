@@ -40,7 +40,7 @@ func newRuntimeServiceWithResponseCapture(configDir, stateDir string, initial co
 		secret: hex.EncodeToString(secret), controllerAddress: fmt.Sprintf("127.0.0.1:%d", controllerPort), proxyPort: proxyPort,
 		groups: make(map[string]mihomo.Group), proxies: make(map[string]string), automation: make(map[string]bool),
 		lastSwitch: make(map[string]time.Time), manualOverride: make(map[string]bool), notifications: make(chan time.Duration, 1),
-		notificationDone: make(chan struct{}),
+		improvementNotifications: make(chan struct{}, 1), notify: notifyDesktop, notificationDone: make(chan struct{}),
 	}
 	for _, id := range initial.Monitor.AutomatedGroups {
 		s.automation[id] = true

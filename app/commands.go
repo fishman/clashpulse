@@ -518,6 +518,12 @@ func (s *runtimeService) acceptBatch(ctx context.Context, batch monitor.Batch) {
 			s.reportError("switch", err)
 			continue
 		}
+		if decision.LowerLatency {
+			select {
+			case s.improvementNotifications <- struct{}{}:
+			default:
+			}
+		}
 		s.lastSwitch[groupID] = time.Now()
 		event := core.SwitchSnapshot{GroupID: groupID, OldID: opaqueID(decision.Old), NewID: opaqueID(decision.New), Reason: decision.Reason, At: time.Now().Unix()}
 		for _, sample := range decision.Evidence {
@@ -580,6 +586,18 @@ func allMeasuredSlow(groups []core.GroupSnapshot, proxies []core.ProxySnapshot, 
 
 func (s *runtimeService) runNotifications(ctx context.Context) {
 	defer close(s.notificationDone)
+	send := s.notify
+	if send == nil {
+		send = notifyDesktop
+	}
+	deliver := func(notification desktopNotification) {
+		if err := send(notification); err != nil {
+			select {
+			case s.notificationErrors <- err:
+			default:
+			}
+		}
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -588,12 +606,12 @@ func (s *runtimeService) runNotifications(ctx context.Context) {
 			if ctx.Err() != nil {
 				return
 			}
-			if err := notifySlowConnections(threshold); err != nil {
-				select {
-				case s.notificationErrors <- err:
-				default:
-				}
+			deliver(slowConnectionsNotification(threshold))
+		case <-s.improvementNotifications:
+			if ctx.Err() != nil {
+				return
 			}
+			deliver(lowerLatencyNotification())
 		}
 	}
 }
