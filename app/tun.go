@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/fishman/clashpulse/config"
@@ -63,6 +66,16 @@ func (s *runtimeService) runtimeCapability(ctx context.Context, allowTun bool) (
 func tunSource(capability mihomo.Capability) tun.Source {
 	return tun.Source{Path: capability.Path, Version: capability.Version}
 }
+
+// tunEnviron is the privileged Mihomo's environment with an empty PATH. Mihomo
+// runs no external command on Linux, but sing-tun runs resolvectl when it finds
+// it, and systemd-resolved raises a polkit prompt for each such call from a
+// non-root process. DNS still reaches Mihomo through auto-route and dns-hijack.
+func tunEnviron() []string {
+	env := slices.DeleteFunc(os.Environ(), func(variable string) bool { return strings.HasPrefix(variable, "PATH=") })
+	return append(env, "PATH=")
+}
+
 func (s *runtimeService) tunCapability(capability mihomo.Capability) bool {
 	return s.tun.path != "" && capability.Path == s.tun.path
 }

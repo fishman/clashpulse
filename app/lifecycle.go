@@ -724,7 +724,11 @@ func (s *runtimeService) startProcess(ctx context.Context, capability mihomo.Cap
 	if home != s.registry.Home() {
 		return core.WrapActivation(core.ActivationResources, fmt.Errorf("clashpulse: invalid managed data home"))
 	}
-	if err := s.process.Start(s.processCtx, mihomo.StartPlan{Capability: capability, ConfigPath: path, Args: []string{"-d", home}}); err != nil {
+	plan := mihomo.StartPlan{Capability: capability, ConfigPath: path, Args: []string{"-d", home}}
+	if s.tunCapability(capability) {
+		plan.Env = tunEnviron()
+	}
+	if err := s.process.Start(s.processCtx, plan); err != nil {
 		return core.WrapActivation(core.ActivationProcessStart, err)
 	}
 	controller, err := mihomo.NewController("http://"+s.controllerAddress, s.secret, &http.Client{Timeout: time.Second})

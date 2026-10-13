@@ -237,9 +237,16 @@ default keys in `keys.toml`; help derived from the keymap.
 ## Risks
 
 - systemd-resolved authorizes per-link DNS changes by uid through polkit, not
-  by capability. A non-root Mihomo may fail to set link DNS while routing
-  works; `dns-hijack` still captures port-53 traffic. Documented, not
-  configured by ClashPulse.
+  by capability. sing-tun (bundled in Mihomo; DNS mode `hijack` whenever
+  `auto-route` is on, not configurable from Mihomo) runs `resolvectl domain`,
+  `default-route`, and `dns` on every TUN start and `revert` on stop, so a
+  non-root Mihomo raises three polkit prompts per start. ClashPulse starts the
+  privileged copy with an empty `PATH`: sing-tun finds no `resolvectl` and
+  skips those calls, so the only prompt is the one-time `setcap`. Mihomo runs
+  no external command on Linux, and sing-tun's only other lookups serve
+  `auto-redirect` (rendered `false`) and OpenWrt `fw4`. DNS still reaches
+  Mihomo through `auto-route` plus `dns-hijack`; resolved keeps its own
+  upstream view in `resolvectl status`.
 - NetworkManager may manage the TUN link and overwrite its DNS. The fixed
   `clashpulse0` name lets the user add an `unmanaged-devices` rule; ClashPulse
   never writes NetworkManager configuration.

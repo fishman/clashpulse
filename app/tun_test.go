@@ -108,13 +108,13 @@ func tunOff(t *testing.T, h *staticRuntime) {
 	t.Setenv("CLASHPULSE_FAKE_TUN_OFF", marker)
 }
 
-func lastStartBinary(t *testing.T, h *staticRuntime) string {
+func lastStart(t *testing.T, h *staticRuntime) map[string]string {
 	t.Helper()
 	starts := readStartRecords(t, h.startLog)
 	if len(starts) == 0 {
 		t.Fatal("Mihomo never started")
 	}
-	return starts[len(starts)-1]["binary"]
+	return starts[len(starts)-1]
 }
 
 func setTun(enabled bool) ipc.Command {
@@ -168,8 +168,14 @@ func TestTunEnableStartsPrivilegedCopy(t *testing.T) {
 	if got := fake.prepares.Load(); got != 1 {
 		t.Fatalf("Prepare ran %d times, want once", got)
 	}
-	if binary := lastStartBinary(t, h); binary != h.service.tun.path {
-		t.Fatalf("Mihomo started from %q, want privileged copy %q", binary, h.service.tun.path)
+	start := lastStart(t, h)
+	if start["binary"] != h.service.tun.path {
+		t.Fatalf("Mihomo started from %q, want privileged copy %q", start["binary"], h.service.tun.path)
+	}
+	// Without resolvectl on PATH, sing-tun skips the systemd-resolved calls that
+	// each raise a polkit prompt for a non-root Mihomo.
+	if start["path"] != "" {
+		t.Fatalf("privileged Mihomo PATH = %q, want empty", start["path"])
 	}
 	want := core.TunSnapshot{Enabled: true, Active: true, Stack: core.TunStackGVisor, DNSMode: core.TunDNSProfile, Privilege: core.TunPrivilegeReady, PrivilegedPath: h.service.tun.path, Device: "clashpulse0"}
 	if state.Tun != want {
@@ -196,8 +202,8 @@ func TestTunNotStartedRestoresPriorRuntime(t *testing.T) {
 	if onDisk, err := os.ReadFile(h.service.configPath()); err != nil || !bytes.Equal(onDisk, before) {
 		t.Fatalf("prior generated configuration not restored: %v", err)
 	}
-	if binary := lastStartBinary(t, h); binary != filepath.Join(h.root, "mihomo") {
-		t.Fatalf("restored runtime runs %q, want the selected binary", binary)
+	if start := lastStart(t, h); start["binary"] != filepath.Join(h.root, "mihomo") || start["path"] == "" {
+		t.Fatalf("restored runtime runs %q with PATH %q, want the selected binary with the normal PATH", start["binary"], start["path"])
 	}
 	state := h.service.stateSnapshot()
 	if !state.Tun.Enabled || state.Tun.Active || state.Tun.LastFailure != core.ActivationTunStart.Message() || state.Tun.Device != "" {
@@ -295,7 +301,7 @@ func TestTunAutomaticStartWithStalePrivilegeSkipsTun(t *testing.T) {
 	if strings.Contains(string(h.service.generated), "clashpulse0") {
 		t.Fatal("automatic start rendered TUN without a ready grant")
 	}
-	if binary := lastStartBinary(t, h); binary != filepath.Join(h.root, "mihomo") {
+	if binary := lastStart(t, h)["binary"]; binary != filepath.Join(h.root, "mihomo") {
 		t.Fatalf("automatic start ran %q, want the selected binary", binary)
 	}
 	if got := fake.prepares.Load(); got != 0 {
@@ -328,7 +334,7 @@ func TestTunDisableRevokesEvenWhenRestartFails(t *testing.T) {
 	if err := h.service.execute(h.ctx, setTun(false)); err != nil {
 		t.Fatal(err)
 	}
-	if binary := lastStartBinary(t, h); binary != filepath.Join(h.root, "mihomo") || h.service.tunActive {
+	if binary := lastStart(t, h)["binary"]; binary != filepath.Join(h.root, "mihomo") || h.service.tunActive {
 		t.Fatalf("disabled TUN runs %q, active=%t", binary, h.service.tunActive)
 	}
 	if got := fake.revokes.Load(); got != 2 {
@@ -482,7 +488,7 @@ func TestTunActivationDiscardsResourceRefreshWithoutTun(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := waitAppSnapshot(t, h.ctx, client, func(state core.Snapshot) bool { return len(state.Jobs) == 0 })
-	if binary := lastStartBinary(t, h); !state.Tun.Active || binary != h.service.tun.path {
+	if binary := lastStart(t, h)["binary"]; !state.Tun.Active || binary != h.service.tun.path {
 		t.Fatalf("stale resource refresh replaced TUN: active=%t binary=%q", state.Tun.Active, binary)
 	}
 }
@@ -516,7 +522,7 @@ func TestTunDisableCancelsPendingPrepare(t *testing.T) {
 	state := waitAppSnapshot(t, h.ctx, client, func(state core.Snapshot) bool {
 		return !state.Tun.Enabled && len(state.Jobs) == 0
 	})
-	if state.Tun.Active || lastStartBinary(t, h) != filepath.Join(h.root, "mihomo") {
+	if state.Tun.Active || lastStart(t, h)["binary"] != filepath.Join(h.root, "mihomo") {
 		t.Fatalf("canceled Prepare activated TUN: %+v", state.Tun)
 	}
 	if _, err := os.Stat(h.service.tun.path); !os.IsNotExist(err) {

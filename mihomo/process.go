@@ -14,6 +14,8 @@ type StartPlan struct {
 	Capability Capability
 	ConfigPath string
 	Args       []string
+	// Env replaces the child's environment when non-nil.
+	Env []string
 }
 
 // stopGrace lets Mihomo remove its TUN routes, ip rules, and nftables state
@@ -59,6 +61,7 @@ func (p *Process) Start(ctx context.Context, plan StartPlan) error {
 	cmd := exec.CommandContext(ctx, plan.Capability.Path, argv...)
 	cmd.Cancel = func() error { return terminate(cmd.Process) }
 	cmd.WaitDelay = p.gracePeriod()
+	cmd.Env = plan.Env
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start mihomo: %w", err)
 	}

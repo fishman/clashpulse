@@ -974,6 +974,7 @@ paths = [p for p in paths if os.path.isabs(p)]
 initial = {p: hashlib.sha256(open(p,'rb').read()).hexdigest() for p in paths if os.path.isfile(p)}
 record = {os.path.basename(p):v for p,v in initial.items()}
 record['binary'] = sys.argv[5]
+record['path'] = os.environ.get('PATH', '<unset>')
 with open(sys.argv[3], 'a', encoding='utf-8') as out: out.write(json.dumps(record)+'\n')
 subprocess.Popen([sys.executable, __file__, '--watch', str(os.getpid()), json.dumps(paths), json.dumps(initial), sys.argv[4]], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 class ProxyHandler(socketserver.BaseRequestHandler):
@@ -1014,7 +1015,7 @@ http.server.ThreadingHTTPServer(('127.0.0.1', int(address.rsplit(':',1)[1])), Ha
 	// inspection check) by this exact binary, not a privileged copy of it,
 	// while the named file exists.
 	const block = "block=\"$CLASHPULSE_FAKE_VALIDATE_BLOCK\"; if [ -n \"$block\" ] && [ -f \"$block\" ] && [ \"$4\" = -d ] && [ \"$0\" = %q ]; then : > \"$block.entered\"; while [ -f \"$block\" ]; do sleep 0.05; done; fi; "
-	script := fmt.Sprintf("#!/bin/sh\ncase \"$1\" in\n -v) echo 'Mihomo Meta v1.19.31 linux amd64'; exit 0;;\n -t) "+block+"if [ -f %q ] && [ \"$5\" = %q ]; then rm -f %q; exit 1; fi; exit 0;;\n -f) if [ -f %q ]; then rm -f %q; exit 0; fi; exec %q %q \"$2\" \"$4\" %q %q \"$0\" 2>>%q;;\nesac\nexit 1\n", binary, failValidation, filepath.Join(root, "state", "resources"), failValidation, failStart, failStart, python, server, startLog, mutationLog, fakeLog)
+	script := fmt.Sprintf("#!/bin/sh\ncase \"$1\" in\n -v) echo 'Mihomo Meta v1.19.31 linux amd64'; exit 0;;\n -t) "+block+"if [ -f %q ] && [ \"$5\" = %q ]; then /bin/rm -f %q; exit 1; fi; exit 0;;\n -f) if [ -f %q ]; then /bin/rm -f %q; exit 0; fi; exec %q %q \"$2\" \"$4\" %q %q \"$0\" 2>>%q;;\nesac\nexit 1\n", binary, failValidation, filepath.Join(root, "state", "resources"), failValidation, failStart, failStart, python, server, startLog, mutationLog, fakeLog)
 	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
