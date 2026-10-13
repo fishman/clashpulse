@@ -220,3 +220,61 @@ func TestTrayAutoFastestToggleSendsOneIntent(t *testing.T) {
 		t.Fatal("disconnected tray kept auto fastest live")
 	}
 }
+
+func TestTrayGroupMenuTogglesAutomation(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	d := &desktopUI{connected: true, window: a.NewWindow("ClashPulse"), actions: make(chan ipc.Command, 2)}
+	snapshot := func(automated bool) core.Snapshot {
+		return core.Snapshot{
+			Monitor: core.MonitorSnapshot{Enabled: true},
+			Groups:  []core.GroupSnapshot{{ID: "group-a", Label: "main", Type: "Selector", Selected: "proxy-a", Proxies: []string{"proxy-a", "proxy-b"}, AutomationEnabled: automated}},
+			Proxies: []core.ProxySnapshot{{ID: "proxy-a", GroupID: "group-a", Label: "node-a"}, {ID: "proxy-b", GroupID: "group-a", Label: "node-b"}},
+		}
+	}
+	toggleFor := func(state core.Snapshot) *fyne.MenuItem {
+		for _, item := range d.trayMenu(state).Items {
+			if item.Label == "Proxies" {
+				group := item.ChildMenu.Items[0]
+				if group.ChildMenu == nil || len(group.ChildMenu.Items) < 3 {
+					t.Fatalf("group submenu = %+v", group.ChildMenu)
+				}
+				return group.ChildMenu.Items[0]
+			}
+		}
+		t.Fatal("tray has no Proxies menu")
+		return nil
+	}
+	item := toggleFor(snapshot(false))
+	if item.Label != "Automatic switching" || item.Checked || item.Disabled {
+		t.Fatalf("automation toggle = %+v", item)
+	}
+	item.Action()
+	if command := <-d.actions; command.Kind != ipc.CommandSetAutomation || command.GroupID != "group-a" || command.Automation == nil || !command.Automation.Enabled {
+		t.Fatalf("enable sent %+v", command)
+	}
+	if trayStateSignature(snapshot(true), true) == trayStateSignature(snapshot(false), true) {
+		t.Fatal("automation change did not refresh tray menu")
+	}
+	if item = toggleFor(snapshot(true)); !item.Checked {
+		t.Fatal("automated group is not checked")
+	}
+	item.Action()
+	if command := <-d.actions; command.Automation == nil || command.Automation.Enabled {
+		t.Fatalf("disable sent %+v", command)
+	}
+	// Automation only acts while the monitor runs, so the item must not
+	// pretend a click took effect when it is off.
+	off := snapshot(false)
+	off.Monitor.Enabled = false
+	if trayStateSignature(off, true) == trayStateSignature(snapshot(false), true) {
+		t.Fatal("monitor change did not refresh tray menu")
+	}
+	if item = toggleFor(off); !item.Disabled || item.Label != "Automatic switching (monitor off)" {
+		t.Fatalf("monitor-off automation toggle = %+v", item)
+	}
+	d.connected = false
+	if item = toggleFor(snapshot(true)); !item.Disabled {
+		t.Fatal("disconnected tray kept group automation live")
+	}
+}

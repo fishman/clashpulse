@@ -901,3 +901,9 @@ other = "TUN（已请求，未生效）"
 
 ["Auto-select fastest connection"]
 other = "自动选择最快连接"
+
+["Automatic switching"]
+other = "自动切换"
+
+["Automatic switching (monitor off)"]
+other = "自动切换（监测已关闭）"

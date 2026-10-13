@@ -35,10 +35,10 @@ func TestTraySelectsProfileAndProxyWithMeasuredLatency(t *testing.T) {
 		t.Fatalf("profile action = %+v", command)
 	}
 	groups := menu.Items[2].ChildMenu.Items
-	if len(groups) != 1 || len(groups[0].ChildMenu.Items) != 2 {
+	if len(groups) != 1 || len(trayProxyEntries(groups[0])) != 2 {
 		t.Fatalf("native URLTest was offered manual selection: %+v", groups)
 	}
-	entries := groups[0].ChildMenu.Items
+	entries := trayProxyEntries(groups[0])
 	if !strings.HasSuffix(entries[0].Label, "180 ms") || !strings.HasSuffix(entries[1].Label, "300 ms") {
 		t.Fatalf("tray proxy list is not ordered fastest-first: %q %q", entries[0].Label, entries[1].Label)
 	}
@@ -175,7 +175,7 @@ func TestTrayProxyOrderRanksMeasuredBeforeUnknownAndUnavailable(t *testing.T) {
 			{GroupID: "main", ID: "fast", Outcome: "success", LatencyMillis: 100},
 		},
 	}
-	items := view.trayMenu(state).Items[2].ChildMenu.Items[0].ChildMenu.Items
+	items := trayProxyEntries(view.trayMenu(state).Items[2].ChildMenu.Items[0])
 	want := []string{"100 ms", "900 ms", "not measured", "unavailable"}
 	if len(items) != len(want) {
 		t.Fatalf("tray entries = %d, want %d", len(items), len(want))
@@ -185,6 +185,12 @@ func TestTrayProxyOrderRanksMeasuredBeforeUnknownAndUnavailable(t *testing.T) {
 			t.Fatalf("tray entry %d = %q, want suffix %q", i, items[i].Label, suffix)
 		}
 	}
+}
+
+// trayProxyEntries is a group submenu's proxy list after its automation toggle
+// and separator.
+func trayProxyEntries(group *fyne.MenuItem) []*fyne.MenuItem {
+	return group.ChildMenu.Items[2:]
 }
 
 func TestTrayLatencyUsesMedianAcrossSelectedGroups(t *testing.T) {

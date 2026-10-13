@@ -197,8 +197,17 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 		if name == "" {
 			name = fmt.Sprintf(localize.T("Group %s"), shortID(groupID))
 		}
+		automated := group.AutomationEnabled
+		automation := fyne.NewMenuItem(localize.T("Automatic switching"), func() {
+			d.enqueue(ipc.Command{Kind: ipc.CommandSetAutomation, GroupID: groupID, Automation: &ipc.AutomationSetting{Enabled: !automated}})
+		})
+		automation.Checked = automated
+		automation.Disabled = !d.connected || !snapshot.Monitor.Enabled
+		if !snapshot.Monitor.Enabled {
+			automation.Label = localize.T("Automatic switching (monitor off)")
+		}
 		item := fyne.NewMenuItem(name, nil)
-		item.ChildMenu = fyne.NewMenu(name, choices...)
+		item.ChildMenu = fyne.NewMenu(name, append([]*fyne.MenuItem{automation, fyne.NewMenuItemSeparator()}, choices...)...)
 		groups = append(groups, item)
 	}
 	if len(groups) == 0 {
@@ -258,12 +267,12 @@ func trayStateSignature(snapshot core.Snapshot, connected bool) string {
 	fmt.Fprintf(&key, "|service:%t", snapshot.ServiceRunning)
 	fmt.Fprintf(&key, "|system-proxy:%t:%t", snapshot.SystemProxy.Enabled, snapshot.SystemProxy.Active)
 	fmt.Fprintf(&key, "|tun:%t:%t:%t", snapshot.Tun.Enabled, snapshot.Tun.Active, snapshot.Tun.Privilege == core.TunPrivilegeUnsupported)
-	fmt.Fprintf(&key, "|auto-fastest:%t", snapshot.Monitor.AutoFastest)
+	fmt.Fprintf(&key, "|monitor:%t|auto-fastest:%t", snapshot.Monitor.Enabled, snapshot.Monitor.AutoFastest)
 	for _, sub := range snapshot.Subscriptions {
 		fmt.Fprintf(&key, "|%s:%s:%t:%t:%t:%s", sub.ID, sub.SourceHost, sub.Enabled, sub.Active, sub.PendingActivation, sub.HashPrefix)
 	}
 	for _, group := range snapshot.Groups {
-		fmt.Fprintf(&key, "|%s:%s:%s:%s", group.ID, group.Label, group.Type, group.Selected)
+		fmt.Fprintf(&key, "|%s:%s:%s:%s:%t", group.ID, group.Label, group.Type, group.Selected, group.AutomationEnabled)
 		for _, id := range group.Proxies {
 			fmt.Fprintf(&key, "|%s:%s", id, trayProxyLatency(snapshot, group.ID, id))
 		}

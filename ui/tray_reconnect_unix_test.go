@@ -69,10 +69,11 @@ func TestTrayReconnectsAndSelectsManagedProxy(t *testing.T) {
 		t.Fatalf("managed groups missing after reconnect: %+v", menu)
 	}
 	group := menu.Items[2].ChildMenu.Items[0]
-	if group.Label != "Managed" || len(group.ChildMenu.Items) != 2 || !group.ChildMenu.Items[0].Checked {
+	choices := trayProxyEntries(group)
+	if group.Label != "Managed" || len(choices) != 2 || !choices[0].Checked {
 		t.Fatalf("managed proxy choices missing from tray: %+v", group)
 	}
-	fyne.DoAndWait(group.ChildMenu.Items[1].Action)
+	fyne.DoAndWait(choices[1].Action)
 	select {
 	case command := <-commands:
 		if command.Kind != ipc.CommandSelectGroup || command.GroupID != "managed" || command.ChoiceID != "beta" {
