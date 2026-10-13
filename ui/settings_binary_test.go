@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -32,6 +33,25 @@ func TestSettingsCanSelectBundledBinaryAndShowCompatibilityIssue(t *testing.T) {
 	}
 	if page.binaryValues[3].Wrapping != fyne.TextWrapWord {
 		t.Fatal("binary capability and compatibility fields clip instead of wrapping")
+	}
+}
+
+func TestSettingsMonitorShowsStabilityAndSendsTestNotification(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	var sent []ipc.Command
+	page := newSettingsPage(func(command ipc.Command) { sent = append(sent, command) }, app.NewWindow("ClashPulse"))
+	button := findSettingsButton(page.sectionViews["Monitor"], "Send test notification")
+	if button == nil {
+		t.Fatal("test notification button is missing from the monitor section")
+	}
+	button.OnTapped()
+	if !reflect.DeepEqual(sent, []ipc.Command{{Kind: ipc.CommandTestNotification}}) {
+		t.Fatalf("test notification sent %+v", sent)
+	}
+	page.update(core.BinarySnapshot{}, core.MonitorSnapshot{WindowSize: 10, MinCandidateSamples: 4, MaxFailures: 3}, core.SystemProxySnapshot{}, core.DNSSnapshot{})
+	if got, want := page.stability.Text, "window 10 samples, 4 successes to switch, at most 3 failures"; got != want {
+		t.Fatalf("stability summary = %q, want %q", got, want)
 	}
 }
 

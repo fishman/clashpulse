@@ -3,12 +3,66 @@ package mihomo
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestWatchDialFailuresReportsOnlyManagedGroupDials(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/logs" || r.URL.Query().Get("level") != "warning" || r.Header.Get("Authorization") != "Bearer secret" {
+			t.Errorf("request = %s %s auth=%q", r.URL.Path, r.URL.RawQuery, r.Header.Get("Authorization"))
+		}
+		flusher := w.(http.Flusher)
+		write := func(payload string) {
+			_ = json.NewEncoder(w).Encode(map[string]string{"type": "warning", "payload": payload})
+			flusher.Flush()
+		}
+		write("[TCP] dial select main (match DomainSuffix/example.com) 192.0.2.1:50000 --> example.com:443 error: connect failed")
+		// Outlives the controller client's timeout: the stream must not be cut.
+		time.Sleep(150 * time.Millisecond)
+		write("[UDP] dial select 192.0.2.1:50001 --> example.net:443 error: timeout")
+		write("[TCP] dial unmanaged 192.0.2.1:50002 --> example.org:443 error: timeout")
+		write("[TCP] 192.0.2.1:50003 --> example.com:443 match Match using select")
+		_, _ = fmt.Fprintln(w, "not json")
+		write("[TCP] dial selectx 192.0.2.1:50004 --> example.com:443 error: timeout")
+	}))
+	defer server.Close()
+	controller, err := NewController(server.URL, "secret", &http.Client{Timeout: 50 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reported []string
+	err = controller.WatchDialFailures(context.Background(), func() []string { return []string{"select", "select main"} }, func(group string) { reported = append(reported, group) })
+	if err == nil || strings.Contains(err.Error(), "example") {
+		t.Fatalf("ended stream error = %v", err)
+	}
+	if !slices.Equal(reported, []string{"select main", "select"}) {
+		t.Fatalf("reported = %q", reported)
+	}
+}
+
+func TestWatchDialFailuresStopsOnCancellation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	controller, err := NewController(server.URL, "secret", server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if err := controller.WatchDialFailures(ctx, func() []string { return []string{"select"} }, func(string) {}); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("cancelled watch error = %v", err)
+	}
+}
 
 func TestNewControllerRejectsNonLoopbackBaseURL(t *testing.T) {
 	for _, baseURL := range []string{"http://example.com", "http://192.168.1.1", "not a URL"} {
@@ -159,5 +213,37 @@ func TestControllerBoundsResponseBodies(t *testing.T) {
 	}
 	if _, _, err := controller.Proxies(context.Background()); err == nil {
 		t.Fatal("Proxies() error = nil")
+	}
+}
+
+func TestControllerTunEnabledReadsRunningConfig(t *testing.T) {
+	for _, test := range []struct {
+		body    string
+		want    bool
+		wantErr bool
+	}{
+		{body: `{"mode":"rule","tun":{"enable":true,"device":"clashpulse0"}}`, want: true},
+		{body: `{"tun":{"enable":false}}`, want: false},
+		{body: `{"mode":"rule"}`, wantErr: true},
+		{body: `{"tun":{}}`, wantErr: true},
+		{body: `{"tun":{"enable":null}}`, wantErr: true},
+	} {
+		t.Run(test.body, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.Path != "/configs" || r.Header.Get("Authorization") != "Bearer secret" {
+					t.Errorf("request = %s %s", r.Method, r.URL.Path)
+				}
+				_, _ = w.Write([]byte(test.body))
+			}))
+			defer server.Close()
+			controller, err := NewController(server.URL, "secret", server.Client())
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := controller.TunEnabled(context.Background())
+			if (err != nil) != test.wantErr || got != test.want {
+				t.Fatalf("TunEnabled() = %v, %v; want %v, error %v", got, err, test.want, test.wantErr)
+			}
+		})
 	}
 }

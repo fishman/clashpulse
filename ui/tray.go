@@ -230,7 +230,18 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 	} else if !snapshot.SystemProxy.Enabled && snapshot.SystemProxy.Active {
 		systemProxy.Label = localize.T("System Proxy (restore needed)")
 	}
-	return fyne.NewMenu("ClashPulse", status, profileMenu, proxyMenu, service, systemProxy, fyne.NewMenuItemSeparator(), fyne.NewMenuItem(localize.T("Show ClashPulse"), d.window.Show), fyne.NewMenuItem(localize.T("Quit"), d.quit))
+	tun := fyne.NewMenuItem(localize.T("TUN"), func() {
+		enabled := !snapshot.Tun.Enabled
+		d.enqueue(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{TunEnabled: &enabled}})
+	})
+	tun.Checked = snapshot.Tun.Enabled
+	tun.Disabled = !d.connected || snapshot.Tun.Privilege == core.TunPrivilegeUnsupported
+	if snapshot.Tun.Privilege == core.TunPrivilegeUnsupported {
+		tun.Label = localize.T("TUN (unsupported on this platform)")
+	} else if snapshot.Tun.Enabled && !snapshot.Tun.Active {
+		tun.Label = localize.T("TUN (requested, inactive)")
+	}
+	return fyne.NewMenu("ClashPulse", status, profileMenu, proxyMenu, service, systemProxy, tun, fyne.NewMenuItemSeparator(), fyne.NewMenuItem(localize.T("Show ClashPulse"), d.window.Show), fyne.NewMenuItem(localize.T("Quit"), d.quit))
 }
 
 func trayStateSignature(snapshot core.Snapshot, connected bool) string {
@@ -241,6 +252,7 @@ func trayStateSignature(snapshot core.Snapshot, connected bool) string {
 	key.WriteString(profileTrayTitle(snapshot))
 	fmt.Fprintf(&key, "|service:%t", snapshot.ServiceRunning)
 	fmt.Fprintf(&key, "|system-proxy:%t:%t", snapshot.SystemProxy.Enabled, snapshot.SystemProxy.Active)
+	fmt.Fprintf(&key, "|tun:%t:%t:%t", snapshot.Tun.Enabled, snapshot.Tun.Active, snapshot.Tun.Privilege == core.TunPrivilegeUnsupported)
 	for _, sub := range snapshot.Subscriptions {
 		fmt.Fprintf(&key, "|%s:%s:%t:%t:%t:%s", sub.ID, sub.SourceHost, sub.Enabled, sub.Active, sub.PendingActivation, sub.HashPrefix)
 	}

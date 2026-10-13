@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/fishman/clashpulse/core"
 )
 
 type configDoc struct {
@@ -25,6 +26,9 @@ type configDoc struct {
 		Threshold             *string  `toml:"threshold"`
 		AlertThreshold        *string  `toml:"alert_threshold"`
 		ConsecutiveBadSamples *int     `toml:"consecutive_bad_samples"`
+		WindowSize            *int     `toml:"window_size"`
+		MinCandidateSamples   *int     `toml:"min_candidate_samples"`
+		MaxFailures           *int     `toml:"max_failures"`
 		MinImprovement        *string  `toml:"min_improvement"`
 		Cooldown              *string  `toml:"cooldown"`
 		Jitter                *string  `toml:"jitter"`
@@ -36,6 +40,11 @@ type configDoc struct {
 	SystemProxy struct {
 		Enabled bool `toml:"enabled"`
 	} `toml:"system_proxy"`
+	Tun struct {
+		Enabled bool    `toml:"enabled"`
+		Stack   *string `toml:"stack"`
+		DNSMode *string `toml:"dns_mode"`
+	} `toml:"tun"`
 }
 
 type subscriptionDoc struct {
@@ -119,49 +128,49 @@ func decodeStrict(path string, dst any) error {
 	return nil
 }
 
-func loadConfig(path string) (App, Mihomo, Monitor, DNS, error) {
+func loadConfig(path string) (Snapshot, error) {
 	var doc configDoc
 	if err := decodeStrict(path, &doc); err != nil {
-		return App{}, Mihomo{}, Monitor{}, DNS{}, err
+		return Snapshot{}, err
 	}
 	interval, err := durationValue(path, "monitor.interval", doc.Monitor.Interval)
 	if err != nil {
-		return App{}, Mihomo{}, Monitor{}, DNS{}, err
+		return Snapshot{}, err
 	}
 	urlTestInterval, err := durationValue(path, "mihomo.url_test_interval", doc.Mihomo.URLTestInterval)
 	if err != nil {
-		return App{}, Mihomo{}, Monitor{}, DNS{}, err
+		return Snapshot{}, err
 	}
 	urlTestTolerance, err := nonnegativeDurationValue(path, "mihomo.url_test_tolerance", doc.Mihomo.URLTestTolerance)
 	if err != nil {
-		return App{}, Mihomo{}, Monitor{}, DNS{}, err
+		return Snapshot{}, err
 	}
 	timeout, err := durationValue(path, "monitor.timeout", doc.Monitor.Timeout)
 	if err != nil {
-		return App{}, Mihomo{}, Monitor{}, DNS{}, err
+		return Snapshot{}, err
 	}
 	threshold, err := durationValue(path, "monitor.threshold", doc.Monitor.Threshold)
 	if err != nil {
-		return App{}, Mihomo{}, Monitor{}, DNS{}, err
+		return Snapshot{}, err
 	}
 	alertThreshold, err := durationValue(path, "monitor.alert_threshold", doc.Monitor.AlertThreshold)
 	if err != nil {
-		return App{}, Mihomo{}, Monitor{}, DNS{}, err
+		return Snapshot{}, err
 	}
 	minImprovement, err := durationValue(path, "monitor.min_improvement", doc.Monitor.MinImprovement)
 	if err != nil {
-		return App{}, Mihomo{}, Monitor{}, DNS{}, err
+		return Snapshot{}, err
 	}
 	cooldown, err := nonnegativeDurationValue(path, "monitor.cooldown", doc.Monitor.Cooldown)
 	if err != nil {
-		return App{}, Mihomo{}, Monitor{}, DNS{}, err
+		return Snapshot{}, err
 	}
 	if doc.Monitor.Cooldown == nil {
 		cooldown = 5 * time.Minute
 	}
 	jitter, err := nonnegativeDurationValue(path, "monitor.jitter", doc.Monitor.Jitter)
 	if err != nil {
-		return App{}, Mihomo{}, Monitor{}, DNS{}, err
+		return Snapshot{}, err
 	}
 	if doc.Monitor.Jitter == nil {
 		effectiveInterval := interval
@@ -174,17 +183,37 @@ func loadConfig(path string) (App, Mihomo, Monitor, DNS, error) {
 		}
 	}
 	if doc.Monitor.Concurrency != nil && (*doc.Monitor.Concurrency < 1 || *doc.Monitor.Concurrency > maxMonitorConcurrency) {
-		return App{}, Mihomo{}, Monitor{}, DNS{}, fmt.Errorf("%s: monitor.concurrency: must be between 1 and %d", path, maxMonitorConcurrency)
+		return Snapshot{}, fmt.Errorf("%s: monitor.concurrency: must be between 1 and %d", path, maxMonitorConcurrency)
 	}
-	if doc.Monitor.ConsecutiveBadSamples != nil && (*doc.Monitor.ConsecutiveBadSamples < 1 || *doc.Monitor.ConsecutiveBadSamples > maxMonitorConsecutiveBadSamples) {
-		return App{}, Mihomo{}, Monitor{}, DNS{}, fmt.Errorf("%s: monitor.consecutive_bad_samples: must be between 1 and %d", path, maxMonitorConsecutiveBadSamples)
+	// Zero means unset after decoding, so an explicit value below a minimum fails
+	// here; full ranges, which depend on window_size, are validated after defaults.
+	if doc.Monitor.WindowSize != nil && *doc.Monitor.WindowSize < core.MonitorWindowMin {
+		return Snapshot{}, fmt.Errorf("%s: monitor.window_size: must be between %d and %d", path, core.MonitorWindowMin, core.MonitorWindowMax)
 	}
-	concurrency, badSamples := 0, 0
+	if doc.Monitor.MinCandidateSamples != nil && *doc.Monitor.MinCandidateSamples < core.MonitorWindowMin {
+		return Snapshot{}, fmt.Errorf("%s: monitor.min_candidate_samples: must be between %d and window_size", path, core.MonitorWindowMin)
+	}
+	if doc.Monitor.MaxFailures != nil && *doc.Monitor.MaxFailures < 1 {
+		return Snapshot{}, fmt.Errorf("%s: monitor.max_failures: must be between 1 and window_size", path)
+	}
+	if doc.Monitor.ConsecutiveBadSamples != nil && *doc.Monitor.ConsecutiveBadSamples < 1 {
+		return Snapshot{}, fmt.Errorf("%s: monitor.consecutive_bad_samples: must be between 1 and window_size", path)
+	}
+	concurrency, badSamples, windowSize, candidateSamples, maxFailures := 0, 0, 0, 0, 0
 	if doc.Monitor.Concurrency != nil {
 		concurrency = *doc.Monitor.Concurrency
 	}
 	if doc.Monitor.ConsecutiveBadSamples != nil {
 		badSamples = *doc.Monitor.ConsecutiveBadSamples
+	}
+	if doc.Monitor.WindowSize != nil {
+		windowSize = *doc.Monitor.WindowSize
+	}
+	if doc.Monitor.MinCandidateSamples != nil {
+		candidateSamples = *doc.Monitor.MinCandidateSamples
+	}
+	if doc.Monitor.MaxFailures != nil {
+		maxFailures = *doc.Monitor.MaxFailures
 	}
 	enabled := true
 	if doc.Monitor.Enabled != nil {
@@ -194,18 +223,29 @@ func loadConfig(path string) (App, Mihomo, Monitor, DNS, error) {
 	if doc.Monitor.TestURL != nil {
 		testURL = *doc.Monitor.TestURL
 		if testURL == "" {
-			return App{}, Mihomo{}, Monitor{}, DNS{}, fmt.Errorf("%s: monitor.test_url: required", path)
+			return Snapshot{}, fmt.Errorf("%s: monitor.test_url: required", path)
 		}
 	}
 	switchPolicy := ""
 	if doc.Monitor.SwitchPolicy != nil {
 		switchPolicy = *doc.Monitor.SwitchPolicy
 	}
-	return App{SystemProxy: SystemProxy{Enabled: doc.SystemProxy.Enabled}}, Mihomo{
+	// Explicit empty strings stay empty so validation rejects them as enums.
+	tun := Tun{Enabled: doc.Tun.Enabled, Stack: core.TunStackGVisor, DNSMode: core.TunDNSProfile}
+	if doc.Tun.Stack != nil {
+		tun.Stack = *doc.Tun.Stack
+	}
+	if doc.Tun.DNSMode != nil {
+		tun.DNSMode = *doc.Tun.DNSMode
+	}
+	return Snapshot{
+		App: App{SystemProxy: SystemProxy{Enabled: doc.SystemProxy.Enabled}},
+		Mihomo: Mihomo{
 			Binary:           doc.Mihomo.Binary,
 			URLTestInterval:  urlTestInterval,
 			URLTestTolerance: urlTestTolerance,
-		}, Monitor{
+		},
+		Monitor: Monitor{
 			Enabled:               enabled,
 			TestURL:               testURL,
 			SwitchPolicy:          switchPolicy,
@@ -215,11 +255,17 @@ func loadConfig(path string) (App, Mihomo, Monitor, DNS, error) {
 			Threshold:             threshold,
 			AlertThreshold:        alertThreshold,
 			ConsecutiveBadSamples: badSamples,
+			WindowSize:            windowSize,
+			MinCandidateSamples:   candidateSamples,
+			MaxFailures:           maxFailures,
 			MinImprovement:        minImprovement,
 			Cooldown:              cooldown,
 			Jitter:                jitter,
 			AutomatedGroups:       append([]string(nil), doc.Monitor.AutomatedGroups...),
-		}, DNS{Listen: doc.DNS.Listen}, nil
+		},
+		DNS: DNS{Listen: doc.DNS.Listen},
+		Tun: tun,
+	}, nil
 }
 
 func loadSubscriptions(path string) ([]Subscription, error) {

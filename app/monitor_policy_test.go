@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -111,6 +112,53 @@ func TestLoadedMonitorPolicyControlsDecisionAndConcurrency(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("scheduler did not stop")
+	}
+}
+
+func TestLoadedStabilityWindowControlsDecision(t *testing.T) {
+	dir := t.TempDir()
+	configured := "[monitor]\ntest_url = \"https://example.com/204\"\nthreshold = \"500ms\"\ncooldown = \"0s\"\nwindow_size = 8\nmin_candidate_samples = 4\nmax_failures = 3\n"
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(configured), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := monitorPolicy(settings.Monitor)
+	group := monitor.GroupState{Group: "auto", Selected: "node-a", Proxies: []string{"node-a", "node-b"}, ProbeEnabled: true, AutomationEnabled: true}
+	probe := func(proxy string, at int64, failed bool) monitor.Sample {
+		sample := monitor.Sample{Group: "auto", Proxy: proxy, URL: "https://example.com/204", FinishedAt: time.Unix(at, 0), Latency: 100 * time.Millisecond, Outcome: monitor.OutcomeSuccess}
+		if failed {
+			sample.Latency, sample.Outcome = 0, monitor.OutcomeTimeout
+		}
+		return sample
+	}
+	// node-a answers fast but fails at t1, t2, and t6; only an 8-probe window
+	// sees three failures, and only max_failures = 3 counts them as unstable.
+	selected := func(failures ...int64) []monitor.Sample {
+		samples := make([]monitor.Sample, 0, 7)
+		for at := int64(1); at <= 7; at++ {
+			samples = append(samples, probe("node-a", at, slices.Contains(failures, at)))
+		}
+		return samples
+	}
+	candidate := func(count int) []monitor.Sample {
+		samples := make([]monitor.Sample, 0, count)
+		for at := range count {
+			samples = append(samples, probe("node-b", int64(at+1), false))
+		}
+		return samples
+	}
+	now := time.Unix(100, 0)
+	if decision := monitor.Decide(policy, group, append(selected(1, 2, 6), candidate(4)...), now); !decision.Switch || decision.New != "node-b" {
+		t.Fatalf("configured window ignored failures beyond the default window: %+v", decision)
+	}
+	if decision := monitor.Decide(policy, group, append(selected(1, 2, 6), candidate(3)...), now); decision.Switch {
+		t.Fatalf("candidate below min_candidate_samples was chosen: %+v", decision)
+	}
+	if decision := monitor.Decide(policy, group, append(selected(2, 6), candidate(4)...), now); decision.Switch {
+		t.Fatalf("failures below max_failures moved traffic: %+v", decision)
 	}
 }
 

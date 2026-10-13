@@ -63,4 +63,12 @@ type Batch struct {
 	Samples    []Sample
 	Decisions  []Decision
 	Alerts     []AlertEvent
+	Stability  []ProxyStability
+}
+
+// ProxyStability is one proxy's probe window in a group after a round.
+type ProxyStability struct {
+	Group     string
+	Proxy     string
+	Stability Stability
 }

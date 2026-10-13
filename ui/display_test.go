@@ -83,6 +83,31 @@ func TestProxyRowFallsBackToMihomoReportedLatency(t *testing.T) {
 	}
 }
 
+func TestProxyRowShowsStabilityOnlyAfterSamples(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	for _, tc := range []struct {
+		proxy core.ProxySnapshot
+		want  string
+	}{
+		{core.ProxySnapshot{LatencyMillis: 120, MedianMillis: 130, JitterMillis: 20, Samples: 5, Failures: 1}, "120 ms \u00b7 median 130 ms \u00b120 ms \u00b7 1/5 failed"},
+		{core.ProxySnapshot{Samples: 3, Failures: 3}, "3/3 failed"},
+		{core.ProxySnapshot{LatencyMillis: 120, MedianMillis: 130, JitterMillis: 20}, "120 ms"},
+	} {
+		tc.proxy.GroupID, tc.proxy.ID, tc.proxy.Label = "g1", "p1", "node-a"
+		page := newProxyPage(nil)
+		page.update(core.Snapshot{
+			Groups:  []core.GroupSnapshot{{ID: "g1", Type: "Selector", Selected: "p1", Proxies: []string{"p1"}}},
+			Proxies: []core.ProxySnapshot{tc.proxy},
+		})
+		row := page.list.CreateItem()
+		page.list.UpdateItem(0, row)
+		if got, want := strings.Join(rowLabels(row), ","), "node-a,Active,"+tc.want; got != want {
+			t.Fatalf("proxy row = %q, want %q", got, want)
+		}
+	}
+}
+
 func TestMonitorThresholdAndCompatibilityLabelsAreSafe(t *testing.T) {
 	if got := monitorThresholdLabel(core.MonitorSnapshot{AlertThresholdMillis: 250}); got != "250 ms" {
 		t.Fatalf("threshold label = %q", got)

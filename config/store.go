@@ -111,6 +111,9 @@ func diffSections(old, next Snapshot) []string {
 	if !reflect.DeepEqual(old.DNS, next.DNS) {
 		changed = append(changed, "dns")
 	}
+	if !reflect.DeepEqual(old.Tun, next.Tun) {
+		changed = append(changed, "tun")
+	}
 	if !reflect.DeepEqual(old.Subscriptions, next.Subscriptions) {
 		changed = append(changed, "subscriptions")
 	}

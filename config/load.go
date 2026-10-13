@@ -7,17 +7,18 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/monitor"
 )
 
 const (
-	maxMonitorConcurrency           = 64
-	maxMonitorConsecutiveBadSamples = 5
-	maxMonitorInterval              = 24 * time.Hour
+	maxMonitorConcurrency = 64
+	maxMonitorInterval    = 24 * time.Hour
 )
 
 var resourceKinds = map[ResourceKind]struct{}{
@@ -42,7 +43,7 @@ var subscriptionRoutes = map[string]struct{}{
 }
 
 func Load(dir string) (Snapshot, error) {
-	app, mihomo, monitor, dns, err := loadConfig(filepath.Join(dir, "config.toml"))
+	snapshot, err := loadConfig(filepath.Join(dir, "config.toml"))
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -59,15 +60,9 @@ func Load(dir string) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 
-	snapshot := Snapshot{
-		App:           app,
-		Mihomo:        mihomo,
-		Monitor:       monitor,
-		DNS:           dns,
-		Subscriptions: subscriptions,
-		Resources:     resources,
-		Filters:       filters,
-	}
+	snapshot.Subscriptions = subscriptions
+	snapshot.Resources = resources
+	snapshot.Filters = filters
 	snapshot.DNS.ResolverSets = resolverSets
 	snapshot.DNS.Routes = routes
 	applyDefaults(&snapshot)
@@ -102,8 +97,18 @@ func applyDefaults(s *Snapshot) {
 	if s.Monitor.Threshold == 0 {
 		s.Monitor.Threshold = 800 * time.Millisecond
 	}
+	if s.Monitor.WindowSize == 0 {
+		s.Monitor.WindowSize = 5
+	}
+	// Sample-count defaults shrink with a narrower window, like timeout with interval.
 	if s.Monitor.ConsecutiveBadSamples == 0 {
-		s.Monitor.ConsecutiveBadSamples = 3
+		s.Monitor.ConsecutiveBadSamples = min(3, s.Monitor.WindowSize)
+	}
+	if s.Monitor.MinCandidateSamples == 0 {
+		s.Monitor.MinCandidateSamples = min(3, s.Monitor.WindowSize)
+	}
+	if s.Monitor.MaxFailures == 0 {
+		s.Monitor.MaxFailures = min(2, s.Monitor.WindowSize)
 	}
 	if s.Monitor.MinImprovement == 0 {
 		s.Monitor.MinImprovement = 100 * time.Millisecond
@@ -146,6 +151,9 @@ func validateSnapshot(s Snapshot) error {
 		return err
 	}
 	if err := validateDNS(s.DNS); err != nil {
+		return err
+	}
+	if err := validateTun(s.Tun); err != nil {
 		return err
 	}
 
@@ -345,8 +353,17 @@ func validateMonitor(m Monitor) error {
 	if m.AlertThreshold <= 0 {
 		return fmt.Errorf("config.toml: monitor.alert_threshold: must be positive")
 	}
-	if m.ConsecutiveBadSamples < 1 || m.ConsecutiveBadSamples > maxMonitorConsecutiveBadSamples {
-		return fmt.Errorf("config.toml: monitor.consecutive_bad_samples: must be between 1 and %d", maxMonitorConsecutiveBadSamples)
+	if m.WindowSize < core.MonitorWindowMin || m.WindowSize > core.MonitorWindowMax {
+		return fmt.Errorf("config.toml: monitor.window_size: must be between %d and %d", core.MonitorWindowMin, core.MonitorWindowMax)
+	}
+	if m.ConsecutiveBadSamples < 1 || m.ConsecutiveBadSamples > m.WindowSize {
+		return fmt.Errorf("config.toml: monitor.consecutive_bad_samples: must be between 1 and window_size")
+	}
+	if m.MinCandidateSamples < core.MonitorWindowMin || m.MinCandidateSamples > m.WindowSize {
+		return fmt.Errorf("config.toml: monitor.min_candidate_samples: must be between %d and window_size", core.MonitorWindowMin)
+	}
+	if m.MaxFailures < 1 || m.MaxFailures > m.WindowSize {
+		return fmt.Errorf("config.toml: monitor.max_failures: must be between 1 and window_size")
 	}
 	if m.MinImprovement <= 0 {
 		return fmt.Errorf("config.toml: monitor.min_improvement: must be positive")
@@ -366,6 +383,16 @@ func validateMonitor(m Monitor) error {
 			return fmt.Errorf("config.toml: monitor.automated_groups: invalid or duplicate group identity")
 		}
 		seen[id] = true
+	}
+	return nil
+}
+
+func validateTun(t Tun) error {
+	if !slices.Contains(core.TunStacks, t.Stack) {
+		return fmt.Errorf("config.toml: tun.stack: must be one of %s", strings.Join(core.TunStacks, ", "))
+	}
+	if !slices.Contains(core.TunDNSModes, t.DNSMode) {
+		return fmt.Errorf("config.toml: tun.dns_mode: must be one of %s", strings.Join(core.TunDNSModes, ", "))
 	}
 	return nil
 }

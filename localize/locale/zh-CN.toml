@@ -79,6 +79,24 @@ other = "已配置的自动测速延迟设置"
 ["override.rules"]
 other = "托管过滤规则"
 
+["override.tun"]
+other = "由应用管理的 TUN 模式"
+
+["override.dns.enable"]
+other = "TUN 模式所需的 DNS"
+
+["override.dns.enhanced-mode"]
+other = "TUN DNS 模式"
+
+["override.dns.fake-ip-range"]
+other = "TUN 虚拟 IP 地址段"
+
+["override.dns.fake-ip-range6"]
+other = "TUN 虚拟 IP 地址段"
+
+["override.dns.fake-ip-filter"]
+other = "TUN 虚拟 IP 排除本地和时间服务器域名"
+
 ["Alert threshold"]
 other = "告警阈值"
 
@@ -202,6 +220,9 @@ other = "编辑过滤列表"
 ["operation.set_dns_routing"]
 other = "设置 DNS 分流"
 
+["operation.test_notification"]
+other = "发送测试通知"
+
 ["operation.subscription"]
 other = "订阅"
 
@@ -282,3 +303,21 @@ other = "连接已改善"
 
 ["Switched to a lower-latency connection"]
 other = "已自动切换到延迟更低的连接"
+
+["ClashPulse connection health"]
+other = "ClashPulse 连接状态"
+
+["All measured connections are slower than %d ms"]
+other = "所有已测速连接均慢于 %d 毫秒"
+
+["ClashPulse notifications"]
+other = "ClashPulse 通知"
+
+["Notifications are working"]
+other = "通知功能正常"
+
+["median %d ms \u00b1%d ms"]
+other = "中位数 %d 毫秒 ±%d 毫秒"
+
+["%d/%d failed"]
+other = "%d/%d 次失败"

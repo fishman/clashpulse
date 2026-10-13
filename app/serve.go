@@ -23,6 +23,7 @@ type serviceWorkKind uint8
 const (
 	workSubscriptionRefresh serviceWorkKind = iota
 	workResourceRefresh
+	workTunPrepare
 )
 
 type serviceWorkRequest struct {
@@ -47,6 +48,7 @@ type serviceWorkRecord struct {
 	command   ipc.Command
 	scheduled bool
 	canceled  bool
+	tun       bool
 }
 
 type preparedResourceRefresh struct {
@@ -114,7 +116,7 @@ func (s *runtimeService) prepareResourceRefresh(ctx context.Context, ids []strin
 		return nil, err
 	}
 	prepared := &preparedResourceRefresh{plan: plan, profile: profile}
-	prepared.capability, err = s.selectedCapability(ctx)
+	prepared.capability, _, err = s.runtimeCapability(ctx, true)
 	if err != nil {
 		_ = plan.Abort()
 		return nil, err
@@ -187,6 +189,8 @@ func (s *runtimeService) runServiceWork(ctx context.Context, requests <-chan ser
 				_, result.err = s.subs.Refresh(request.ctx, request.command.SubscriptionID)
 			case workResourceRefresh:
 				result.prepared, result.err = s.prepareResourceRefresh(request.ctx, request.ids)
+			case workTunPrepare:
+				result.err = s.prepareTun(request.ctx)
 			}
 			if result.err == nil {
 				result.err = request.ctx.Err()
@@ -226,7 +230,7 @@ func (s *runtimeService) run(ctx context.Context, startup func(context.Context) 
 		s.offerChange(change)
 	})
 	defer unsubscribe()
-	for _, section := range []string{"app", "mihomo", "monitor", "dns", "resources", "filters"} {
+	for _, section := range []string{"app", "mihomo", "monitor", "dns", "tun", "resources", "filters"} {
 		unsubscribeSection := s.store.Subscribe(section, s.offerChange)
 		defer unsubscribeSection()
 	}
@@ -244,13 +248,11 @@ func (s *runtimeService) run(ctx context.Context, startup func(context.Context) 
 		})
 	}()
 	workRequests := make(chan serviceWorkRequest, serviceWorkQueueSize)
+	tunRequests := make(chan serviceWorkRequest, 1)
 	workResults := make(chan serviceWorkResult, serviceWorkQueueSize)
 	var workWorkers sync.WaitGroup
-	workWorkers.Add(1)
-	go func() {
-		defer workWorkers.Done()
-		s.runServiceWork(serviceCtx, workRequests, workResults)
-	}()
+	workWorkers.Go(func() { s.runServiceWork(serviceCtx, workRequests, workResults) })
+	workWorkers.Go(func() { s.runServiceWork(serviceCtx, tunRequests, workResults) })
 	workRecords := make(map[uint64]*serviceWorkRecord)
 	var workID uint64
 	defer func() {
@@ -290,10 +292,15 @@ func (s *runtimeService) run(ctx context.Context, startup func(context.Context) 
 		workID++
 		workCtx, stopWork := context.WithCancel(serviceCtx)
 		request := serviceWorkRequest{id: workID, kind: kind, ctx: workCtx, done: make(chan struct{}), command: cmd, ids: ids}
-		record := &serviceWorkRecord{cancel: stopWork, jobID: jobID, command: cmd, scheduled: scheduled}
+		tunWork := kind == workTunPrepare
+		record := &serviceWorkRecord{cancel: stopWork, jobID: jobID, command: cmd, scheduled: scheduled, tun: tunWork}
 		workRecords[workID] = record
+		requests := workRequests
+		if tunWork {
+			requests = tunRequests
+		}
 		select {
-		case workRequests <- request:
+		case requests <- request:
 		default:
 			delete(workRecords, workID)
 			stopWork()
@@ -305,13 +312,28 @@ func (s *runtimeService) run(ctx context.Context, startup func(context.Context) 
 			}
 		}
 	}
-	cancelWork := func() {
+	// Tun work survives other commands because a polkit dialog may stay open;
+	// it is canceled only when the TUN intent is withdrawn.
+	cancelWork := func(tun bool) {
 		for _, record := range workRecords {
-			if !record.canceled {
+			if !record.canceled && record.tun == tun {
 				record.canceled = true
 				record.cancel()
 			}
 		}
+	}
+	cancelWithdrawnTun := func() {
+		if !s.store.Snapshot().Tun.Enabled {
+			cancelWork(true)
+		}
+	}
+	tunPending := func() bool {
+		for _, record := range workRecords {
+			if record.tun && !record.canceled {
+				return true
+			}
+		}
+		return false
 	}
 	finishWork := func(result serviceWorkResult) {
 		record, ok := workRecords[result.id]
@@ -328,6 +350,12 @@ func (s *runtimeService) run(ctx context.Context, startup func(context.Context) 
 			if result.prepared != nil {
 				_ = result.prepared.plan.Abort()
 			}
+			if record.tun && !s.store.Snapshot().Tun.Enabled {
+				// Prepare may have written its copy after the disable revoked it.
+				if err := s.tun.revoke(); err != nil {
+					s.reportError(string(ipc.CommandAuthorizeTun), err)
+				}
+			}
 			if record.jobID != "" {
 				s.discardServiceIntent(record.jobID)
 			}
@@ -335,6 +363,12 @@ func (s *runtimeService) run(ctx context.Context, startup func(context.Context) 
 			err := result.err
 			if result.prepared != nil {
 				err = s.applyPreparedResourceRefresh(serviceCtx, result.prepared)
+			}
+			if record.tun {
+				// Work prepared for the runtime being replaced must not restart
+				// Mihomo without TUN afterwards.
+				cancelWork(false)
+				err = s.runOperation(serviceCtx, ipc.CommandAuthorizeTun, func(ctx context.Context) error { return s.finishTunPrepare(ctx, result.err) })
 			}
 			if record.jobID != "" {
 				s.finishServiceIntent(record.jobID, record.command, err)
@@ -371,9 +405,28 @@ func (s *runtimeService) run(ctx context.Context, startup func(context.Context) 
 				return
 			}
 			queueWork(workResourceRefresh, cmd, jobID, []string{resourceID}, false)
+		case ipc.CommandAuthorizeTun:
+			jobID = s.beginServiceIntent(cmd)
+			switch {
+			case !s.store.Snapshot().Tun.Enabled:
+				s.finishServiceIntent(jobID, cmd, errTunNotEnabled)
+			case tunPending():
+				// The open authorization already answers this request.
+				s.finishServiceIntent(jobID, cmd, nil)
+			default:
+				queueWork(workTunPrepare, cmd, jobID, nil, false)
+			}
 		default:
-			cancelWork()
+			cancelWork(false)
 			s.runIntent(serviceCtx, cmd)
+			cancelWithdrawnTun()
+			if s.tunPrepareRequested {
+				s.tunPrepareRequested = false
+				if !tunPending() {
+					authorize := ipc.Command{Kind: ipc.CommandAuthorizeTun}
+					queueWork(workTunPrepare, authorize, s.beginServiceIntent(authorize), nil, false)
+				}
+			}
 		}
 	}
 	if startup != nil {
@@ -429,13 +482,18 @@ func (s *runtimeService) run(ctx context.Context, startup func(context.Context) 
 			}
 		case err := <-s.configErrors:
 			s.reportError("config", err)
-		case <-s.notificationErrors:
-			s.reportError("notification", fmt.Errorf("desktop notification unavailable"))
+		case err := <-s.notificationErrors:
+			if err != nil {
+				s.reportError("notification", fmt.Errorf("desktop notification unavailable"))
+			} else if s.resolveIssue("notification", "") {
+				s.publish()
+			}
 		case change := <-s.changes:
-			cancelWork()
+			cancelWork(false)
 			if err := s.runOperation(serviceCtx, "", func(operationCtx context.Context) error { return s.applyChange(operationCtx, change) }); err != nil {
 				s.reportError("config", err)
 			}
+			cancelWithdrawnTun()
 		case <-s.stateChanged:
 			s.reconcileSubscriptionFailures(s.subs.List())
 			s.publish()
@@ -446,7 +504,7 @@ func (s *runtimeService) run(ctx context.Context, startup func(context.Context) 
 		case result := <-workResults:
 			finishWork(result)
 		case <-s.exited:
-			cancelWork()
+			cancelWork(false)
 			s.exited = nil
 			cleanup, stop := context.WithTimeout(context.Background(), 5*time.Second)
 			if err := s.proxy.Restore(cleanup); err != nil {

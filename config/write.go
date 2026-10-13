@@ -70,9 +70,15 @@ type SettingsPatch struct {
 	MonitorThreshold             *time.Duration
 	AlertThreshold               *time.Duration
 	MonitorConsecutiveBadSamples *int
+	MonitorWindowSize            *int
+	MonitorMinCandidateSamples   *int
+	MonitorMaxFailures           *int
 	MonitorMinImprovement        *time.Duration
 	MonitorCooldown              *time.Duration
 	MonitorJitter                *time.Duration
+	TunEnabled                   *bool
+	TunStack                     *string
+	TunDNSMode                   *string
 }
 
 // PatchSettings edits only the explicit user intent fields in config.toml.
@@ -139,6 +145,18 @@ func PatchSettings(path string, current Snapshot, patch SettingsPatch) error {
 		document.Monitor.ConsecutiveBadSamples = patch.MonitorConsecutiveBadSamples
 		next.Monitor.ConsecutiveBadSamples = *patch.MonitorConsecutiveBadSamples
 	}
+	if patch.MonitorWindowSize != nil {
+		document.Monitor.WindowSize = patch.MonitorWindowSize
+		next.Monitor.WindowSize = *patch.MonitorWindowSize
+	}
+	if patch.MonitorMinCandidateSamples != nil {
+		document.Monitor.MinCandidateSamples = patch.MonitorMinCandidateSamples
+		next.Monitor.MinCandidateSamples = *patch.MonitorMinCandidateSamples
+	}
+	if patch.MonitorMaxFailures != nil {
+		document.Monitor.MaxFailures = patch.MonitorMaxFailures
+		next.Monitor.MaxFailures = *patch.MonitorMaxFailures
+	}
 	if patch.MonitorMinImprovement != nil {
 		value := patch.MonitorMinImprovement.String()
 		document.Monitor.MinImprovement = &value
@@ -158,6 +176,18 @@ func PatchSettings(path string, current Snapshot, patch SettingsPatch) error {
 		value := patch.AlertThreshold.String()
 		document.Monitor.AlertThreshold = &value
 		next.Monitor.AlertThreshold = *patch.AlertThreshold
+	}
+	if patch.TunEnabled != nil {
+		document.Tun.Enabled = *patch.TunEnabled
+		next.Tun.Enabled = *patch.TunEnabled
+	}
+	if patch.TunStack != nil {
+		document.Tun.Stack = patch.TunStack
+		next.Tun.Stack = *patch.TunStack
+	}
+	if patch.TunDNSMode != nil {
+		document.Tun.DNSMode = patch.TunDNSMode
+		next.Tun.DNSMode = *patch.TunDNSMode
 	}
 	if reflect.DeepEqual(next, current) {
 		return nil

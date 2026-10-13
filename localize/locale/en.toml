@@ -43,6 +43,24 @@ other = "configured url-test delay settings"
 ["override.rules"]
 other = "managed filter rules"
 
+["override.tun"]
+other = "app-owned TUN mode"
+
+["override.dns.enable"]
+other = "DNS required by TUN mode"
+
+["override.dns.enhanced-mode"]
+other = "TUN DNS mode"
+
+["override.dns.fake-ip-range"]
+other = "TUN fake-IP range"
+
+["override.dns.fake-ip-range6"]
+other = "TUN fake-IP range"
+
+["override.dns.fake-ip-filter"]
+other = "TUN fake-IP exclusions for local and time-server names"
+
 ["control.enable"]
 other = "Enabled"
 

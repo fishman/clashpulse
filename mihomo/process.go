@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"time"
 )
 
 type StartPlan struct {
@@ -15,10 +16,17 @@ type StartPlan struct {
 	Args       []string
 }
 
+// stopGrace lets Mihomo remove its TUN routes, ip rules, and nftables state
+// after SIGTERM before it is killed; it stays shorter than the 5s cleanup
+// deadlines that wrap Stop so the kill always happens inside them.
+const stopGrace = 3 * time.Second
+
 type Process struct {
 	mu   sync.Mutex
 	cmd  *exec.Cmd
 	done chan struct{}
+	// grace overrides stopGrace when positive.
+	grace time.Duration
 }
 
 // Exited reports the latest child's completion; nil means no child has started.
@@ -49,6 +57,8 @@ func (p *Process) Start(ctx context.Context, plan StartPlan) error {
 	argv = append(argv, "-f", plan.ConfigPath)
 	argv = append(argv, plan.Args...)
 	cmd := exec.CommandContext(ctx, plan.Capability.Path, argv...)
+	cmd.Cancel = func() error { return terminate(cmd.Process) }
+	cmd.WaitDelay = p.gracePeriod()
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start mihomo: %w", err)
 	}
@@ -67,16 +77,38 @@ func (p *Process) Stop(ctx context.Context) error {
 	if cmd == nil {
 		return nil
 	}
+	if err := terminate(cmd.Process); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		return fmt.Errorf("stop mihomo: %w", err)
+	}
+	grace := time.NewTimer(p.gracePeriod())
+	defer grace.Stop()
+	var canceled error
+	select {
+	case <-done:
+		return nil
+	case <-grace.C:
+	case <-ctx.Done():
+		canceled = ctx.Err()
+	}
 	if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		return fmt.Errorf("stop mihomo: %w", err)
 	}
-
+	if canceled != nil {
+		return canceled
+	}
 	select {
 	case <-done:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func (p *Process) gracePeriod() time.Duration {
+	if p.grace > 0 {
+		return p.grace
+	}
+	return stopGrace
 }
 
 func (p *Process) wait(cmd *exec.Cmd, done chan struct{}) {

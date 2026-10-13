@@ -16,6 +16,8 @@ const (
 	// build cannot configure from an apply that failed. The cause is stripped at
 	// the subscription boundary, so the distinction travels as stage identity.
 	ActivationSystemProxyUnsupported ActivationStage = "system_proxy_unsupported"
+	ActivationTunPrivilege           ActivationStage = "tun_privilege"
+	ActivationTunStart               ActivationStage = "tun_start"
 	ActivationStateCommit            ActivationStage = "state_commit"
 	ActivationRollback               ActivationStage = "rollback"
 )
@@ -29,6 +31,8 @@ var activationMessages = map[ActivationStage]string{
 	ActivationControllerReadiness:    "Mihomo controller did not become ready",
 	ActivationSystemProxy:            "System Proxy could not be applied",
 	ActivationSystemProxyUnsupported: "system proxy is unsupported in this desktop environment",
+	ActivationTunPrivilege:           "TUN privilege is not granted for the selected Mihomo binary",
+	ActivationTunStart:               "Mihomo did not start the TUN interface",
 	ActivationStateCommit:            "private activation state could not be committed",
 	ActivationRollback:               "activation rollback failed; prior runtime needs attention",
 }

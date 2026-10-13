@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -41,6 +42,8 @@ type staticRuntime struct {
 	startLog, mutationLog     string
 	failValidation, failStart string
 	proxyState, fakeLog       string
+	// profile is the subscription body the source serves.
+	profile *atomic.Pointer[string]
 }
 
 func newStaticRuntime(t *testing.T) *staticRuntime {
@@ -130,8 +133,9 @@ elif args[0] in ('set', 'reset'):
 	if err := config.Write(filepath.Join(configDir, "filters.toml"), []byte(filtersTOML)); err != nil {
 		t.Fatal(err)
 	}
-	profile := []byte(twoNodeProfile)
-	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(profile) }))
+	profile := new(atomic.Pointer[string])
+	profile.Store(new(twoNodeProfile))
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(*profile.Load())) }))
 	t.Cleanup(source.Close)
 	subscription := config.Subscription{ID: "daily", URL: source.URL, Enabled: true, AllowHTTP: true, Timeout: 2 * time.Second}
 	if err := config.Write(filepath.Join(configDir, "subscriptions.toml"), []byte(fmt.Sprintf("[[subscription]]\nid = \"daily\"\nurl = %q\nenabled = true\nallow_http = true\ntimeout = \"2s\"\n", source.URL))); err != nil {
@@ -157,7 +161,7 @@ elif args[0] in ('set', 'reset'):
 		root: root, configDir: configDir, stateDir: stateDir, ctx: ctx, cancel: cancel, service: service,
 		subscription: subscription, source: source, resourceFiles: resourceFiles,
 		initialBodies: initialBodies, updatedBodies: updatedBodies, startLog: startLog, mutationLog: mutationLog,
-		failValidation: failValidation, failStart: failStart, proxyState: proxyState, fakeLog: fakeLog,
+		failValidation: failValidation, failStart: failStart, proxyState: proxyState, fakeLog: fakeLog, profile: profile,
 	}
 	t.Cleanup(func() {
 		cleanup, done := context.WithTimeout(context.Background(), 6*time.Second)
@@ -934,7 +938,9 @@ port = int(re.search(r'^mixed-port:\s*(\d+)', text, re.M).group(1))
 paths = [v.strip().strip('"\'') for v in re.findall(r'^\s*path:\s*(.+?)\s*$', text, re.M)]
 paths = [p for p in paths if os.path.isabs(p)]
 initial = {p: hashlib.sha256(open(p,'rb').read()).hexdigest() for p in paths if os.path.isfile(p)}
-with open(sys.argv[3], 'a', encoding='utf-8') as out: out.write(json.dumps({os.path.basename(p):v for p,v in initial.items()})+'\n')
+record = {os.path.basename(p):v for p,v in initial.items()}
+record['binary'] = sys.argv[5]
+with open(sys.argv[3], 'a', encoding='utf-8') as out: out.write(json.dumps(record)+'\n')
 subprocess.Popen([sys.executable, __file__, '--watch', str(os.getpid()), json.dumps(paths), json.dumps(initial), sys.argv[4]], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 class ProxyHandler(socketserver.BaseRequestHandler):
     def handle(self): self.request.close()
@@ -951,6 +957,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path.startswith('/proxies'):
             payload = {'proxies': {'select-main': {'name':'select-main','type':'Selector','all':['node-a','node-b'],'now':selected[0]}, 'node-a':{'name':'node-a','type':'Direct'}, 'node-b':{'name':'node-b','type':'Direct'}}}
             self.send_response(200); self.end_headers(); self.wfile.write(json.dumps(payload).encode()); return
+        if self.path == '/configs':
+            off = os.environ.get('CLASHPULSE_FAKE_TUN_OFF', '')
+            enabled = bool(re.search(r'^\s+device:\s*clashpulse0\s*$', text, re.M)) and not (off and os.path.exists(off))
+            self.send_response(200); self.end_headers(); self.wfile.write(json.dumps({'tun': {'enable': enabled}}).encode()); return
         self.send_error(404)
     def do_PUT(self):
         if self.headers.get('Authorization') != 'Bearer ' + secret:
@@ -966,7 +976,11 @@ http.server.ThreadingHTTPServer(('127.0.0.1', int(address.rsplit(':',1)[1])), Ha
 		t.Fatal(err)
 	}
 	binary := filepath.Join(root, "mihomo")
-	script := fmt.Sprintf("#!/bin/sh\ncase \"$1\" in\n -v) echo 'Mihomo Meta v1.19.31 linux amd64'; exit 0;;\n -t) if [ -f %q ] && [ \"$5\" = %q ]; then rm -f %q; exit 1; fi; exit 0;;\n -f) if [ -f %q ]; then rm -f %q; exit 0; fi; exec %q %q \"$2\" \"$4\" %q %q 2>>%q;;\nesac\nexit 1\n", failValidation, filepath.Join(root, "state", "resources"), failValidation, failStart, failStart, python, server, startLog, mutationLog, fakeLog)
+	// CLASHPULSE_FAKE_VALIDATE_BLOCK holds candidate validation (not the
+	// inspection check) by this exact binary, not a privileged copy of it,
+	// while the named file exists.
+	const block = "block=\"$CLASHPULSE_FAKE_VALIDATE_BLOCK\"; if [ -n \"$block\" ] && [ -f \"$block\" ] && [ \"$4\" = -d ] && [ \"$0\" = %q ]; then : > \"$block.entered\"; while [ -f \"$block\" ]; do sleep 0.05; done; fi; "
+	script := fmt.Sprintf("#!/bin/sh\ncase \"$1\" in\n -v) echo 'Mihomo Meta v1.19.31 linux amd64'; exit 0;;\n -t) "+block+"if [ -f %q ] && [ \"$5\" = %q ]; then rm -f %q; exit 1; fi; exit 0;;\n -f) if [ -f %q ]; then rm -f %q; exit 0; fi; exec %q %q \"$2\" \"$4\" %q %q \"$0\" 2>>%q;;\nesac\nexit 1\n", binary, failValidation, filepath.Join(root, "state", "resources"), failValidation, failStart, failStart, python, server, startLog, mutationLog, fakeLog)
 	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}

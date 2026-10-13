@@ -4,6 +4,9 @@ other = "Mihomo 内核"
 ["gui.settings.section.System Proxy"]
 other = "系统代理"
 
+["gui.settings.section.TUN"]
+other = "TUN"
+
 ["gui.settings.section.Monitor"]
 other = "延迟监测"
 
@@ -785,8 +788,8 @@ other = "切换策略"
 ["Note"]
 other = "说明"
 
-["A switch needs at least three probes of each node and the switch cooldown after one. Lowest latency compares median latencies and requires the required improvement; the unhealthy threshold then no longer gates switching."]
-other = "切换前每个节点至少需要三次探测；切换后还需等待冷却时间。最低延迟策略会比较延迟中位数，并要求达到设定的改善幅度；此时不再以不健康阈值作为切换条件。"
+["A switch needs the required candidate successes in each candidate's probe window and the switch cooldown after one. The selected node counts as unstable once its window holds the maximum failures. Lowest latency compares median latencies and requires the required improvement; the unhealthy threshold then no longer gates switching."]
+other = "切换前每个候选节点的探测窗口内需达到要求的成功次数；切换后还需等待冷却时间。当前节点的窗口内失败次数达到上限时视为不稳定。最低延迟策略会比较延迟中位数，并要求达到设定的改善幅度；此时不再以不健康阈值作为切换条件。"
 
 ["Timeout (ms)"]
 other = "超时（毫秒）"
@@ -809,6 +812,33 @@ other = "切换冷却时间（秒）"
 ["Probe jitter (ms)"]
 other = "探测抖动（毫秒）"
 
+["Probe window (samples)"]
+other = "探测窗口（样本数）"
+
+["Required candidate successes"]
+other = "候选节点要求的成功次数"
+
+["Max failures in window"]
+other = "窗口内最大失败次数"
+
+["probe window samples"]
+other = "探测窗口样本数"
+
+["required candidate successes"]
+other = "候选节点要求的成功次数"
+
+["max failures in window"]
+other = "窗口内最大失败次数"
+
+["Switch stability"]
+other = "切换稳定性"
+
+["window %d samples, %d successes to switch, at most %d failures"]
+other = "窗口 %d 个样本，切换需 %d 次成功，最多 %d 次失败"
+
+["Send test notification"]
+other = "发送测试通知"
+
 ["Monitor probe policy"]
 other = "监测探测策略"
 
@@ -823,3 +853,48 @@ other = "解析器组"
 
 ["resource %s requires %s"]
 other = "资源 %s 需要 %s"
+
+["TUN"]
+other = "TUN"
+
+["Enable TUN"]
+other = "启用 TUN"
+
+["Stack"]
+other = "网络栈"
+
+["DNS mode"]
+other = "DNS 模式"
+
+["Authorize"]
+other = "授权"
+
+["Requested %s, active %s"]
+other = "已请求：%s，已生效：%s"
+
+["Last failure: %s"]
+other = "上次失败：%s"
+
+["TUN privilege is not authorized"]
+other = "TUN 权限尚未授权"
+
+["Mihomo was updated, re-authorize"]
+other = "Mihomo 已更新，请重新授权"
+
+["The private TUN copy is on a nosuid mount, so its file capability is ignored"]
+other = "私有 TUN 副本位于 nosuid 挂载点，其文件能力会被忽略"
+
+["No polkit authentication agent is running; run the command below in a terminal"]
+other = "未运行 polkit 认证代理；请在终端中运行下面的命令"
+
+["TUN is unsupported on this platform"]
+other = "此平台不支持 TUN"
+
+["A leftover TUN device exists while no ClashPulse Mihomo runs. ClashPulse does not remove network state it did not create."]
+other = "存在残留的 TUN 设备，但没有由 ClashPulse 运行的 Mihomo。ClashPulse 不会移除非其创建的网络状态。"
+
+["TUN (unsupported on this platform)"]
+other = "TUN（此平台不支持）"
+
+["TUN (requested, inactive)"]
+other = "TUN（已请求，未生效）"

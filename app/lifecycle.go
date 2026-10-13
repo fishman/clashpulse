@@ -5,12 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -82,6 +84,9 @@ func (s *runtimeService) renderProfile(ctx context.Context, profile []byte) ([]b
 }
 
 func (s *runtimeService) renderWithHome(ctx context.Context, profile []byte, intent config.Snapshot, home string, paths map[string]string, capability mihomo.Capability) ([]byte, error) {
+	if !s.tunCapability(capability) {
+		intent.Tun.Enabled = false
+	}
 	if err := dns.Validate(ctx, intent, paths); err != nil {
 		return nil, core.WrapActivation(core.ActivationConfigValidation, err)
 	}
@@ -204,10 +209,11 @@ func (s *runtimeService) commitOverrideReport(report []core.ConfigOverrideSnapsh
 }
 
 func (s *runtimeService) applyGenerated(ctx context.Context, profile []byte) error {
-	capability, err := s.selectedCapability(ctx)
+	capability, privilege, err := s.runtimeCapability(ctx, true)
 	if err != nil {
 		return core.WrapActivation(core.ActivationBinary, err)
 	}
+	s.notePrivilege(privilege)
 	intent := s.store.Snapshot()
 	home, paths, err := s.registry.PathsWithHome(intent)
 	if err == nil {
@@ -564,6 +570,10 @@ func (s *runtimeService) applyCandidateAt(ctx context.Context, candidate []byte,
 			return core.WrapActivation(core.ActivationRollback, err)
 		}
 	}
+	if !wasRunning {
+		_, err := net.InterfaceByName(s.tun.device)
+		s.tunLeftover = err == nil
+	}
 	if err := config.Write(activePath, candidate); err != nil {
 		if wasRunning {
 			restore()
@@ -588,6 +598,14 @@ func (s *runtimeService) applyCandidateAt(ctx context.Context, candidate []byte,
 		}
 	}
 	s.generated, s.cap, s.resourceHome = bytes.Clone(candidate), capability, home
+	abandon := func() {
+		_ = s.stopMonitorAndProcess(ctx)
+		if wasRunning {
+			restore()
+		} else if len(oldConfig) > 0 && activePath == oldPath {
+			_ = config.Write(activePath, oldConfig)
+		}
+	}
 	if s.store.Snapshot().App.SystemProxy.Enabled {
 		if err := s.proxy.Apply(ctx, fmt.Sprintf("127.0.0.1:%d", s.proxyPort)); err != nil {
 			cleanup, done := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
@@ -598,17 +616,26 @@ func (s *runtimeService) applyCandidateAt(ctx context.Context, candidate []byte,
 				s.publish()
 				return core.WrapActivation(core.ActivationRollback, errors.Join(err, restoreErr))
 			}
-			_ = s.stopMonitorAndProcess(ctx)
-			if wasRunning {
-				restore()
-			} else if len(oldConfig) > 0 {
-				if activePath == oldPath {
-					_ = config.Write(activePath, oldConfig)
-				}
-			}
+			abandon()
 			return systemProxyActivation(err)
 		}
 		s.proxyActive = true
+	}
+	if s.tunCapability(capability) && !s.tunActive {
+		cause := core.WrapActivation(core.ActivationTunStart, errors.New("clashpulse: Mihomo reported tun.enable false"))
+		s.tunFailure = core.ActivationTunStart.Message()
+		if s.proxyActive {
+			cleanup, done := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			restoreErr := s.proxy.Restore(cleanup)
+			done()
+			if restoreErr != nil {
+				s.publish()
+				return core.WrapActivation(core.ActivationRollback, errors.Join(cause, restoreErr))
+			}
+			s.proxyActive = false
+		}
+		abandon()
+		return cause
 	}
 	s.snapshot.Binary.LastCompatibilityFailure = ""
 	s.publish()
@@ -724,7 +751,28 @@ func (s *runtimeService) startProcess(ctx context.Context, capability mihomo.Cap
 		return s.stopStartedProcess(ctx, core.WrapActivation(core.ActivationControllerReadiness, err))
 	}
 	s.exited = s.process.Exited()
+	if s.tunCapability(capability) {
+		s.tunActive = s.confirmTun(ctx)
+		if s.tunActive {
+			s.tunFailure = ""
+		}
+	}
 	return nil
+}
+
+func (s *runtimeService) confirmTun(ctx context.Context) bool {
+	confirmCtx, cancel := context.WithTimeout(ctx, tunConfirmTimeout)
+	defer cancel()
+	for {
+		if enabled, err := s.controller.TunEnabled(confirmCtx); err == nil && enabled {
+			return true
+		}
+		select {
+		case <-confirmCtx.Done():
+			return false
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
 }
 
 func (s *runtimeService) stopStartedProcess(ctx context.Context, cause error) error {
@@ -744,6 +792,7 @@ func (s *runtimeService) stopMonitorAndProcess(ctx context.Context) error {
 		s.monitor = nil
 	}
 	s.running.Store(false)
+	s.tunActive = false
 	s.exited = nil
 	s.controller = nil
 	if err := s.process.Stop(ctx); err != nil {
@@ -784,11 +833,16 @@ func (s *runtimeService) start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	intent := s.store.Snapshot()
-	capability, err := s.selectedCapability(ctx)
+	capability, privilege, err := s.runtimeCapability(ctx, !s.tunHold)
 	if err != nil {
 		return core.WrapActivation(core.ActivationBinary, err)
 	}
+	s.notePrivilege(privilege)
+	return s.startWith(ctx, profile, capability)
+}
+
+func (s *runtimeService) startWith(ctx context.Context, profile []byte, capability mihomo.Capability) error {
+	intent := s.store.Snapshot()
 	if home, paths, err := s.registry.PathsWithHome(intent); err == nil {
 		candidate, err := s.renderWithHome(ctx, profile, intent, home, paths, capability)
 		if err != nil {
@@ -831,6 +885,9 @@ func monitorPolicy(settings config.Monitor) monitor.Policy {
 	policy.Threshold = settings.Threshold
 	policy.LatencyAlertThreshold = settings.AlertThreshold
 	policy.ConsecutiveBadSamples = settings.ConsecutiveBadSamples
+	policy.WindowSize = settings.WindowSize
+	policy.MinCandidateSamples = settings.MinCandidateSamples
+	policy.MaxFailures = settings.MaxFailures
 	policy.MinImprovement = settings.MinImprovement
 	policy.Cooldown = settings.Cooldown
 	policy.Jitter = settings.Jitter
@@ -883,6 +940,7 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 			view := core.ProxySnapshot{ID: proxyID, GroupID: id, Label: label, MihomoMillis: mihomoMillis[name]}
 			if prior, ok := carried[id+"\x00"+proxyID]; ok {
 				view.LatencyMillis, view.FinishedAt, view.Outcome = prior.LatencyMillis, prior.FinishedAt, prior.Outcome
+				view.MedianMillis, view.JitterMillis, view.Samples, view.Failures = prior.MedianMillis, prior.JitterMillis, prior.Samples, prior.Failures
 			}
 			s.snapshot.Proxies = append(s.snapshot.Proxies, view)
 		}
@@ -915,13 +973,33 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 		}
 		monitorCtx, cancel := context.WithCancel(s.processCtx)
 		s.stopMonitor, s.monitorDone = cancel, make(chan error, 1)
-		go func() { s.monitorDone <- s.monitor.Run(monitorCtx) }()
+		scheduler, controller := s.monitor, s.controller
+		go func() {
+			var watcher sync.WaitGroup
+			watcher.Go(func() { watchDialFailures(monitorCtx, controller, scheduler.ProbedGroups, scheduler.ReportDialFailure) })
+			err := scheduler.Run(monitorCtx)
+			watcher.Wait()
+			s.monitorDone <- err
+		}()
 	}
 	if err := s.monitor.SetGroups(monitorGroups); err != nil {
 		return err
 	}
 	s.publish()
 	return nil
+}
+
+// watchDialFailures follows Mihomo's log for the monitor's lifetime. A dropped
+// stream is not a service failure; it reconnects at the early-probe spacing.
+func watchDialFailures(ctx context.Context, controller *mihomo.Controller, groups func() []string, report func(group string)) {
+	for {
+		_ = controller.WatchDialFailures(ctx, groups, report)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(monitor.DialFailureProbeSpacing):
+		}
+	}
 }
 
 // probeEnabled measures a managed select group whenever the monitor is enabled.

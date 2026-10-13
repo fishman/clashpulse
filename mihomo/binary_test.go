@@ -141,7 +141,7 @@ func TestInspectRejectsBinaryWithoutConfigCheck(t *testing.T) {
 	}
 }
 
-func TestInspectGatesGeodataByKnownVersion(t *testing.T) {
+func TestInspectGatesCapabilitiesByKnownVersion(t *testing.T) {
 	for _, identity := range []string{
 		"Mihomo Meta v1.19.31 linux amd64",
 		"Mihomo Meta 1.19.30 linux amd64 with go1.26.6",
@@ -151,8 +151,8 @@ func TestInspectGatesGeodataByKnownVersion(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !supported.SupportsGeoIPDat || !supported.SupportsGeoSiteDat || !supported.SupportsMMDB {
-			t.Fatalf("%q missing geodata capabilities: %+v", identity, supported)
+		if !supported.SupportsGeoIPDat || !supported.SupportsGeoSiteDat || !supported.SupportsMMDB || !supported.SupportsTUN {
+			t.Fatalf("%q missing documented capabilities: %+v", identity, supported)
 		}
 	}
 	for _, identity := range []string{"Mihomo Meta v1.18.9 linux amd64", "unrecognized build"} {
@@ -160,8 +160,8 @@ func TestInspectGatesGeodataByKnownVersion(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if unknown.SupportsGeoIPDat || unknown.SupportsGeoSiteDat || unknown.SupportsMMDB {
-			t.Fatalf("%q claimed geodata capability: %+v", identity, unknown)
+		if unknown.SupportsGeoIPDat || unknown.SupportsGeoSiteDat || unknown.SupportsMMDB || unknown.SupportsTUN {
+			t.Fatalf("%q claimed documented capability: %+v", identity, unknown)
 		}
 	}
 }

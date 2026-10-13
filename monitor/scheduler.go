@@ -16,17 +16,24 @@ type DelayProber interface {
 	Delay(context.Context, string, string, time.Duration) (time.Duration, error)
 }
 
+// DialFailureProbeSpacing bounds early probes triggered by real-traffic dial
+// failures, so an outage cannot turn into a continuous probe storm.
+const DialFailureProbeSpacing = 15 * time.Second
+
 type Scheduler struct {
 	policy  Policy
 	prober  DelayProber
 	onBatch func(Batch)
+	now     func() time.Time
 
-	mu         sync.Mutex
-	groups     []GroupState
-	generation uint64
-	requests   map[string]struct{}
-	wake       chan struct{}
-	started    bool
+	mu            sync.Mutex
+	groups        []GroupState
+	generation    uint64
+	requests      map[string]struct{}
+	dialFailures  map[string]int
+	lastDialProbe map[string]time.Time
+	wake          chan struct{}
+	started       bool
 }
 
 func NewScheduler(policy Policy, prober DelayProber, onBatch func(Batch)) (*Scheduler, error) {
@@ -40,11 +47,14 @@ func NewScheduler(policy Policy, prober DelayProber, onBatch func(Batch)) (*Sche
 		return nil, fmt.Errorf("monitor scheduler: batch handler is required")
 	}
 	return &Scheduler{
-		policy:   policy,
-		prober:   prober,
-		onBatch:  onBatch,
-		requests: make(map[string]struct{}),
-		wake:     make(chan struct{}, 1),
+		policy:        policy,
+		prober:        prober,
+		onBatch:       onBatch,
+		now:           time.Now,
+		requests:      make(map[string]struct{}),
+		dialFailures:  make(map[string]int),
+		lastDialProbe: make(map[string]time.Time),
+		wake:          make(chan struct{}, 1),
 	}, nil
 }
 
@@ -116,6 +126,47 @@ func (s *Scheduler) Request(group string) error {
 	s.mu.Unlock()
 	s.signal()
 	return nil
+}
+
+// ProbedGroups returns the names of the currently probe-enabled groups.
+func (s *Scheduler) ProbedGroups() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var names []string
+	for _, group := range s.groups {
+		if group.ProbeEnabled {
+			names = append(names, group.Group)
+		}
+	}
+	return names
+}
+
+// ReportDialFailure records a failed real-traffic dial through a probed group.
+// MaxFailures failures since the group's last probe force an early probe, at
+// most once per DialFailureProbeSpacing; the probe result is the evidence.
+func (s *Scheduler) ReportDialFailure(group string) {
+	s.mu.Lock()
+	probed := false
+	for _, current := range s.groups {
+		if current.Group == group {
+			probed = current.ProbeEnabled
+			break
+		}
+	}
+	if !probed {
+		s.mu.Unlock()
+		return
+	}
+	s.dialFailures[group]++
+	now := s.now()
+	if s.dialFailures[group] < s.policy.MaxFailures || now.Sub(s.lastDialProbe[group]) < DialFailureProbeSpacing {
+		s.mu.Unlock()
+		return
+	}
+	s.lastDialProbe[group] = now
+	s.requests[group] = struct{}{}
+	s.mu.Unlock()
+	s.signal()
 }
 
 // Run owns the sole scheduling timer and a fixed-size worker pool. onBatch runs
@@ -254,6 +305,9 @@ func (s *Scheduler) Run(ctx context.Context) error {
 					continue
 				}
 				delete(forced, name)
+				s.mu.Lock()
+				delete(s.dialFailures, name)
+				s.mu.Unlock()
 				if runtime.state.ProbeEnabled {
 					runtime.next = time.Now().Add(s.policy.Interval + s.jitter())
 				}
@@ -348,6 +402,9 @@ func (s *Scheduler) Run(ctx context.Context) error {
 							continue
 						}
 						batch.Decisions = append(batch.Decisions, Decide(s.policy, runtime.state, historySamples(runtime), batch.FinishedAt))
+						for _, proxy := range runtime.state.Proxies {
+							batch.Stability = append(batch.Stability, ProxyStability{Group: name, Proxy: proxy, Stability: MeasureStability(runtime.history[proxy], s.policy.WindowSize)})
+						}
 						groupSamples := make([]Sample, 0, len(runtime.state.Proxies))
 						for _, sample := range batch.Samples {
 							if sample.Group == name {

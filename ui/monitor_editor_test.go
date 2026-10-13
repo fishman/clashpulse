@@ -8,12 +8,9 @@ import (
 )
 
 func TestMonitorPolicyFormKeepsSubsecondTimeoutAndZeroCooldown(t *testing.T) {
-	patch, err := monitorPolicyPatch(monitorPolicyInput{
-		TestURL: "https://probe.example/check", SwitchPolicy: switchPolicyLabel(monitor.SwitchFailover),
-		IntervalSeconds: "300", TimeoutMillis: "750", Concurrency: "3",
-		ThresholdMillis: "800", AlertThresholdMillis: "250", ConsecutiveBadSamples: "3",
-		MinImprovementMillis: "100", CooldownSeconds: "0", JitterMillis: "0",
-	})
+	input := stabilityPolicyInput("5", "3", "2", "3")
+	input.CooldownSeconds = "0"
+	patch, err := monitorPolicyPatch(input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,12 +24,10 @@ func TestMonitorPolicyFormKeepsSubsecondTimeoutAndZeroCooldown(t *testing.T) {
 
 func TestMonitorPolicyFormAcceptsApprovedHTTPProbe(t *testing.T) {
 	url := "http://cp.cloudflare.com/generate_204"
-	patch, err := monitorPolicyPatch(monitorPolicyInput{
-		TestURL: url, SwitchPolicy: switchPolicyLabel(monitor.SwitchLowestLatency),
-		IntervalSeconds: "300", TimeoutMillis: "5000", Concurrency: "3",
-		ThresholdMillis: "800", AlertThresholdMillis: "250", ConsecutiveBadSamples: "3",
-		MinImprovementMillis: "100", CooldownSeconds: "600", JitterMillis: "15000",
-	})
+	input := stabilityPolicyInput("5", "3", "2", "3")
+	input.TestURL, input.SwitchPolicy = url, switchPolicyLabel(monitor.SwitchLowestLatency)
+	input.TimeoutMillis, input.JitterMillis = "5000", "15000"
+	patch, err := monitorPolicyPatch(input)
 	if err != nil || patch.MonitorTestURL == nil || *patch.MonitorTestURL != url {
 		t.Fatalf("approved HTTP probe URL unavailable: %+v, %v", patch, err)
 	}
@@ -42,12 +37,49 @@ func TestMonitorPolicyFormAcceptsApprovedHTTPProbe(t *testing.T) {
 }
 
 func TestMonitorPolicyFormRejectsUnknownSwitchPolicy(t *testing.T) {
-	if _, err := monitorPolicyPatch(monitorPolicyInput{
-		TestURL: "https://probe.example/check", SwitchPolicy: "fastest", IntervalSeconds: "300",
-		TimeoutMillis: "750", Concurrency: "3", ThresholdMillis: "800", AlertThresholdMillis: "250",
-		ConsecutiveBadSamples: "3", MinImprovementMillis: "100", CooldownSeconds: "600", JitterMillis: "0",
-	}); err == nil {
+	input := stabilityPolicyInput("5", "3", "2", "3")
+	input.SwitchPolicy = "fastest"
+	if _, err := monitorPolicyPatch(input); err == nil {
 		t.Fatal("unlabelled switch policy was accepted")
+	}
+}
+
+func stabilityPolicyInput(window, candidates, maxFailures, badSamples string) monitorPolicyInput {
+	return monitorPolicyInput{
+		TestURL: "https://probe.example/check", SwitchPolicy: switchPolicyLabel(monitor.SwitchFailover),
+		IntervalSeconds: "300", TimeoutMillis: "750", Concurrency: "3",
+		ThresholdMillis: "800", AlertThresholdMillis: "250", ConsecutiveBadSamples: badSamples,
+		WindowSize: window, MinCandidateSamples: candidates, MaxFailures: maxFailures,
+		MinImprovementMillis: "100", CooldownSeconds: "600", JitterMillis: "0",
+	}
+}
+
+func TestMonitorPolicyFormSendsStabilityWindow(t *testing.T) {
+	patch, err := monitorPolicyPatch(stabilityPolicyInput("10", "4", "3", "6"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if patch.MonitorWindowSize == nil || *patch.MonitorWindowSize != 10 ||
+		patch.MonitorMinCandidateSamples == nil || *patch.MonitorMinCandidateSamples != 4 ||
+		patch.MonitorMaxFailures == nil || *patch.MonitorMaxFailures != 3 ||
+		patch.MonitorConsecutiveBadSamples == nil || *patch.MonitorConsecutiveBadSamples != 6 {
+		t.Fatalf("stability window lost: %+v", patch)
+	}
+}
+
+func TestMonitorPolicyFormBoundsStabilityByWindow(t *testing.T) {
+	for _, input := range [][4]string{
+		{"1", "2", "1", "1"}, {"21", "2", "1", "1"}, {"", "3", "2", "3"},
+		{"5", "1", "2", "3"}, {"5", "6", "2", "3"},
+		{"5", "3", "0", "3"}, {"5", "3", "6", "3"},
+		{"5", "3", "2", "0"}, {"5", "3", "2", "6"},
+	} {
+		if _, err := monitorPolicyPatch(stabilityPolicyInput(input[0], input[1], input[2], input[3])); err == nil {
+			t.Fatalf("accepted window %q, candidates %q, max failures %q, bad samples %q", input[0], input[1], input[2], input[3])
+		}
+	}
+	if _, err := monitorPolicyPatch(stabilityPolicyInput("20", "20", "20", "20")); err != nil {
+		t.Fatalf("largest window rejected: %v", err)
 	}
 }
 

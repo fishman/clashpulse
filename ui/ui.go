@@ -400,6 +400,7 @@ func (d *desktopUI) postSnapshot(snapshot core.Snapshot) {
 		if binaryChanged || previous.Monitor != immutable.Monitor || previous.SystemProxy != immutable.SystemProxy || !reflect.DeepEqual(previous.DNS, immutable.DNS) {
 			d.settingsPage.update(immutable.Binary, immutable.Monitor, immutable.SystemProxy, immutable.DNS)
 		}
+		d.settingsPage.updateTun(immutable.Tun)
 		if !reflect.DeepEqual(previous.Diagnostics, immutable.Diagnostics) {
 			d.activity.update(immutable.Diagnostics)
 		}

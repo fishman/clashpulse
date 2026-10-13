@@ -395,7 +395,7 @@ other = "必须提供稳定的订阅 ID。"
 other = "告警阈值（毫秒）"
 
 ["tui.monitor.range.alert_threshold"]
-other = "告警阈值必须介于 1 至 60000 毫秒之间。"
+other = "告警阈值必须介于 %d 至 %d 毫秒之间。"
 
 ["Allow HTTP"]
 other = "允许 HTTP"
@@ -428,10 +428,10 @@ other = "并发数"
 other = "请确认移除 DNS 策略。"
 
 ["tui.monitor.range.bad_samples"]
-other = "连续异常样本数必须介于 1 至 5 之间。"
+other = "连续异常样本数必须介于 %d 至 %d 之间。"
 
 ["tui.monitor.range.cooldown"]
-other = "冷却时间必须介于 0 至 4294967295 秒之间。"
+other = "冷却时间必须介于 %d 至 %d 秒之间。"
 
 ["Cooldown seconds"]
 other = "冷却时间（秒）"
@@ -539,7 +539,7 @@ other = "间隔（秒）"
 other = "抖动（毫秒）"
 
 ["tui.monitor.range.jitter"]
-other = "抖动必须介于 0 至 4294967295 毫秒之间。"
+other = "抖动必须介于 %d 至 %d 毫秒之间。"
 
 ["Kind, format, source URL, and positive interval are required."]
 other = "类型、格式、来源 URL 和正数间隔均为必填项。"
@@ -560,16 +560,16 @@ other = "匹配值长度必须为 1 至 %d 字节。"
 other = "最小改善幅度（毫秒）"
 
 ["tui.monitor.range.improvement"]
-other = "最小改善幅度必须介于 1 至 4294967295 毫秒之间。"
+other = "最小改善幅度必须介于 %d 至 %d 毫秒之间。"
 
 ["tui.monitor.range.concurrency"]
-other = "监控并发数必须介于 1 至 64 之间。"
+other = "监控并发数必须介于 %d 至 %d 之间。"
 
 ["Monitor enabled must be true or false."]
 other = "监控启用状态只能为 true 或 false。"
 
 ["tui.monitor.range.interval"]
-other = "监控间隔必须介于 1 至 86400 秒之间。"
+other = "监控间隔必须介于 %d 至 %d 秒之间。"
 
 ["Monitor setting is out of range."]
 other = "监控设置超出范围。"
@@ -584,10 +584,10 @@ other = "监控测试 URL 长度必须为 1 至 2048 字节，且不能包含换
 other = "监控测试 URL 必须使用 HTTP 或 HTTPS，且不能包含凭据或片段。"
 
 ["tui.monitor.range.threshold"]
-other = "监控阈值必须介于 1 至 4294967295 毫秒之间。"
+other = "监控阈值必须介于 %d 至 %d 毫秒之间。"
 
 ["tui.monitor.range.timeout"]
-other = "监控超时必须介于 1 至 86400000 毫秒之间。"
+other = "监控超时必须介于 %d 至 %d 毫秒之间。"
 
 ["Refresh interval must be between 60 and 2592000 seconds."]
 other = "刷新间隔必须介于 60 至 2592000 秒之间。"
@@ -903,3 +903,105 @@ other = "切换会话日志"
 
 ["Enter Unsupported dialog."]
 other = "不支持的对话框。"
+
+["tui.monitor.range.window_size"]
+other = "统计窗口大小必须介于 %d 至 %d 之间。"
+
+["tui.monitor.range.min_candidate_samples"]
+other = "候选节点最少样本数必须介于 %d 至 %d 之间。"
+
+["tui.monitor.range.max_failures"]
+other = "最大失败次数必须介于 %d 至 %d 之间。"
+
+["Window size"]
+other = "统计窗口大小"
+
+["Minimum candidate samples"]
+other = "候选节点最少样本数"
+
+["Maximum failures"]
+other = "最大失败次数"
+
+["set stability window size"]
+other = "设置稳定性窗口大小"
+
+["set minimum candidate samples"]
+other = "设置候选节点最少样本数"
+
+["set maximum failures in window"]
+other = "设置窗口内最大失败次数"
+
+["send test notification"]
+other = "发送测试通知"
+
+["tui.modal.title.tun_stack"]
+other = "TUN 协议栈"
+
+["tui.modal.title.tun_dns_mode"]
+other = "TUN DNS 模式"
+
+["TUN stack must be one of %s."]
+other = "TUN 协议栈必须是以下之一：%s。"
+
+["TUN DNS mode must be one of %s."]
+other = "TUN DNS 模式必须是以下之一：%s。"
+
+["Enter one of %s."]
+other = "输入以下之一：%s。"
+
+["TUN is unsupported on this platform."]
+other = "此平台不支持 TUN。"
+
+["requested %s; active %s; privilege %s"]
+other = "请求状态：%s；启用状态：%s；权限：%s"
+
+["TUN stack"]
+other = "TUN 协议栈"
+
+["TUN DNS mode"]
+other = "TUN DNS 模式"
+
+["TUN manual command"]
+other = "TUN 手动命令"
+
+["TUN last failure"]
+other = "TUN 最近失败"
+
+["TUN leftover"]
+other = "TUN 残留"
+
+["Leftover clashpulse0 device found; ClashPulse did not remove it."]
+other = "发现残留的 clashpulse0 设备；ClashPulse 未将其移除。"
+
+["tun.privilege.ready"]
+other = "就绪"
+
+["tun.privilege.missing"]
+other = "缺失"
+
+["tun.privilege.stale"]
+other = "已过期"
+
+["tun.privilege.nosuid"]
+other = "nosuid 挂载"
+
+["tun.privilege.no-agent"]
+other = "无认证代理"
+
+["tun.privilege.unsupported-platform"]
+other = "平台不支持"
+
+["enable TUN"]
+other = "启用 TUN"
+
+["disable TUN"]
+other = "停用 TUN"
+
+["authorize TUN privilege"]
+other = "授权 TUN 权限"
+
+["set TUN stack"]
+other = "设置 TUN 协议栈"
+
+["set TUN DNS mode"]
+other = "设置 TUN DNS 模式"

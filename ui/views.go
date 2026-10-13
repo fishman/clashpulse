@@ -1142,11 +1142,22 @@ type settingsPage struct {
 	binaryPath          string
 	threshold           *widget.Label
 	urlTestDelay        *widget.Label
+	stability           *widget.Label
 	monitor             *widget.Check
 	monitorState        core.MonitorSnapshot
 	systemProxy         *widget.Check
 	systemProxyState    core.SystemProxySnapshot
 	proxyStatus         *widget.Label
+	tunEnabled          *widget.Check
+	tunStack            *widget.Select
+	tunDNSMode          *widget.Select
+	tunStatus           *widget.Label
+	tunAuthorize        *widget.Button
+	tunManual           *widget.Label
+	tunLeftover         *widget.Label
+	tunState            core.TunSnapshot
+	tunInitialized      bool
+	tunView             *fyne.Container
 	interval            *widget.Select
 	intervals           map[string]uint32
 	refreshing          bool
@@ -1162,6 +1173,7 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 	p.binary, p.binaryValues = newBinaryForm()
 	p.threshold = widget.NewLabel(localize.T("Not configured"))
 	p.urlTestDelay = widget.NewLabel(localize.T("Profile default"))
+	p.stability = widget.NewLabel("")
 	p.systemProxy = widget.NewCheck(localize.T("Enable system proxy"), func(enabled bool) {
 		if p.refreshing {
 			return
@@ -1170,6 +1182,42 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{SystemProxyEnabled: &value}})
 	})
 	p.proxyStatus = widget.NewLabel(localize.T("System proxy inactive"))
+	p.tunEnabled = widget.NewCheck(localize.T("Enable TUN"), func(enabled bool) {
+		if p.refreshing {
+			return
+		}
+		value := enabled
+		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{TunEnabled: &value}})
+	})
+	p.tunStack = widget.NewSelect(core.TunStacks, func(stack string) {
+		if p.refreshing {
+			return
+		}
+		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{TunStack: &stack}})
+	})
+	p.tunDNSMode = widget.NewSelect(core.TunDNSModes, func(mode string) {
+		if p.refreshing {
+			return
+		}
+		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{TunDNSMode: &mode}})
+	})
+	p.tunStatus = widget.NewLabel("")
+	p.tunStatus.Wrapping = fyne.TextWrapWord
+	p.tunAuthorize = widget.NewButton(localize.T("Authorize"), func() { p.send(ipc.Command{Kind: ipc.CommandAuthorizeTun}) })
+	p.tunManual = widget.NewLabel("")
+	p.tunManual.Selectable = true
+	p.tunLeftover = widget.NewLabel(localize.T("A leftover TUN device exists while no ClashPulse Mihomo runs. ClashPulse does not remove network state it did not create."))
+	p.tunLeftover.Wrapping = fyne.TextWrapWord
+	p.tunAuthorize.Hide()
+	p.tunManual.Hide()
+	p.tunLeftover.Hide()
+	p.tunView = container.NewVBox(
+		widget.NewLabelWithStyle(localize.T("TUN"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		p.tunEnabled,
+		container.NewHBox(widget.NewLabel(localize.T("Stack")), p.tunStack),
+		container.NewHBox(widget.NewLabel(localize.T("DNS mode")), p.tunDNSMode),
+		p.tunStatus, p.tunAuthorize, p.tunManual, p.tunLeftover,
+	)
 	p.monitor = widget.NewCheck(localize.T("Enable latency monitor"), func(enabled bool) {
 		if p.refreshing {
 			return
@@ -1186,7 +1234,7 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 			p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{MonitorIntervalSeconds: &value}})
 		}
 	})
-	sections := []string{"Mihomo binary", "System Proxy", "Monitor", "DNS"}
+	sections := []string{"Mihomo binary", "System Proxy", "TUN", "Monitor", "DNS"}
 	sectionNames := make([]string, len(sections))
 	for i, section := range sections {
 		sectionNames[i] = localize.T("gui.settings.section." + section)
@@ -1211,15 +1259,20 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 			widget.NewLabelWithStyle(localize.T("System proxy"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 			p.systemProxy, p.proxyStatus,
 		),
-		sections[2]: container.NewVBox(
+		sections[2]: p.tunView,
+		sections[3]: container.NewVBox(
 			widget.NewLabelWithStyle(localize.T("Monitor"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 			p.monitor,
 			container.NewHBox(widget.NewLabel(localize.T("Monitor interval")), p.interval),
 			container.NewHBox(widget.NewLabel(localize.T("Alert threshold")), p.threshold, widget.NewButton(localize.T("Change"), p.editThreshold)),
 			widget.NewButton(localize.T("Edit probe policy"), p.editMonitorPolicy),
+			container.NewHBox(widget.NewLabel(localize.T("Switch stability")), p.stability),
 			container.NewHBox(widget.NewLabel(localize.T("Mihomo url-test delay")), p.urlTestDelay, widget.NewButton(localize.T("Change"), p.editURLTestDelay)),
+			widget.NewButton(localize.T("Send test notification"), func() {
+				p.send(ipc.Command{Kind: ipc.CommandTestNotification})
+			}),
 		),
-		sections[3]: p.dns.view,
+		sections[4]: p.dns.view,
 	}
 	selectSection := func(label string) {
 		for i, name := range sectionNames {
@@ -1308,6 +1361,7 @@ func (p *settingsPage) update(binary core.BinarySnapshot, monitor core.MonitorSn
 	if monitorChanged {
 		p.threshold.SetText(monitorThresholdLabel(monitor))
 		p.urlTestDelay.SetText(urlTestDelayLabel(monitor))
+		p.stability.SetText(monitorStabilityLabel(monitor))
 	}
 	if monitorChanged || proxyChanged {
 		p.refreshing = true
@@ -1338,6 +1392,73 @@ func (p *settingsPage) update(binary core.BinarySnapshot, monitor core.MonitorSn
 			p.interval.Refresh()
 		}
 		p.refreshing = false
+	}
+}
+
+func (p *settingsPage) updateTun(tun core.TunSnapshot) {
+	if p.tunInitialized && p.tunState == tun {
+		return
+	}
+	p.tunInitialized, p.tunState = true, tun
+	p.refreshing = true
+	p.tunEnabled.SetChecked(tun.Enabled)
+	p.tunStack.Selected = tun.Stack
+	p.tunStack.Refresh()
+	p.tunDNSMode.Selected = tun.DNSMode
+	p.tunDNSMode.Refresh()
+	p.refreshing = false
+	lines := []string{fmt.Sprintf(localize.T("Requested %s, active %s"), yesNo(tun.Enabled), yesNo(tun.Active))}
+	if reason := tunPrivilegeReason(tun.Privilege); reason != "" {
+		lines = append(lines, reason)
+	}
+	if tun.LastFailure != "" {
+		lines = append(lines, fmt.Sprintf(localize.T("Last failure: %s"), localize.T(tun.LastFailure)))
+	}
+	p.tunStatus.SetText(strings.Join(lines, "\n"))
+	unsupported := tun.Privilege == core.TunPrivilegeUnsupported
+	for _, control := range []fyne.Disableable{p.tunEnabled, p.tunStack, p.tunDNSMode} {
+		if unsupported {
+			control.Disable()
+		} else {
+			control.Enable()
+		}
+	}
+	showIf(p.tunAuthorize, !unsupported && tun.Privilege != core.TunPrivilegeReady)
+	manual := tun.ManualGrantCommand()
+	p.tunManual.SetText(manual)
+	showIf(p.tunManual, manual != "")
+	showIf(p.tunLeftover, tun.Leftover)
+	p.tunView.Refresh()
+}
+
+func tunPrivilegeReason(privilege string) string {
+	switch privilege {
+	case core.TunPrivilegeMissing:
+		return localize.T("TUN privilege is not authorized")
+	case core.TunPrivilegeStale:
+		return localize.T("Mihomo was updated, re-authorize")
+	case core.TunPrivilegeNoSUID:
+		return localize.T("The private TUN copy is on a nosuid mount, so its file capability is ignored")
+	case core.TunPrivilegeNoAgent:
+		return localize.T("No polkit authentication agent is running; run the command below in a terminal")
+	case core.TunPrivilegeUnsupported:
+		return localize.T("TUN is unsupported on this platform")
+	}
+	return ""
+}
+
+func yesNo(value bool) string {
+	if value {
+		return localize.T("yes")
+	}
+	return localize.T("no")
+}
+
+func showIf(object fyne.CanvasObject, visible bool) {
+	if visible {
+		object.Show()
+	} else {
+		object.Hide()
 	}
 }
 

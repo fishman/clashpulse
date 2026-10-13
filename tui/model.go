@@ -5,12 +5,14 @@ import (
 	"net/url"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/localize"
 	"github.com/fishman/notmutt/lib/tui/form"
@@ -49,6 +51,8 @@ const (
 	ModalDNSResolver        ModalKind = "dns_resolver"
 	ModalDNSRoute           ModalKind = "dns_route"
 	ModalDeleteDNS          ModalKind = "delete_dns"
+	ModalTunStack           ModalKind = "tun_stack"
+	ModalTunDNSMode         ModalKind = "tun_dns_mode"
 )
 
 type monitorField string
@@ -64,6 +68,9 @@ const (
 	monitorImprovement    monitorField = "improvement"
 	monitorCooldown       monitorField = "cooldown"
 	monitorJitter         monitorField = "jitter"
+	monitorWindowSize     monitorField = "window_size"
+	monitorCandidates     monitorField = "min_candidate_samples"
+	monitorMaxFailures    monitorField = "max_failures"
 )
 
 type dnsForm struct{ values [3]string }
@@ -115,6 +122,7 @@ const (
 	rowSettingDNSListen
 	rowDNSResolver
 	rowDNSRoute
+	rowSettingTunManual
 )
 
 // Model is local view state for the remote IPC client. IPC snapshots are
@@ -212,7 +220,7 @@ func tabRowsChanged(before, after ipc.Event, tab Tab) bool {
 	case TabResources:
 		return !reflect.DeepEqual(old.Resources, next.Resources)
 	case TabSettings:
-		return !reflect.DeepEqual(old.Binary, next.Binary) || old.Monitor != next.Monitor || old.SystemProxy != next.SystemProxy || !reflect.DeepEqual(old.DNS, next.DNS)
+		return !reflect.DeepEqual(old.Binary, next.Binary) || old.Monitor != next.Monitor || old.SystemProxy != next.SystemProxy || old.Tun != next.Tun || !reflect.DeepEqual(old.DNS, next.DNS)
 	default:
 		return true
 	}
@@ -405,6 +413,8 @@ func (m Model) HandleKey(key string) (Model, *ipc.Command, bool) {
 		return m, command(ipc.CommandStop), false
 	case "reload_configuration":
 		return m, command(ipc.CommandReloadConfiguration), false
+	case "test_notification":
+		return m, command(ipc.CommandTestNotification), false
 	case "manual_probe":
 		groupID := m.focusedGroupID()
 		if groupID == "" {
@@ -456,6 +466,12 @@ func (m Model) HandleKey(key string) (Model, *ipc.Command, bool) {
 		return m.openMonitorModal(monitorCooldown), nil, false
 	case "edit_monitor_jitter":
 		return m.openMonitorModal(monitorJitter), nil, false
+	case "edit_monitor_window":
+		return m.openMonitorModal(monitorWindowSize), nil, false
+	case "edit_monitor_candidates":
+		return m.openMonitorModal(monitorCandidates), nil, false
+	case "edit_monitor_max_failures":
+		return m.openMonitorModal(monitorMaxFailures), nil, false
 	case "edit_dns_listen":
 		return m.openDNSListenModal(), nil, false
 	case "new_dns_resolver":
@@ -468,6 +484,8 @@ func (m Model) HandleKey(key string) (Model, *ipc.Command, bool) {
 		return m.deleteSelectedDNS(), nil, false
 	case "edit_binary":
 		return m.openModal(ModalBinary), nil, false
+	case "tun_enable", "tun_disable", "tun_authorize", "edit_tun_stack", "edit_tun_dns_mode":
+		return m.tunAction(action)
 	default:
 		return m, nil, false
 	}
@@ -529,6 +547,9 @@ func (m Model) handleModalKey(key string) (Model, *ipc.Command, bool) {
 	}
 	if m.Modal.Kind == ModalDNSListen {
 		return m.handleDNSListenKey(key)
+	}
+	if m.Modal.Kind == ModalTunStack || m.Modal.Kind == ModalTunDNSMode {
+		return m.handleTunChoiceKey(key)
 	}
 	if m.Modal.Kind == ModalDeleteSubscription {
 		if key != "enter" || m.Modal.TargetID == "" {
@@ -597,6 +618,9 @@ func (m Model) openMonitorModal(_ monitorField) Model {
 		{ID: "improvement", Label: localize.T("Minimum improvement milliseconds"), Kind: form.Text, Value: strconv.FormatInt(monitor.MinImprovementMillis, 10)},
 		{ID: "cooldown", Label: localize.T("Cooldown seconds"), Kind: form.Text, Value: strconv.FormatInt(monitor.CooldownSeconds, 10)},
 		{ID: "jitter", Label: localize.T("Jitter milliseconds"), Kind: form.Text, Value: strconv.FormatInt(monitor.JitterMillis, 10)},
+		{ID: "window_size", Label: localize.T("Window size"), Kind: form.Text, Value: strconv.Itoa(monitor.WindowSize)},
+		{ID: "min_candidate_samples", Label: localize.T("Minimum candidate samples"), Kind: form.Text, Value: strconv.Itoa(monitor.MinCandidateSamples)},
+		{ID: "max_failures", Label: localize.T("Maximum failures"), Kind: form.Text, Value: strconv.Itoa(monitor.MaxFailures)},
 	})
 	if err != nil {
 		m.Notice = localize.T("Monitor settings form unavailable.")
@@ -619,23 +643,8 @@ func monitorSettingPatch(field monitorField, input string) (*ipc.ConfigPatch, st
 	if err != nil {
 		return nil, localize.T("Enter a whole number within the setting's range.")
 	}
-	max := uint64(^uint32(0))
-	min := uint64(1)
-	switch field {
-	case monitorInterval:
-		max = 86400
-	case monitorTimeout:
-		max = 86400000
-	case monitorConcurrency:
-		max = 64
-	case monitorAlertThreshold:
-		max = 60000
-	case monitorBadSamples:
-		max = 5
-	case monitorCooldown, monitorJitter:
-		min = 0
-	case monitorThreshold, monitorImprovement:
-	default:
+	min, max, ok := monitorRange(field)
+	if !ok {
 		return nil, localize.T("Unsupported monitor setting.")
 	}
 	if value < min || value > max {
@@ -662,17 +671,51 @@ func monitorSettingPatch(field monitorField, input string) (*ipc.ConfigPatch, st
 		patch.MonitorCooldownSeconds = &parsed
 	case monitorJitter:
 		patch.MonitorJitterMillis = &parsed
+	case monitorWindowSize:
+		patch.MonitorWindowSize = &parsed
+	case monitorCandidates:
+		patch.MonitorMinCandidateSamples = &parsed
+	case monitorMaxFailures:
+		patch.MonitorMaxFailures = &parsed
 	}
 	return patch, ""
 }
 
+// monitorRange is the accepted inclusive range of a numeric monitor field.
+func monitorRange(field monitorField) (min, max uint64, ok bool) {
+	min, max = 1, uint64(^uint32(0))
+	switch field {
+	case monitorInterval:
+		max = 86400
+	case monitorTimeout:
+		max = 86400000
+	case monitorConcurrency:
+		max = 64
+	case monitorAlertThreshold:
+		max = 60000
+	case monitorBadSamples, monitorMaxFailures:
+		max = core.MonitorWindowMax
+	case monitorWindowSize, monitorCandidates:
+		min, max = core.MonitorWindowMin, core.MonitorWindowMax
+	case monitorCooldown, monitorJitter:
+		min = 0
+	case monitorThreshold, monitorImprovement:
+	default:
+		return 0, 0, false
+	}
+	return min, max, true
+}
+
 func monitorRangeNotice(field monitorField) string {
 	id := "tui.monitor.range." + string(field)
-	if notice := localize.T(id); notice != id {
-		return notice
+	if min, max, ok := monitorRange(field); ok {
+		if notice := localize.T(id); notice != id {
+			return fmt.Sprintf(notice, min, max)
+		}
 	}
 	return localize.T("Monitor setting is out of range.")
 }
+
 func monitorFormIntent(modal *Modal) (*ipc.Command, string) {
 	patch := &ipc.ConfigPatch{}
 	for _, change := range modal.Form.Changes() {
@@ -717,10 +760,16 @@ func monitorFormIntent(modal *Modal) (*ipc.Command, string) {
 				patch.MonitorCooldownSeconds = setting.MonitorCooldownSeconds
 			case monitorJitter:
 				patch.MonitorJitterMillis = setting.MonitorJitterMillis
+			case monitorWindowSize:
+				patch.MonitorWindowSize = setting.MonitorWindowSize
+			case monitorCandidates:
+				patch.MonitorMinCandidateSamples = setting.MonitorMinCandidateSamples
+			case monitorMaxFailures:
+				patch.MonitorMaxFailures = setting.MonitorMaxFailures
 			}
 		}
 	}
-	if patch.MonitorEnabled == nil && patch.MonitorTestURL == nil && patch.MonitorIntervalSeconds == nil && patch.MonitorTimeoutMillis == nil && patch.MonitorConcurrency == nil && patch.MonitorThresholdMillis == nil && patch.AlertThresholdMillis == nil && patch.MonitorConsecutiveBadSamples == nil && patch.MonitorMinImprovementMillis == nil && patch.MonitorCooldownSeconds == nil && patch.MonitorJitterMillis == nil {
+	if patch.Empty() {
 		return nil, ""
 	}
 	return configCommand(patch), ""
@@ -756,6 +805,57 @@ func (m Model) handleDNSListenKey(key string) (Model, *ipc.Command, bool) {
 		modal.Input += key
 		m.Modal = &modal
 	}
+	return m, nil, false
+}
+
+func (m Model) tunAction(action string) (Model, *ipc.Command, bool) {
+	if m.snapshot.Snapshot.Tun.Privilege == core.TunPrivilegeUnsupported {
+		m.Notice = localize.T("TUN is unsupported on this platform.")
+		return m, nil, false
+	}
+	switch action {
+	case "tun_enable":
+		return m, configCommand(&ipc.ConfigPatch{TunEnabled: new(true)}), false
+	case "tun_disable":
+		return m, configCommand(&ipc.ConfigPatch{TunEnabled: new(false)}), false
+	case "tun_authorize":
+		return m, command(ipc.CommandAuthorizeTun), false
+	case "edit_tun_stack":
+		return m.openModal(ModalTunStack), nil, false
+	default:
+		return m.openModal(ModalTunDNSMode), nil, false
+	}
+}
+
+func (m Model) handleTunChoiceKey(key string) (Model, *ipc.Command, bool) {
+	modal := *m.Modal
+	switch {
+	case key == "backspace":
+		if input := []rune(modal.Input); len(input) > 0 {
+			modal.Input = string(input[:len(input)-1])
+		}
+	case key == "enter":
+		value := modal.Input
+		var patch *ipc.ConfigPatch
+		switch {
+		case modal.Kind == ModalTunStack && slices.Contains(core.TunStacks, value):
+			patch = &ipc.ConfigPatch{TunStack: &value}
+		case modal.Kind == ModalTunDNSMode && slices.Contains(core.TunDNSModes, value):
+			patch = &ipc.ConfigPatch{TunDNSMode: &value}
+		case modal.Kind == ModalTunStack:
+			m.Notice = fmt.Sprintf(localize.T("TUN stack must be one of %s."), strings.Join(core.TunStacks, ", "))
+			return m, nil, false
+		default:
+			m.Notice = fmt.Sprintf(localize.T("TUN DNS mode must be one of %s."), strings.Join(core.TunDNSModes, ", "))
+			return m, nil, false
+		}
+		m.Modal = nil
+		m.Focus = FocusContent
+		return m, configCommand(patch), false
+	case utf8.ValidString(key) && utf8.RuneCountInString(key) == 1 && unicode.IsPrint([]rune(key)[0]) && len(modal.Input) < 16:
+		modal.Input += key
+	}
+	m.Modal = &modal
 	return m, nil, false
 }
 
@@ -1353,7 +1453,9 @@ func (m Model) openModal(kind ModalKind) Model {
 	m.Modal = &Modal{Kind: kind}
 	m.Focus = FocusModal
 	id := "tui.modal.notice." + string(kind)
-	if notice := localize.T(id); notice != id {
+	if choices := tunChoices(kind); choices != nil {
+		m.Notice = fmt.Sprintf(localize.T("Enter one of %s."), strings.Join(choices, ", "))
+	} else if notice := localize.T(id); notice != id {
 		m.Notice = notice
 	} else {
 		m.Notice = localize.T("Enter Unsupported dialog.")
@@ -1362,11 +1464,25 @@ func (m Model) openModal(kind ModalKind) Model {
 }
 
 func modalPrompt(kind ModalKind) string {
+	if choices := tunChoices(kind); choices != nil {
+		return strings.Join(choices, ", ")
+	}
 	id := "tui.modal.prompt." + string(kind)
 	if prompt := localize.T(id); prompt != id {
 		return prompt
 	}
 	return localize.T("Unsupported dialog")
+}
+
+// tunChoices lists the valid values for a TUN enum modal, or nil for any other.
+func tunChoices(kind ModalKind) []string {
+	switch kind {
+	case ModalTunStack:
+		return core.TunStacks
+	case ModalTunDNSMode:
+		return core.TunDNSModes
+	}
+	return nil
 }
 
 func (m Model) selectTab(tab Tab) Model {
@@ -1429,6 +1545,8 @@ func (m Model) activate() (Model, *ipc.Command, bool) {
 		return m.openDNSRouteModal(true, row.dnsID), nil, false
 	case rowSettingBinary:
 		return m.openModal(ModalBinary), nil, false
+	case rowSettingTunManual:
+		m.Notice = row.Detail
 	}
 	return m, nil, false
 }
@@ -1525,6 +1643,9 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 				info.latency = fmt.Sprintf("%d %s", proxy.LatencyMillis, localize.T("ms"))
 			} else if proxy.MihomoMillis > 0 {
 				info.latency = fmt.Sprintf("%d %s (mihomo)", proxy.MihomoMillis, localize.T("ms"))
+			}
+			if stability := proxy.StabilityLabel(); stability != "" {
+				info.latency = appendStability(info.latency, stability)
 			}
 			proxyInfo[key] = info
 		}
@@ -1679,6 +1800,7 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 			{ID: "setting:system-proxy", Title: localize.T("System proxy"), Detail: fmt.Sprintf(localize.T("System proxy requested %s; currently active %s."), localizedBool(snapshot.SystemProxy.Enabled), localizedBool(snapshot.SystemProxy.Active)), Cells: []string{localize.T("System proxy"), fmt.Sprintf(localize.T("requested %s; active %s"), localizedBool(snapshot.SystemProxy.Enabled), localizedBool(snapshot.SystemProxy.Active)), ""}, action: proxyAction},
 			{ID: "setting:monitor", Title: localize.T("Monitor"), Detail: enabledLabel(monitor.Enabled), Cells: []string{localize.T("Monitor"), enabledLabel(monitor.Enabled), ""}, action: monitorAction},
 		}
+		rows = append(rows, tunRows(snapshot.Tun)...)
 		for _, setting := range []struct {
 			id, title, value, action string
 			field                    monitorField
@@ -1693,6 +1815,9 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 			{"setting:monitor:improvement", localize.T("Minimum improvement"), strconv.FormatInt(monitor.MinImprovementMillis, 10) + " " + localize.T("ms"), "edit_monitor_improvement", monitorImprovement},
 			{"setting:monitor:cooldown", localize.T("Monitor cooldown"), strconv.FormatInt(monitor.CooldownSeconds, 10) + " " + localize.T("seconds"), "edit_monitor_cooldown", monitorCooldown},
 			{"setting:monitor:jitter", localize.T("Monitor jitter"), strconv.FormatInt(monitor.JitterMillis, 10) + " " + localize.T("ms"), "edit_monitor_jitter", monitorJitter},
+			{"setting:monitor:window-size", localize.T("Window size"), strconv.Itoa(monitor.WindowSize), "edit_monitor_window", monitorWindowSize},
+			{"setting:monitor:min-candidate-samples", localize.T("Minimum candidate samples"), strconv.Itoa(monitor.MinCandidateSamples), "edit_monitor_candidates", monitorCandidates},
+			{"setting:monitor:max-failures", localize.T("Maximum failures"), strconv.Itoa(monitor.MaxFailures), "edit_monitor_max_failures", monitorMaxFailures},
 		} {
 			detail := setting.value
 			if setting.field == monitorTestURL {
@@ -1735,6 +1860,32 @@ func shortProxyID(id string) string {
 	return id
 }
 
+func tunRows(tun core.TunSnapshot) []Row {
+	action := "tun_enable"
+	if tun.Enabled {
+		action = "tun_disable"
+	}
+	state := fmt.Sprintf(localize.T("requested %s; active %s; privilege %s"), localizedBool(tun.Enabled), localizedBool(tun.Active),
+		fallback(localize.Code("tun.privilege", tun.Privilege), localize.T("unknown")))
+	rows := []Row{
+		{ID: "setting:tun", Title: localize.T("TUN"), Detail: localize.T("TUN") + ": " + state, Cells: []string{localize.T("TUN"), state, ""}, action: action},
+		{ID: "setting:tun:stack", Title: localize.T("TUN stack"), Detail: tun.Stack, Cells: []string{localize.T("TUN stack"), fallback(tun.Stack, localize.T("unknown")), ""}, action: "edit_tun_stack"},
+		{ID: "setting:tun:dns-mode", Title: localize.T("TUN DNS mode"), Detail: tun.DNSMode, Cells: []string{localize.T("TUN DNS mode"), fallback(tun.DNSMode, localize.T("unknown")), ""}, action: "edit_tun_dns_mode"},
+	}
+	if manual := tun.ManualGrantCommand(); manual != "" {
+		rows = append(rows, Row{ID: "setting:tun:manual", Title: localize.T("TUN manual command"), Detail: manual, Cells: []string{localize.T("TUN manual command"), manual, ""}, kind: rowSettingTunManual})
+	}
+	if tun.LastFailure != "" {
+		failure := localize.T(tun.LastFailure)
+		rows = append(rows, Row{ID: "setting:tun:failure", Title: localize.T("TUN last failure"), Detail: failure, Cells: []string{localize.T("TUN last failure"), failure, ""}})
+	}
+	if tun.Leftover {
+		leftover := localize.T("Leftover clashpulse0 device found; ClashPulse did not remove it.")
+		rows = append(rows, Row{ID: "setting:tun:leftover", Title: localize.T("TUN leftover"), Detail: leftover, Cells: []string{localize.T("TUN leftover"), leftover, ""}})
+	}
+	return rows
+}
+
 func binaryDetail(desired, observed, failure string, capabilities []string) string {
 	detail := appendDetail(localize.T("desired ")+fallback(desired, localize.T("unspecified")), localize.T("observed ")+fallback(observed, localize.T("unknown")))
 	capabilityText := localize.T("none verified")
@@ -1760,6 +1911,13 @@ func appendDetail(current, addition string) string {
 		return addition
 	}
 	return current + " | " + addition
+}
+
+func appendStability(current, addition string) string {
+	if current == "" {
+		return addition
+	}
+	return current + " \u00b7 " + addition
 }
 
 func localizedBool(value bool) string {

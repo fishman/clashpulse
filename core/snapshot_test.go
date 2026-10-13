@@ -89,3 +89,50 @@ func TestConfigOverrideDescriptionUsesSharedMainlandCatalog(t *testing.T) {
 		t.Fatalf("untrusted reason = %q", got)
 	}
 }
+
+func TestConfigOverrideReportedFieldsHaveCatalogDescriptions(t *testing.T) {
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	for _, key := range []string{
+		"mixed-port", "port", "socks-port", "external-controller", "secret", "allow-lan", "bind-address",
+		"dns.listen", "external-controller-tls", "external-controller-cors", "external-ui", "dns.nameserver-policy",
+		"rule-providers", "proxy-groups", "rules",
+		"tun", "dns.enable", "dns.enhanced-mode", "dns.fake-ip-range", "dns.fake-ip-range6", "dns.fake-ip-filter",
+	} {
+		entry := ConfigOverrideSnapshot{Key: key, Change: "replaced"}
+		for _, language := range []string{"en", "zh-CN"} {
+			localize.SetLanguage(language)
+			if got := entry.Description(); got == "" || got == "override."+key {
+				t.Errorf("%s description in %s = %q", key, language, got)
+			}
+		}
+	}
+}
+
+func TestActivationMessagesHaveMainlandTranslations(t *testing.T) {
+	localize.SetLanguage("zh-CN")
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	for stage, message := range activationMessages {
+		if localize.T(message) == message {
+			t.Errorf("%s message %q has no zh-CN translation", stage, message)
+		}
+	}
+}
+
+func TestManualGrantCommandOnlyWhenSetcapCanHelp(t *testing.T) {
+	const path = "/home/user/.local/state/clashpulse/tun/mihomo"
+	for privilege, want := range map[string]string{
+		TunPrivilegeNoAgent: "sudo setcap cap_net_admin+ep " + path,
+		// File capabilities are ignored on a nosuid mount, so setcap cannot help.
+		TunPrivilegeNoSUID:      "",
+		TunPrivilegeMissing:     "",
+		TunPrivilegeReady:       "",
+		TunPrivilegeUnsupported: "",
+	} {
+		if got := (TunSnapshot{Privilege: privilege, PrivilegedPath: path}).ManualGrantCommand(); got != want {
+			t.Errorf("%s: ManualGrantCommand() = %q, want %q", privilege, got, want)
+		}
+	}
+	if got := (TunSnapshot{Privilege: TunPrivilegeNoAgent}).ManualGrantCommand(); got != "" {
+		t.Errorf("no path: ManualGrantCommand() = %q", got)
+	}
+}

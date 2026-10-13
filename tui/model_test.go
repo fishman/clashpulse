@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -802,6 +803,76 @@ func TestMonitorPolicyEditsKeepSubsecondUnitsAndAllowZero(t *testing.T) {
 	}
 }
 
+func TestStabilitySettingsEditOneFieldAndRejectOutOfRange(t *testing.T) {
+	event := eventFromJSON(t, `{"Snapshot":{"Monitor":{"WindowSize":5,"MinCandidateSamples":3,"MaxFailures":2}}}`)
+	for _, tc := range []struct{ key, id, current, valid, invalid, patch string }{
+		{"W", "window_size", "5", "8", "21", `{"monitor_window_size":8}`},
+		{"C", "min_candidate_samples", "3", "4", "1", `{"monitor_min_candidate_samples":4}`},
+		{"f", "max_failures", "2", "3", "0", `{"monitor_max_failures":3}`},
+	} {
+		open := func() Model {
+			model := NewModel().Apply(event).selectTab(TabSettings)
+			model, _, _ = model.HandleKey(tc.key)
+			if model.Modal == nil || model.Modal.Kind != ModalMonitorSetting {
+				t.Fatalf("%s did not open the monitor form: %#v", tc.key, model.Modal)
+			}
+			shown := false
+			for _, row := range model.Modal.Form.Rows(100, 64) {
+				shown = shown || row.ID == tc.id && strings.Contains(row.Text, tc.current)
+			}
+			if !shown {
+				t.Fatalf("%s field does not show current value %s", tc.id, tc.current)
+			}
+			return model
+		}
+		model, command, _ := setFormText(t, open(), tc.id, tc.invalid).HandleKey("ctrl+s")
+		if command != nil || model.Modal == nil || model.Notice != monitorRangeNotice(monitorField(tc.id)) || model.Notice == localize.T("Monitor setting is out of range.") {
+			t.Fatalf("%s=%s was not rejected with its range notice: %#v %q", tc.id, tc.invalid, command, model.Notice)
+		}
+		_, command, _ = setFormText(t, open(), tc.id, tc.valid).HandleKey("ctrl+s")
+		if command == nil || command.Kind != ipc.CommandUpdateConfiguration || command.Config == nil {
+			t.Fatalf("%s edit sent %#v", tc.id, command)
+		}
+		if encoded, _ := json.Marshal(command.Config); string(encoded) != tc.patch {
+			t.Fatalf("%s patch = %s, want %s", tc.id, encoded, tc.patch)
+		}
+	}
+}
+
+func TestTestNotificationKeySendsOnlyThatCommand(t *testing.T) {
+	model := NewModel().selectTab(TabSettings)
+	_, command, quit := model.HandleKey("T")
+	if quit || command == nil || !reflect.DeepEqual(*command, ipc.Command{Kind: ipc.CommandTestNotification}) {
+		t.Fatalf("test notification command = %#v", command)
+	}
+}
+
+func TestProxyLatencyShowsStabilityOnlyWithSamples(t *testing.T) {
+	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{
+		Groups: []core.GroupSnapshot{{ID: "main", Proxies: []string{"node-a", "node-b", "node-c"}}},
+		Proxies: []core.ProxySnapshot{
+			{GroupID: "main", ID: "node-a", Outcome: "success", LatencyMillis: 120, MedianMillis: 130, JitterMillis: 20, Samples: 5, Failures: 1},
+			{GroupID: "main", ID: "node-b", Outcome: "success", LatencyMillis: 45},
+			{GroupID: "main", ID: "node-c", Outcome: "timeout", Samples: 3, Failures: 3},
+		},
+	}}).selectTab(TabProxies)
+	latency := make(map[string]string)
+	for _, row := range model.Rows() {
+		if row.kind == rowProxy {
+			latency[row.choiceID] = row.Cells[3]
+		}
+	}
+	if got := latency["node-a"]; got != "120 ms \u00b7 median 130 ms \u00b120 ms \u00b7 1/5 failed" {
+		t.Fatalf("stable proxy latency = %q", got)
+	}
+	if got := latency["node-b"]; got != "45 ms" {
+		t.Fatalf("proxy without samples changed: %q", got)
+	}
+	if got := latency["node-c"]; got != "3/3 failed" {
+		t.Fatalf("all-failed proxy latency = %q", got)
+	}
+}
+
 func TestDNSSetAndRouteEditsPreserveFullPolicyUntilSnapshot(t *testing.T) {
 	model := dnsPolicyModel(t)
 	model.Selection[TabSettings] = "dns:set:one"
@@ -943,6 +1014,7 @@ func TestSettingsRenderCurrentMonitorAndDNSPolicy(t *testing.T) {
 	monitor.IntervalSeconds, monitor.TimeoutMillis, monitor.Concurrency = 60, 750, 3
 	monitor.ThresholdMillis, monitor.AlertThresholdMillis, monitor.ConsecutiveBadSamples = 800, 250, 2
 	monitor.MinImprovementMillis, monitor.CooldownSeconds, monitor.JitterMillis = 100, 0, 200
+	monitor.WindowSize, monitor.MinCandidateSamples, monitor.MaxFailures = 7, 4, 3
 	event.Snapshot.Monitor = monitor
 	model = model.Apply(event)
 	details := make(map[string]string)
@@ -950,17 +1022,20 @@ func TestSettingsRenderCurrentMonitorAndDNSPolicy(t *testing.T) {
 		details[row.ID] = row.Title + " " + row.Detail
 	}
 	for id, value := range map[string]string{
-		"setting:interval":             "60 seconds",
-		"setting:monitor:timeout":      "750 ms",
-		"setting:monitor:concurrency":  "3",
-		"setting:monitor:threshold":    "800 ms",
-		"setting:alert-threshold":      "250 ms",
-		"setting:monitor:bad-samples":  "2",
-		"setting:monitor:improvement":  "100 ms",
-		"setting:monitor:cooldown":     "0 seconds",
-		"setting:monitor:jitter":       "200 ms",
-		"setting:dns-listen":           "127.0.0.1:1053",
-		"dns:route:suffix:example.com": "resolver one",
+		"setting:interval":                      "60 seconds",
+		"setting:monitor:timeout":               "750 ms",
+		"setting:monitor:concurrency":           "3",
+		"setting:monitor:threshold":             "800 ms",
+		"setting:alert-threshold":               "250 ms",
+		"setting:monitor:bad-samples":           "2",
+		"setting:monitor:improvement":           "100 ms",
+		"setting:monitor:cooldown":              "0 seconds",
+		"setting:monitor:jitter":                "200 ms",
+		"setting:monitor:window-size":           "Window size 7",
+		"setting:monitor:min-candidate-samples": "Minimum candidate samples 4",
+		"setting:monitor:max-failures":          "Maximum failures 3",
+		"setting:dns-listen":                    "127.0.0.1:1053",
+		"dns:route:suffix:example.com":          "resolver one",
 	} {
 		if !strings.Contains(details[id], value) {
 			t.Errorf("row %s = %q, want %q", id, details[id], value)
@@ -972,7 +1047,7 @@ func TestSettingsRenderCurrentMonitorAndDNSPolicy(t *testing.T) {
 		}
 	}
 	help := strings.Join(model.Help(), ";")
-	for _, binding := range []string{"u set monitor test URL", "o set monitor timeout in milliseconds", "z set monitor cooldown in seconds", "w set monitor jitter in milliseconds", "v add DNS resolver set", "a add DNS route", "x remove selected DNS entry"} {
+	for _, binding := range []string{"u set monitor test URL", "o set monitor timeout in milliseconds", "z set monitor cooldown in seconds", "w set monitor jitter in milliseconds", "W set stability window size", "C set minimum candidate samples", "f set maximum failures in window", "T send test notification", "v add DNS resolver set", "a add DNS route", "x remove selected DNS entry"} {
 		if !strings.Contains(help, binding) {
 			t.Errorf("settings help missing %q: %s", binding, help)
 		}

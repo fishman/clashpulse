@@ -1,6 +1,10 @@
 package core
 
-import "github.com/fishman/clashpulse/localize"
+import (
+	"fmt"
+
+	"github.com/fishman/clashpulse/localize"
+)
 
 const MaxDiagnostics = 200
 
@@ -24,6 +28,25 @@ type ProxySnapshot struct {
 	// MihomoMillis is what mihomo's own url-test last reported for this node,
 	// shown where this application never probed the group itself.
 	MihomoMillis int64
+	// Window statistics over this group's probe history; Samples == 0 means
+	// no window yet. Median and jitter cover successful probes only.
+	MedianMillis int64
+	JitterMillis int64
+	Samples      int
+	Failures     int
+}
+
+// StabilityLabel summarizes the probe window, or "" before any window exists.
+// Median and jitter are omitted when every sample failed.
+func (p ProxySnapshot) StabilityLabel() string {
+	if p.Samples <= 0 {
+		return ""
+	}
+	failed := fmt.Sprintf(localize.T("%d/%d failed"), p.Failures, p.Samples)
+	if p.Failures >= p.Samples {
+		return failed
+	}
+	return fmt.Sprintf(localize.T("median %d ms \u00b1%d ms"), p.MedianMillis, p.JitterMillis) + " \u00b7 " + failed
 }
 
 type UsageSnapshot struct {
@@ -71,7 +94,8 @@ func (o ConfigOverrideSnapshot) Valid() bool {
 		return false
 	}
 	switch o.Key {
-	case "mixed-port", "port", "socks-port", "external-controller", "secret", "allow-lan", "bind-address", "dns.listen", "external-controller-tls", "external-controller-cors", "external-ui", "dns.nameserver-policy", "rule-providers", "proxy-groups", "rules":
+	case "mixed-port", "port", "socks-port", "external-controller", "secret", "allow-lan", "bind-address", "dns.listen", "external-controller-tls", "external-controller-cors", "external-ui", "dns.nameserver-policy", "rule-providers", "proxy-groups", "rules",
+		"tun", "dns.enable", "dns.enhanced-mode", "dns.fake-ip-range", "dns.fake-ip-range6", "dns.fake-ip-filter":
 		return true
 	default:
 		return false
@@ -97,6 +121,9 @@ type MonitorSnapshot struct {
 	ThresholdMillis        int64
 	AlertThresholdMillis   int64
 	ConsecutiveBadSamples  int
+	WindowSize             int
+	MinCandidateSamples    int
+	MaxFailures            int
 	MinImprovementMillis   int64
 	CooldownSeconds        int64
 	JitterMillis           int64
@@ -121,6 +148,62 @@ type DNSSnapshot struct {
 type SystemProxySnapshot struct {
 	Enabled bool
 	Active  bool
+}
+
+// TunSnapshot reports TUN intent and runtime state. Privilege is one of the
+// TunPrivilege* values; PrivilegedPath is not secret and lets clients show
+// the manual setcap command.
+type TunSnapshot struct {
+	Enabled        bool
+	Active         bool
+	Stack          string
+	DNSMode        string
+	Privilege      string
+	PrivilegedPath string
+	Device         string
+	LastFailure    string
+	Leftover       bool
+}
+
+const (
+	TunPrivilegeReady       = "ready"
+	TunPrivilegeMissing     = "missing"
+	TunPrivilegeStale       = "stale"
+	TunPrivilegeNoSUID      = "nosuid"
+	TunPrivilegeNoAgent     = "no-agent"
+	TunPrivilegeUnsupported = "unsupported-platform"
+
+	TunStackGVisor = "gvisor"
+	TunStackMixed  = "mixed"
+	TunStackSystem = "system"
+
+	TunDNSProfile   = "profile"
+	TunDNSFakeIP    = "fake-ip"
+	TunDNSRedirHost = "redir-host"
+)
+
+// TunStacks and TunDNSModes are every valid [tun] stack and dns_mode.
+var (
+	TunStacks   = []string{TunStackGVisor, TunStackMixed, TunStackSystem}
+	TunDNSModes = []string{TunDNSProfile, TunDNSFakeIP, TunDNSRedirHost}
+)
+
+// MonitorWindowMin and MonitorWindowMax bound the per-node probe window. The
+// window's candidate-success count shares the window's lower bound; its
+// failure and consecutive-bad-sample counts start at 1.
+const (
+	MonitorWindowMin = 2
+	MonitorWindowMax = 20
+)
+
+// ManualGrantCommand is the command a user runs to grant TUN privilege when
+// no polkit agent can, or "" when it cannot help: file capabilities are
+// ignored on a nosuid mount whoever sets them.
+func (t TunSnapshot) ManualGrantCommand() string {
+	if t.Privilege != TunPrivilegeNoAgent || t.PrivilegedPath == "" {
+		return ""
+	}
+	return "sudo setcap cap_net_admin+ep " + t.PrivilegedPath
 }
 
 type ProbeSnapshot struct {
@@ -162,6 +245,7 @@ type Snapshot struct {
 	Monitor         MonitorSnapshot
 	DNS             DNSSnapshot
 	SystemProxy     SystemProxySnapshot
+	Tun             TunSnapshot
 	Jobs            []JobSnapshot
 	Switches        []SwitchSnapshot
 	Errors          []ErrorSnapshot

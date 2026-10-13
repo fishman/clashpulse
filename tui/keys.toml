@@ -64,11 +64,20 @@
 "p" = { fun = "edit_monitor_improvement", desc = "set minimum improvement in milliseconds", show = true }
 "z" = { fun = "edit_monitor_cooldown", desc = "set monitor cooldown in seconds", show = true }
 "w" = { fun = "edit_monitor_jitter", desc = "set monitor jitter in milliseconds", show = true }
+"W" = { fun = "edit_monitor_window", desc = "set stability window size", show = true }
+"C" = { fun = "edit_monitor_candidates", desc = "set minimum candidate samples", show = true }
+"f" = { fun = "edit_monitor_max_failures", desc = "set maximum failures in window", show = true }
+"T" = { fun = "test_notification", desc = "send test notification", show = true }
 "l" = { fun = "edit_dns_listen", desc = "set DNS listener", show = true }
 "v" = { fun = "new_dns_resolver", desc = "add DNS resolver set", show = true }
 "a" = { fun = "new_dns_route", desc = "add DNS route", show = true }
 "g" = { fun = "edit_dns_entry", desc = "edit selected DNS entry", show = true }
 "x" = { fun = "delete_dns_entry", desc = "remove selected DNS entry", show = true }
+"U" = { fun = "tun_enable", desc = "enable TUN", show = true }
+"D" = { fun = "tun_disable", desc = "disable TUN", show = true }
+"A" = { fun = "tun_authorize", desc = "authorize TUN privilege", show = true }
+"S" = { fun = "edit_tun_stack", desc = "set TUN stack", show = true }
+"M" = { fun = "edit_tun_dns_mode", desc = "set TUN DNS mode", show = true }
 
 [schemes.default.form]
 "up" = { fun = "form_up", desc = "previous field" }

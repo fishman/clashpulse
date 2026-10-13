@@ -25,6 +25,12 @@ other = "dns route settings"
 ["tui.modal.title.delete_dns"]
 other = "Delete DNS policy"
 
+["tui.modal.title.tun_stack"]
+other = "TUN stack"
+
+["tui.modal.title.tun_dns_mode"]
+other = "TUN DNS mode"
+
 ["tui.modal.prompt.binary"]
 other = "system, bundled, or an absolute executable path"
 
@@ -66,29 +72,39 @@ other = "Enter DNS route details."
 
 ["tui.modal.notice.delete_dns"]
 other = "Confirm DNS policy removal."
+
 ["tui.monitor.range.interval"]
-other = "Monitor interval must be between 1 and 86400 seconds."
+other = "Monitor interval must be between %d and %d seconds."
 
 ["tui.monitor.range.timeout"]
-other = "Monitor timeout must be between 1 and 86400000 milliseconds."
+other = "Monitor timeout must be between %d and %d milliseconds."
 
 ["tui.monitor.range.concurrency"]
-other = "Monitor concurrency must be between 1 and 64."
+other = "Monitor concurrency must be between %d and %d."
 
 ["tui.monitor.range.threshold"]
-other = "Monitor threshold must be between 1 and 4294967295 milliseconds."
+other = "Monitor threshold must be between %d and %d milliseconds."
 
 ["tui.monitor.range.alert_threshold"]
-other = "Alert threshold must be between 1 and 60000 milliseconds."
+other = "Alert threshold must be between %d and %d milliseconds."
 
 ["tui.monitor.range.bad_samples"]
-other = "Consecutive bad samples must be between 1 and 5."
+other = "Consecutive bad samples must be between %d and %d."
 
 ["tui.monitor.range.improvement"]
-other = "Minimum improvement must be between 1 and 4294967295 milliseconds."
+other = "Minimum improvement must be between %d and %d milliseconds."
 
 ["tui.monitor.range.cooldown"]
-other = "Cooldown must be between 0 and 4294967295 seconds."
+other = "Cooldown must be between %d and %d seconds."
 
 ["tui.monitor.range.jitter"]
-other = "Jitter must be between 0 and 4294967295 milliseconds."
+other = "Jitter must be between %d and %d milliseconds."
+
+["tui.monitor.range.window_size"]
+other = "Window size must be between %d and %d."
+
+["tui.monitor.range.min_candidate_samples"]
+other = "Minimum candidate samples must be between %d and %d."
+
+["tui.monitor.range.max_failures"]
+other = "Maximum failures must be between %d and %d."

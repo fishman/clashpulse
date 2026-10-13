@@ -173,6 +173,13 @@ func (s *runtimeService) execute(ctx context.Context, cmd ipc.Command) error {
 			s.manualOverride[cmd.GroupID] = false
 		}
 		return nil
+	case ipc.CommandTestNotification:
+		// A pending test already covers this request.
+		select {
+		case s.testNotifications <- struct{}{}:
+		default:
+		}
+		return nil
 	default:
 		return fmt.Errorf("unsupported command")
 	}
@@ -232,50 +239,30 @@ func (s *runtimeService) patchSettings(ctx context.Context, patch *ipc.ConfigPat
 		}
 		return nil
 	}
-	change := config.SettingsPatch{Binary: patch.Binary, SystemProxyEnabled: patch.SystemProxyEnabled, DNSListen: patch.DNSListen, MonitorEnabled: patch.MonitorEnabled, MonitorTestURL: patch.MonitorTestURL, MonitorSwitchPolicy: patch.MonitorSwitchPolicy}
-	if patch.URLTestIntervalSeconds != nil {
-		value := time.Duration(*patch.URLTestIntervalSeconds) * time.Second
-		change.MihomoURLTestInterval = &value
-	}
-	if patch.URLTestToleranceMillis != nil {
-		value := time.Duration(*patch.URLTestToleranceMillis) * time.Millisecond
-		change.MihomoURLTestTolerance = &value
-	}
-	if patch.MonitorIntervalSeconds != nil {
-		value := time.Duration(*patch.MonitorIntervalSeconds) * time.Second
-		change.MonitorInterval = &value
-	}
-	if patch.MonitorTimeoutMillis != nil {
-		value := time.Duration(*patch.MonitorTimeoutMillis) * time.Millisecond
-		change.MonitorTimeout = &value
-	}
-	if patch.MonitorConcurrency != nil {
-		value := int(*patch.MonitorConcurrency)
-		change.MonitorConcurrency = &value
-	}
-	if patch.MonitorThresholdMillis != nil {
-		value := time.Duration(*patch.MonitorThresholdMillis) * time.Millisecond
-		change.MonitorThreshold = &value
-	}
-	if patch.MonitorConsecutiveBadSamples != nil {
-		value := int(*patch.MonitorConsecutiveBadSamples)
-		change.MonitorConsecutiveBadSamples = &value
-	}
-	if patch.MonitorMinImprovementMillis != nil {
-		value := time.Duration(*patch.MonitorMinImprovementMillis) * time.Millisecond
-		change.MonitorMinImprovement = &value
-	}
-	if patch.MonitorCooldownSeconds != nil {
-		value := time.Duration(*patch.MonitorCooldownSeconds) * time.Second
-		change.MonitorCooldown = &value
-	}
-	if patch.MonitorJitterMillis != nil {
-		value := time.Duration(*patch.MonitorJitterMillis) * time.Millisecond
-		change.MonitorJitter = &value
-	}
-	if patch.AlertThresholdMillis != nil {
-		value := time.Duration(*patch.AlertThresholdMillis) * time.Millisecond
-		change.AlertThreshold = &value
+	change := config.SettingsPatch{
+		Binary:                       patch.Binary,
+		SystemProxyEnabled:           patch.SystemProxyEnabled,
+		DNSListen:                    patch.DNSListen,
+		MihomoURLTestInterval:        durationPatch(patch.URLTestIntervalSeconds, time.Second),
+		MihomoURLTestTolerance:       durationPatch(patch.URLTestToleranceMillis, time.Millisecond),
+		MonitorEnabled:               patch.MonitorEnabled,
+		MonitorTestURL:               patch.MonitorTestURL,
+		MonitorSwitchPolicy:          patch.MonitorSwitchPolicy,
+		MonitorInterval:              durationPatch(patch.MonitorIntervalSeconds, time.Second),
+		MonitorTimeout:               durationPatch(patch.MonitorTimeoutMillis, time.Millisecond),
+		MonitorConcurrency:           intPatch(patch.MonitorConcurrency),
+		MonitorThreshold:             durationPatch(patch.MonitorThresholdMillis, time.Millisecond),
+		AlertThreshold:               durationPatch(patch.AlertThresholdMillis, time.Millisecond),
+		MonitorConsecutiveBadSamples: intPatch(patch.MonitorConsecutiveBadSamples),
+		MonitorWindowSize:            intPatch(patch.MonitorWindowSize),
+		MonitorMinCandidateSamples:   intPatch(patch.MonitorMinCandidateSamples),
+		MonitorMaxFailures:           intPatch(patch.MonitorMaxFailures),
+		MonitorMinImprovement:        durationPatch(patch.MonitorMinImprovementMillis, time.Millisecond),
+		MonitorCooldown:              durationPatch(patch.MonitorCooldownSeconds, time.Second),
+		MonitorJitter:                durationPatch(patch.MonitorJitterMillis, time.Millisecond),
+		TunEnabled:                   patch.TunEnabled,
+		TunStack:                     patch.TunStack,
+		TunDNSMode:                   patch.TunDNSMode,
 	}
 	if err := config.PatchSettings(path, current, change); err != nil {
 		return err
@@ -293,10 +280,14 @@ func (s *runtimeService) patchSettings(ctx context.Context, patch *ipc.ConfigPat
 		}
 		return err
 	}
+	// Only a user's enable may prompt; the service loop runs Prepare off-loop.
+	if patch.TunEnabled != nil && *patch.TunEnabled && !s.tunActive && (s.controller == nil || s.tunPrivilege != core.TunPrivilegeReady) {
+		s.tunPrepareRequested = true
+	}
 	return nil
 }
 
-func (s *runtimeService) applyChange(ctx context.Context, _ config.Change) error {
+func (s *runtimeService) applyChange(ctx context.Context, _ config.Change) (result error) {
 	change := config.NewStore(s.lastAppliedSettings).Replace(s.store.Snapshot())
 	if len(change.Sections) == 0 {
 		return nil
@@ -308,12 +299,14 @@ func (s *runtimeService) applyChange(ctx context.Context, _ config.Change) error
 		}
 		return cause
 	}
-	needsRender := false
+	needsRender, tunChanged := false, false
 	monitorChanged, proxyChanged := false, false
 	for _, section := range change.Sections {
 		switch section {
 		case "mihomo", "resources", "dns", "filters":
 			needsRender = true
+		case "tun":
+			needsRender, tunChanged = true, true
 		case "monitor":
 			monitorChanged = true
 		case "app":
@@ -341,6 +334,17 @@ func (s *runtimeService) applyChange(ctx context.Context, _ config.Change) error
 		if entry.Active && !targetSubscriptions[entry.ID] {
 			return restoreBefore(fmt.Errorf("clashpulse: active subscription %q cannot be removed before a validated replacement is activated", entry.ID))
 		}
+	}
+	if change.Before.Tun.Enabled && !change.After.Tun.Enabled {
+		// Disabling never leaves the privileged copy behind, even when the
+		// restart without TUN failed.
+		defer func() {
+			if err := s.tun.revoke(); err != nil {
+				result = errors.Join(result, fmt.Errorf("clashpulse: revoke TUN privilege: %w", err))
+			}
+			s.tunPrivilege, s.tunFailure = core.TunPrivilegeMissing, ""
+			s.publish()
+		}()
 	}
 
 	priorAutomation := maps.Clone(s.automation)
@@ -408,7 +412,12 @@ func (s *runtimeService) applyChange(ctx context.Context, _ config.Change) error
 	}
 	if s.controller != nil && needsRender {
 		runtimeAttempted = true
-		if err := s.start(ctx); err != nil {
+		// A newly requested TUN is activated after commit, so its failure
+		// cannot revert the saved intent.
+		s.tunHold = change.After.Tun.Enabled && !s.tunActive
+		err := s.start(ctx)
+		s.tunHold = false
+		if err != nil {
 			return revert(err)
 		}
 	}
@@ -456,6 +465,10 @@ func (s *runtimeService) applyChange(ctx context.Context, _ config.Change) error
 		offerLatest(s.configErrors, deletionErr)
 	}
 	s.publish()
+	if tunChanged && change.After.Tun.Enabled && !s.tunActive && s.controller != nil {
+		// A failure is reported through the TUN state; the intent stays saved.
+		_ = s.activateTun(ctx)
+	}
 	return nil
 }
 
@@ -477,6 +490,18 @@ func (s *runtimeService) acceptBatch(ctx context.Context, batch monitor.Batch) {
 			default:
 				snapshot.Outcome = "error"
 			}
+			break
+		}
+	}
+	for _, item := range batch.Stability {
+		id, groupID := opaqueID(item.Proxy), opaqueID(item.Group)
+		for index := range s.snapshot.Proxies {
+			snapshot := &s.snapshot.Proxies[index]
+			if snapshot.ID != id || snapshot.GroupID != groupID {
+				continue
+			}
+			snapshot.MedianMillis, snapshot.JitterMillis = item.Stability.Median.Milliseconds(), item.Stability.Jitter.Milliseconds()
+			snapshot.Samples, snapshot.Failures = item.Stability.Samples, item.Stability.Failures
 			break
 		}
 	}
@@ -612,6 +637,30 @@ func (s *runtimeService) runNotifications(ctx context.Context) {
 				return
 			}
 			deliver(lowerLatencyNotification())
+		case <-s.testNotifications:
+			if ctx.Err() != nil {
+				return
+			}
+			// The service clears a reported notification issue on a nil result.
+			offerLatest(s.notificationErrors, send(testNotification()))
 		}
 	}
+}
+
+// intPatch and durationPatch convert an optional IPC wire value to the typed
+// settings patch, keeping nil as "unchanged".
+func intPatch(value *uint32) *int {
+	if value == nil {
+		return nil
+	}
+	converted := int(*value)
+	return &converted
+}
+
+func durationPatch(value *uint32, unit time.Duration) *time.Duration {
+	if value == nil {
+		return nil
+	}
+	converted := time.Duration(*value) * unit
+	return &converted
 }

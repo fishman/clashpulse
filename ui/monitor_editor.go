@@ -19,6 +19,7 @@ import (
 type monitorPolicyInput struct {
 	TestURL, SwitchPolicy, IntervalSeconds, TimeoutMillis, Concurrency string
 	ThresholdMillis, AlertThresholdMillis, ConsecutiveBadSamples       string
+	WindowSize, MinCandidateSamples, MaxFailures                       string
 	MinImprovementMillis, CooldownSeconds, JitterMillis                string
 }
 
@@ -88,7 +89,17 @@ func monitorPolicyPatch(input monitorPolicyInput) (*ipc.ConfigPatch, error) {
 	if patch.AlertThresholdMillis, err = parse("alert milliseconds", input.AlertThresholdMillis, 1, 60000); err != nil {
 		return nil, err
 	}
-	if patch.MonitorConsecutiveBadSamples, err = parse("consecutive bad samples", input.ConsecutiveBadSamples, 1, 5); err != nil {
+	if patch.MonitorWindowSize, err = parse("probe window samples", input.WindowSize, core.MonitorWindowMin, core.MonitorWindowMax); err != nil {
+		return nil, err
+	}
+	window := uint64(*patch.MonitorWindowSize)
+	if patch.MonitorMinCandidateSamples, err = parse("required candidate successes", input.MinCandidateSamples, core.MonitorWindowMin, window); err != nil {
+		return nil, err
+	}
+	if patch.MonitorMaxFailures, err = parse("max failures in window", input.MaxFailures, 1, window); err != nil {
+		return nil, err
+	}
+	if patch.MonitorConsecutiveBadSamples, err = parse("consecutive bad samples", input.ConsecutiveBadSamples, 1, window); err != nil {
 		return nil, err
 	}
 	if patch.MonitorMinImprovementMillis, err = parse("minimum improvement milliseconds", input.MinImprovementMillis, 1, 4294967295); err != nil {
@@ -178,7 +189,7 @@ func urlTestDelayPatch(interval, tolerance string) (*ipc.ConfigPatch, error) {
 
 func (p *settingsPage) editMonitorPolicy() {
 	state := p.monitorState
-	items := make([]*widget.FormItem, 0, 12)
+	items := make([]*widget.FormItem, 0, 16)
 	add := func(label, value string) *widget.Entry {
 		field := widget.NewEntry()
 		field.SetText(value)
@@ -189,12 +200,15 @@ func (p *settingsPage) editMonitorPolicy() {
 	items = append(items, widget.NewFormItem(localize.T("Warning"), widget.NewLabel(localize.T("Plain HTTP probes can be intercepted; use HTTPS for probe integrity."))))
 	policy := switchPolicySelect(state.SwitchPolicy)
 	items = append(items, widget.NewFormItem(localize.T("Switch policy"), policy))
-	items = append(items, widget.NewFormItem(localize.T("Note"), widget.NewLabel(localize.T("A switch needs at least three probes of each node and the switch cooldown after one. Lowest latency compares median latencies and requires the required improvement; the unhealthy threshold then no longer gates switching."))))
+	items = append(items, widget.NewFormItem(localize.T("Note"), widget.NewLabel(localize.T("A switch needs the required candidate successes in each candidate's probe window and the switch cooldown after one. The selected node counts as unstable once its window holds the maximum failures. Lowest latency compares median latencies and requires the required improvement; the unhealthy threshold then no longer gates switching."))))
 	interval := add(localize.T("Interval (seconds)"), strconv.FormatInt(state.IntervalSeconds, 10))
 	timeout := add(localize.T("Timeout (ms)"), strconv.FormatInt(state.TimeoutMillis, 10))
 	concurrency := add(localize.T("Concurrent probes"), strconv.Itoa(state.Concurrency))
 	threshold := add(localize.T("Unhealthy threshold (ms)"), strconv.FormatInt(state.ThresholdMillis, 10))
 	alert := add(localize.T("Alert threshold (ms)"), strconv.FormatInt(state.AlertThresholdMillis, 10))
+	window := add(localize.T("Probe window (samples)"), strconv.Itoa(state.WindowSize))
+	candidates := add(localize.T("Required candidate successes"), strconv.Itoa(state.MinCandidateSamples))
+	maxFailures := add(localize.T("Max failures in window"), strconv.Itoa(state.MaxFailures))
 	consecutive := add(localize.T("Consecutive bad samples"), strconv.Itoa(state.ConsecutiveBadSamples))
 	improvement := add(localize.T("Required improvement (ms)"), strconv.FormatInt(state.MinImprovementMillis, 10))
 	cooldown := add(localize.T("Switch cooldown (seconds)"), strconv.FormatInt(state.CooldownSeconds, 10))
@@ -206,7 +220,8 @@ func (p *settingsPage) editMonitorPolicy() {
 		patch, err := monitorPolicyPatch(monitorPolicyInput{
 			TestURL: testURL.Text, SwitchPolicy: policy.Selected, IntervalSeconds: interval.Text, TimeoutMillis: timeout.Text,
 			Concurrency: concurrency.Text, ThresholdMillis: threshold.Text, AlertThresholdMillis: alert.Text,
-			ConsecutiveBadSamples: consecutive.Text, MinImprovementMillis: improvement.Text,
+			ConsecutiveBadSamples: consecutive.Text, WindowSize: window.Text, MinCandidateSamples: candidates.Text,
+			MaxFailures: maxFailures.Text, MinImprovementMillis: improvement.Text,
 			CooldownSeconds: cooldown.Text, JitterMillis: jitter.Text,
 		})
 		if err != nil {

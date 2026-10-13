@@ -67,12 +67,16 @@ func proxyLatency(snapshot core.Snapshot, groupID, proxyID string) string {
 		if proxy.GroupID != groupID || proxy.ID != proxyID {
 			continue
 		}
+		var parts []string
 		if proxy.LatencyMillis > 0 {
-			return fmt.Sprintf(localize.T("%d ms"), proxy.LatencyMillis)
+			parts = append(parts, fmt.Sprintf(localize.T("%d ms"), proxy.LatencyMillis))
+		} else if proxy.MihomoMillis > 0 {
+			parts = append(parts, fmt.Sprintf(localize.T("%d ms (mihomo)"), proxy.MihomoMillis))
 		}
-		if proxy.MihomoMillis > 0 {
-			return fmt.Sprintf(localize.T("%d ms (mihomo)"), proxy.MihomoMillis)
+		if stability := proxy.StabilityLabel(); stability != "" {
+			parts = append(parts, stability)
 		}
+		return strings.Join(parts, " \u00b7 ")
 	}
 	return ""
 }
@@ -82,6 +86,10 @@ func monitorThresholdLabel(monitor core.MonitorSnapshot) string {
 		return localize.T("Not configured")
 	}
 	return fmt.Sprintf(localize.T("%d ms"), monitor.AlertThresholdMillis)
+}
+
+func monitorStabilityLabel(monitor core.MonitorSnapshot) string {
+	return fmt.Sprintf(localize.T("window %d samples, %d successes to switch, at most %d failures"), monitor.WindowSize, monitor.MinCandidateSamples, monitor.MaxFailures)
 }
 
 func compatibilityLabel(failure string) string {

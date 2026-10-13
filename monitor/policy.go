@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/fishman/clashpulse/core"
 )
 
 // SwitchFailover moves traffic only after the selected node has failed enough
@@ -27,6 +29,7 @@ type Policy struct {
 	WindowSize            int
 	MinCandidateSamples   int
 	ConsecutiveBadSamples int
+	MaxFailures           int
 	MinImprovement        time.Duration
 	Cooldown              time.Duration
 	Jitter                time.Duration
@@ -44,6 +47,7 @@ func DefaultPolicy() Policy {
 		WindowSize:            5,
 		MinCandidateSamples:   3,
 		ConsecutiveBadSamples: 3,
+		MaxFailures:           2,
 		MinImprovement:        100 * time.Millisecond,
 		Cooldown:              5 * time.Minute,
 		Jitter:                10 * time.Second,
@@ -70,11 +74,14 @@ func (p Policy) Validate() error {
 	if p.Threshold <= 0 || p.LatencyAlertThreshold <= 0 {
 		return fmt.Errorf("monitor policy: latency thresholds must be positive")
 	}
-	if p.WindowSize < 1 || p.ConsecutiveBadSamples < 1 || p.ConsecutiveBadSamples > p.WindowSize {
-		return fmt.Errorf("monitor policy: unhealthy sample count must fit within a positive window")
+	if p.WindowSize < core.MonitorWindowMin || p.ConsecutiveBadSamples < 1 || p.ConsecutiveBadSamples > p.WindowSize {
+		return fmt.Errorf("monitor policy: unhealthy sample count must fit within a window of at least %d", core.MonitorWindowMin)
 	}
-	if p.MinCandidateSamples < 2 || p.MinCandidateSamples > p.WindowSize {
-		return fmt.Errorf("monitor policy: candidate sample count must be between 2 and the window size")
+	if p.MinCandidateSamples < core.MonitorWindowMin || p.MinCandidateSamples > p.WindowSize {
+		return fmt.Errorf("monitor policy: candidate sample count must be between %d and the window size", core.MonitorWindowMin)
+	}
+	if p.MaxFailures < 1 || p.MaxFailures > p.WindowSize {
+		return fmt.Errorf("monitor policy: max failures must be between 1 and the window size")
 	}
 	if p.MinImprovement <= 0 {
 		return fmt.Errorf("monitor policy: minimum improvement must be positive")
@@ -135,7 +142,11 @@ func Decide(policy Policy, state GroupState, samples []Sample, now time.Time) De
 	}
 
 	window := recent(byProxy[state.Selected], policy.WindowSize)
+	selected := MeasureStability(window, 0)
 	comparable := window
+	// unstable marks a selected node that answers fast but fails too many of
+	// its recent probes; a replacement must be steadier, not faster.
+	unstable := false
 	if policy.SwitchPolicy == SwitchLowestLatency {
 		// The fastest node wins while it still answers, so the selected node's own
 		// health is irrelevant; it is only compared against the candidates.
@@ -143,7 +154,7 @@ func Decide(policy Policy, state GroupState, samples []Sample, now time.Time) De
 			return decision
 		}
 	} else {
-		if len(window) < policy.ConsecutiveBadSamples {
+		if len(window) < policy.ConsecutiveBadSamples && selected.Failures < policy.MaxFailures {
 			return decision
 		}
 		bad := 0
@@ -154,41 +165,74 @@ func Decide(policy Policy, state GroupState, samples []Sample, now time.Time) De
 			}
 			break
 		}
-		if bad < policy.ConsecutiveBadSamples {
+		switch {
+		case bad >= policy.ConsecutiveBadSamples:
+			comparable = window[len(window)-bad:]
+		case selected.Failures >= policy.MaxFailures:
+			unstable = true
+		default:
 			decision.Reason = ReasonSelectedHealthy
 			return decision
 		}
-		comparable = window[len(window)-bad:]
 	}
 
-	selectedMedian, selectedCount := successfulMedian(comparable)
-	selectedOffline := selectedCount == 0
-	baseline := selectedMedian
+	baseline := MeasureStability(comparable, 0)
+	selectedOffline := baseline.Failures == baseline.Samples
 
 	bestName := ""
-	bestMedian := time.Duration(0)
+	var best Stability
 	for _, proxy := range state.Proxies {
 		if proxy == state.Selected {
 			continue
 		}
 		candidate := recent(byProxy[proxy], policy.WindowSize)
-		median, count := successfulMedian(candidate)
-		if len(candidate) == 0 || sampleFailed(candidate[len(candidate)-1]) || count < policy.MinCandidateSamples || (!selectedOffline && baseline-median < policy.MinImprovement) {
+		if len(candidate) == 0 || sampleFailed(candidate[len(candidate)-1]) {
 			continue
 		}
-		if bestName == "" || median < bestMedian || (median == bestMedian && proxy < bestName) {
-			bestName, bestMedian = proxy, median
+		stats := MeasureStability(candidate, 0)
+		if stats.Samples-stats.Failures < policy.MinCandidateSamples {
+			continue
+		}
+		switch {
+		case selectedOffline:
+		case unstable:
+			if stats.Failures >= selected.Failures || stats.Median > policy.Threshold {
+				continue
+			}
+		default:
+			// A candidate that is itself unstable never replaces a node that answers.
+			if stats.Failures >= policy.MaxFailures || baseline.Median-stats.Median < policy.MinImprovement {
+				continue
+			}
+		}
+		if bestName == "" || steadier(stats, proxy, best, bestName) {
+			bestName, best = proxy, stats
 		}
 	}
 	if bestName == "" {
 		decision.Reason = ReasonNoBetterCandidate
 		return decision
 	}
-	decision.LowerLatency = !selectedOffline && selectedCount >= policy.MinCandidateSamples && !sampleFailed(comparable[len(comparable)-1])
+	decision.LowerLatency = !selectedOffline && !unstable && baseline.Samples-baseline.Failures >= policy.MinCandidateSamples && !sampleFailed(comparable[len(comparable)-1])
 	decision.Switch = true
 	decision.New = bestName
 	decision.Reason = ReasonSwitchCandidate
 	return decision
+}
+
+// steadier ranks candidates by failed probes, then median latency, then jitter,
+// so a fast node that drops probes never outranks a stable one.
+func steadier(a Stability, aName string, b Stability, bName string) bool {
+	if a.Failures != b.Failures {
+		return a.Failures < b.Failures
+	}
+	if a.Median != b.Median {
+		return a.Median < b.Median
+	}
+	if a.Jitter != b.Jitter {
+		return a.Jitter < b.Jitter
+	}
+	return aName < bName
 }
 
 func allCandidatesFailed(proxies []string, byProxy map[string][]Sample, windowSize int) bool {
@@ -215,22 +259,46 @@ func recent(samples []Sample, limit int) []Sample {
 	return ordered
 }
 
-func successfulMedian(samples []Sample) (time.Duration, int) {
-	latencies := make([]time.Duration, 0, len(samples))
-	for _, sample := range samples {
-		if !sampleFailed(sample) {
-			latencies = append(latencies, sample.Latency)
+// Stability summarizes one proxy's most recent probes. Median and Jitter cover
+// successful probes only; Jitter is their median absolute deviation.
+type Stability struct {
+	Samples  int
+	Failures int
+	Median   time.Duration
+	Jitter   time.Duration
+}
+
+// MeasureStability summarizes the newest windowSize samples, or all samples
+// when windowSize is zero.
+func MeasureStability(samples []Sample, windowSize int) Stability {
+	window := recent(samples, windowSize)
+	stats := Stability{Samples: len(window)}
+	latencies := make([]time.Duration, 0, len(window))
+	for _, sample := range window {
+		if sampleFailed(sample) {
+			stats.Failures++
+			continue
 		}
+		latencies = append(latencies, sample.Latency)
 	}
 	if len(latencies) == 0 {
-		return 0, 0
+		return stats
 	}
-	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
-	middle := len(latencies) / 2
-	if len(latencies)%2 == 1 {
-		return latencies[middle], len(latencies)
+	stats.Median = median(latencies)
+	for i, latency := range latencies {
+		latencies[i] = (latency - stats.Median).Abs()
 	}
-	return latencies[middle-1] + (latencies[middle]-latencies[middle-1])/2, len(latencies)
+	stats.Jitter = median(latencies)
+	return stats
+}
+
+func median(values []time.Duration) time.Duration {
+	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
+	middle := len(values) / 2
+	if len(values)%2 == 1 {
+		return values[middle]
+	}
+	return values[middle-1] + (values[middle]-values[middle-1])/2
 }
 
 func sampleFailed(sample Sample) bool {

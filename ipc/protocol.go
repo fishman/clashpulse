@@ -5,14 +5,16 @@ import (
 	"errors"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/monitor"
 )
 
 const (
 	// ProtocolVersion is negotiated in the first frame on every connection.
-	ProtocolVersion uint16 = 5
+	ProtocolVersion uint16 = 7
 	// MaxFrameSize bounds both incoming and outgoing JSON frames.
 	MaxFrameSize = 1 << 20
 )
@@ -45,6 +47,8 @@ const (
 	CommandPutResource          CommandKind = "put_resource"
 	CommandPutFilter            CommandKind = "put_filter"
 	CommandSetDNSRouting        CommandKind = "set_dns_routing"
+	CommandTestNotification     CommandKind = "test_notification"
+	CommandAuthorizeTun         CommandKind = "authorize_tun"
 )
 
 // Command is a deliberately narrow user-intent schema. Sensitive URLs may
@@ -78,13 +82,22 @@ type ConfigPatch struct {
 	MonitorThresholdMillis       *uint32 `json:"monitor_threshold_millis,omitempty"`
 	AlertThresholdMillis         *uint32 `json:"alert_threshold_millis,omitempty"`
 	MonitorConsecutiveBadSamples *uint32 `json:"monitor_consecutive_bad_samples,omitempty"`
+	MonitorWindowSize            *uint32 `json:"monitor_window_size,omitempty"`
+	MonitorMinCandidateSamples   *uint32 `json:"monitor_min_candidate_samples,omitempty"`
+	MonitorMaxFailures           *uint32 `json:"monitor_max_failures,omitempty"`
 	MonitorMinImprovementMillis  *uint32 `json:"monitor_min_improvement_millis,omitempty"`
 	MonitorCooldownSeconds       *uint32 `json:"monitor_cooldown_seconds,omitempty"`
 	MonitorJitterMillis          *uint32 `json:"monitor_jitter_millis,omitempty"`
 	Binary                       *string `json:"binary,omitempty"`
 	URLTestIntervalSeconds       *uint32 `json:"url_test_interval_seconds,omitempty"`
 	URLTestToleranceMillis       *uint32 `json:"url_test_tolerance_millis,omitempty"`
+	TunEnabled                   *bool   `json:"tun_enabled,omitempty"`
+	TunStack                     *string `json:"tun_stack,omitempty"`
+	TunDNSMode                   *string `json:"tun_dns_mode,omitempty"`
 }
+
+// Empty reports whether the patch changes nothing.
+func (p ConfigPatch) Empty() bool { return p == ConfigPatch{} }
 
 // SubscriptionEdit changes only supplied fields. URL is required for a new
 // source but omitted for edits that should retain its private stored value.
@@ -159,6 +172,14 @@ func validBinaryIntent(value string) bool {
 	return value != "" && len(value) <= 4096 && filepath.IsAbs(value) && !strings.ContainsAny(value, "\x00\r\n")
 }
 
+func validTunStack(value string) bool {
+	return slices.Contains(core.TunStacks, value)
+}
+
+func validTunDNSMode(value string) bool {
+	return slices.Contains(core.TunDNSModes, value)
+}
+
 func (c Command) validate() error {
 	if c.Kind != CommandPutSubscription && c.Subscription != nil {
 		return errors.New("unexpected subscription edit fields")
@@ -176,7 +197,7 @@ func (c Command) validate() error {
 			(want != "filter" && c.FilterID != "")
 	}
 	switch c.Kind {
-	case CommandStart, CommandStop, CommandRestart, CommandReloadConfiguration:
+	case CommandStart, CommandStop, CommandRestart, CommandReloadConfiguration, CommandTestNotification, CommandAuthorizeTun:
 		if c.GroupID != "" || c.ChoiceID != "" || c.Config != nil || c.Automation != nil || hasOtherTarget("") {
 			return errors.New("unexpected command fields")
 		}
@@ -185,17 +206,26 @@ func (c Command) validate() error {
 			return errors.New("invalid configuration command")
 		}
 		p := c.Config
-		if p.SystemProxyEnabled == nil && p.DNSListen == nil && p.MonitorEnabled == nil && p.MonitorTestURL == nil && p.MonitorIntervalSeconds == nil && p.MonitorTimeoutMillis == nil && p.MonitorConcurrency == nil && p.MonitorThresholdMillis == nil && p.AlertThresholdMillis == nil && p.MonitorConsecutiveBadSamples == nil && p.MonitorMinImprovementMillis == nil && p.MonitorCooldownSeconds == nil && p.MonitorJitterMillis == nil && p.Binary == nil {
+		if p.Empty() {
 			return errors.New("empty configuration patch")
 		}
 		if p.MonitorTestURL != nil && (len(*p.MonitorTestURL) > 2048 || strings.ContainsAny(*p.MonitorTestURL, "\x00\r\n")) {
 			return errors.New("invalid monitor test URL")
 		}
+		if p.MonitorSwitchPolicy != nil && *p.MonitorSwitchPolicy != monitor.SwitchFailover && *p.MonitorSwitchPolicy != monitor.SwitchLowestLatency {
+			return errors.New("invalid monitor switch policy")
+		}
+		if p.TunStack != nil && !validTunStack(*p.TunStack) || p.TunDNSMode != nil && !validTunDNSMode(*p.TunDNSMode) {
+			return errors.New("invalid TUN mode setting")
+		}
 		if p.DNSListen != nil && (len(*p.DNSListen) > 128 || strings.ContainsAny(*p.DNSListen, "\x00\r\n")) {
 			return errors.New("invalid DNS listener")
 		}
-		if p.MonitorConcurrency != nil && (*p.MonitorConcurrency < 1 || *p.MonitorConcurrency > 64) || p.MonitorConsecutiveBadSamples != nil && (*p.MonitorConsecutiveBadSamples < 1 || *p.MonitorConsecutiveBadSamples > 5) {
+		if p.MonitorConcurrency != nil && (*p.MonitorConcurrency < 1 || *p.MonitorConcurrency > 64) || p.MonitorConsecutiveBadSamples != nil && (*p.MonitorConsecutiveBadSamples < 1 || *p.MonitorConsecutiveBadSamples > core.MonitorWindowMax) {
 			return errors.New("monitor worker or sample count out of range")
+		}
+		if p.MonitorWindowSize != nil && (*p.MonitorWindowSize < core.MonitorWindowMin || *p.MonitorWindowSize > core.MonitorWindowMax) || p.MonitorMinCandidateSamples != nil && (*p.MonitorMinCandidateSamples < core.MonitorWindowMin || *p.MonitorMinCandidateSamples > core.MonitorWindowMax) || p.MonitorMaxFailures != nil && (*p.MonitorMaxFailures < 1 || *p.MonitorMaxFailures > core.MonitorWindowMax) {
+			return errors.New("monitor stability window out of range")
 		}
 		if p.MonitorTimeoutMillis != nil && (*p.MonitorTimeoutMillis < 1 || *p.MonitorTimeoutMillis > 86400000) || p.MonitorThresholdMillis != nil && *p.MonitorThresholdMillis == 0 || p.MonitorMinImprovementMillis != nil && *p.MonitorMinImprovementMillis == 0 {
 			return errors.New("monitor delay policy out of range")
@@ -311,13 +341,16 @@ func validateSnapshot(snapshot core.Snapshot) error {
 	default:
 		return errors.New("ipc: invalid active source")
 	}
-	if len(snapshot.ConfigOverrides) > 14 {
+	if len(snapshot.ConfigOverrides) > 21 {
 		return errors.New("ipc: invalid config override report")
 	}
 	for _, item := range snapshot.ConfigOverrides {
 		if !item.Valid() {
 			return errors.New("ipc: invalid config override report")
 		}
+	}
+	if err := validateTunSnapshot(snapshot.Tun); err != nil {
+		return err
 	}
 	itemLimit := (MaxFrameSize - 1024) / 256
 	items := 0
@@ -358,6 +391,9 @@ func validateSnapshot(snapshot core.Snapshot) error {
 	for _, proxy := range snapshot.Proxies {
 		if !addText(proxy.ID, proxy.Label, proxy.GroupID, proxy.Outcome) {
 			return ErrSnapshotTooLarge
+		}
+		if proxy.Failures < 0 || proxy.Failures > proxy.Samples || proxy.Samples > core.MonitorWindowMax || proxy.MedianMillis < 0 || proxy.JitterMillis < 0 {
+			return errors.New("ipc: invalid proxy stability")
 		}
 	}
 	for _, subscription := range snapshot.Subscriptions {
@@ -428,6 +464,23 @@ func validateSnapshot(snapshot core.Snapshot) error {
 	body, err := json.Marshal(frame)
 	if err != nil || len(body) > MaxFrameSize {
 		return ErrSnapshotTooLarge
+	}
+	return nil
+}
+
+// validateTunSnapshot accepts the zero value so a snapshot taken before the
+// first configuration load still crosses the boundary.
+func validateTunSnapshot(tun core.TunSnapshot) error {
+	switch tun.Privilege {
+	case "", core.TunPrivilegeReady, core.TunPrivilegeMissing, core.TunPrivilegeStale, core.TunPrivilegeNoSUID, core.TunPrivilegeNoAgent, core.TunPrivilegeUnsupported:
+	default:
+		return errors.New("ipc: invalid TUN snapshot")
+	}
+	if tun.Stack != "" && !validTunStack(tun.Stack) || tun.DNSMode != "" && !validTunDNSMode(tun.DNSMode) ||
+		tun.PrivilegedPath != "" && (len(tun.PrivilegedPath) > 4096 || !filepath.IsAbs(tun.PrivilegedPath) || strings.ContainsAny(tun.PrivilegedPath, "\x00\r\n")) ||
+		len(tun.Device) > 15 || strings.ContainsAny(tun.Device, "\x00\r\n/ ") ||
+		len(tun.LastFailure) > 160 || strings.ContainsAny(tun.LastFailure, "\x00\r\n") || strings.Contains(tun.LastFailure, "://") {
+		return errors.New("ipc: invalid TUN snapshot")
 	}
 	return nil
 }

@@ -7,11 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/fishman/clashpulse/config"
+	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/filters"
 	"gopkg.in/yaml.v3"
 )
@@ -305,5 +307,212 @@ func TestExplainOverridesRedactsSourceValues(t *testing.T) {
 	}
 	if _, err := ExplainOverrides([]byte("dns: ["), generated); err == nil || strings.Contains(err.Error(), "dns:") {
 		t.Fatalf("malformed source leaked through report error: %v", err)
+	}
+}
+
+const (
+	tunProfile = "proxies:\n  - name: alpha\n    type: direct\n"
+	tunDNS     = "dns:\n  nameserver: [192.0.2.53]\n"
+)
+
+func renderTun(profile string, intent config.Snapshot) (map[string]any, error) {
+	got, err := Render([]byte(tunProfile+profile), intent, nil, ControllerSettings{Address: "127.0.0.1:9090", Secret: "secret"}, Capability{SupportsTUN: true})
+	if err != nil {
+		return nil, err
+	}
+	var document map[string]any
+	return document, yaml.Unmarshal(got, &document)
+}
+
+func parseYAML(t *testing.T, source string) map[string]any {
+	t.Helper()
+	var document map[string]any
+	if err := yaml.Unmarshal([]byte(source), &document); err != nil {
+		t.Fatal(err)
+	}
+	return document
+}
+
+func TestRenderTunReplacesDisabledProfileBlock(t *testing.T) {
+	tun := config.Tun{Enabled: true, Stack: core.TunStackMixed, DNSMode: core.TunDNSProfile}
+	document, err := renderTun("tun:\n  enable: false\n  device: utun9\n  stack: system\n  strict-route: true\n"+tunDNS, config.Snapshot{Tun: tun})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := parseYAML(t, "enable: true\nstack: mixed\ndevice: clashpulse0\nauto-route: true\nauto-detect-interface: true\ndns-hijack: [any:53]\nmtu: 1500\nstrict-route: false\nauto-redirect: false\n")
+	if !reflect.DeepEqual(document["tun"], want) {
+		t.Fatalf("tun block = %v, want %v", document["tun"], want)
+	}
+	if _, err := renderTun("tun:\n  enable: true\n", config.Snapshot{Tun: tun}); err == nil {
+		t.Fatal("accepted a profile that enables its own TUN")
+	}
+}
+
+func TestRenderTunRequiresCapability(t *testing.T) {
+	intent := config.Snapshot{Tun: config.Tun{Enabled: true, Stack: core.TunStackGVisor, DNSMode: core.TunDNSProfile}}
+	_, err := Render([]byte(tunProfile), intent, nil, ControllerSettings{Address: "127.0.0.1:9090", Secret: "secret"}, Capability{})
+	var missing *CapabilityError
+	if !errors.As(err, &missing) || missing.ResourceID != "tun" {
+		t.Fatalf("missing TUN capability error = %v", err)
+	}
+}
+
+func TestRenderTunDNSModes(t *testing.T) {
+	const (
+		base       = "enable: true\nlisten: 127.0.0.1:1053\n"
+		fakeIP     = "enhanced-mode: fake-ip\nfake-ip-range: 198.18.0.1/16\nfake-ip-filter: ['*.lan', '*.local', '*.arpa', 'time.*.com', 'ntp.*.com', '+.pool.ntp.org']\n"
+		redirHost  = "enhanced-mode: redir-host\n"
+		nameserver = "nameserver: [192.0.2.53]\n"
+		ownFakeIP  = "fake-ip-range: 198.19.0.1/16\nfake-ip-filter: [+.example.com]\n" + nameserver
+	)
+	profiles := map[string]string{
+		"fake-ip":    "dns:\n  enable: true\n  enhanced-mode: fake-ip\n  fake-ip-range: 198.19.0.1/16\n  fake-ip-filter: [+.example.com]\n  nameserver: [192.0.2.53]\n",
+		"redir-host": "dns:\n  enable: true\n  enhanced-mode: redir-host\n  nameserver: [192.0.2.53]\n",
+		"disabled":   "dns:\n  enable: false\n  enhanced-mode: redir-host\n  nameserver: [192.0.2.53]\n",
+	}
+	for _, test := range []struct{ profile, mode, want string }{
+		{"fake-ip", core.TunDNSProfile, base + "enhanced-mode: fake-ip\n" + ownFakeIP},
+		{"fake-ip", core.TunDNSFakeIP, base + "enhanced-mode: fake-ip\n" + ownFakeIP},
+		{"fake-ip", core.TunDNSRedirHost, base + redirHost + ownFakeIP},
+		{"redir-host", core.TunDNSProfile, base + redirHost + nameserver},
+		{"redir-host", core.TunDNSFakeIP, base + fakeIP + nameserver},
+		{"redir-host", core.TunDNSRedirHost, base + redirHost + nameserver},
+		{"disabled", core.TunDNSProfile, base + redirHost + nameserver},
+		{"disabled", core.TunDNSFakeIP, base + fakeIP + nameserver},
+		{"disabled", core.TunDNSRedirHost, base + redirHost + nameserver},
+	} {
+		t.Run(test.profile+"/"+test.mode, func(t *testing.T) {
+			document, err := renderTun(profiles[test.profile], config.Snapshot{Tun: config.Tun{Enabled: true, Stack: core.TunStackGVisor, DNSMode: test.mode}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if want := parseYAML(t, test.want); !reflect.DeepEqual(document["dns"], want) {
+				t.Fatalf("dns = %v, want %v", document["dns"], want)
+			}
+		})
+	}
+}
+
+func TestRenderTunRequiresUsableNameserver(t *testing.T) {
+	for _, test := range []struct{ profile, wantErr string }{
+		{"", "dns.nameserver"},
+		{"dns:\n  enable: false\n", "dns.nameserver"},
+		{"dns:\n  nameserver: []\n", "dns.nameserver"},
+		{"dns:\n  nameserver: [https://dns.example/dns-query]\n", "dns.default-nameserver"},
+		{"dns:\n  nameserver: [192.0.2.53]\n  fallback: [tls://dns.example]\n", "dns.default-nameserver"},
+		{"dns:\n  nameserver: [dns.example]\n  default-nameserver: []\n", "dns.default-nameserver"},
+		{"dns:\n  nameserver: [192.0.2.53]\n  nameserver-policy:\n    '+.example.com': 'https://dns.example/dns-query'\n", "dns.default-nameserver"},
+		{"dns:\n  nameserver: [192.0.2.53]\n  proxy-server-nameserver: [tls://dns.example]\n", "dns.default-nameserver"},
+		{"dns:\n  nameserver: [192.0.2.53]\n  direct-nameserver: [dns.example]\n", "dns.default-nameserver"},
+		{"dns:\n  nameserver: [192.0.2.53, 'tls://192.0.2.54:853', 'https://[2001:db8::53]/dns-query']\n  fallback: ['192.0.2.55:53']\n", ""},
+		{"dns:\n  nameserver: [https://dns.example/dns-query]\n  default-nameserver: [192.0.2.53]\n", ""},
+	} {
+		for _, mode := range []string{core.TunDNSProfile, core.TunDNSFakeIP, core.TunDNSRedirHost} {
+			_, err := renderTun(test.profile, config.Snapshot{Tun: config.Tun{Enabled: true, Stack: core.TunStackGVisor, DNSMode: mode}})
+			if test.wantErr == "" && err != nil {
+				t.Fatalf("%s %q rejected: %v", mode, test.profile, err)
+			}
+			if test.wantErr != "" && (err == nil || !strings.Contains(err.Error(), test.wantErr)) {
+				t.Fatalf("%s %q error = %v, want %s rejection", mode, test.profile, err, test.wantErr)
+			}
+		}
+	}
+}
+
+func TestRenderTunFakeIPRange6OnlyWithIPv6(t *testing.T) {
+	for _, test := range []struct {
+		profile string
+		want    any
+	}{
+		{"ipv6: true\n" + tunDNS, "2001:2::0/64"},
+		{"dns:\n  ipv6: true\n  nameserver: [192.0.2.53]\n", "2001:2::0/64"},
+		{"ipv6: true\ndns:\n  fake-ip-range6: 2001:db8::/64\n  nameserver: [192.0.2.53]\n", "2001:db8::/64"},
+		{tunDNS, nil},
+		{"ipv6: false\n" + tunDNS, nil},
+		{"ipv6: true\ndns:\n  enhanced-mode: redir-host\n  nameserver: [192.0.2.53]\n", nil},
+	} {
+		document, err := renderTun(test.profile, config.Snapshot{Tun: config.Tun{Enabled: true, Stack: core.TunStackGVisor, DNSMode: core.TunDNSProfile}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		section, _ := document["dns"].(map[string]any)
+		if got := section["fake-ip-range6"]; got != test.want {
+			t.Fatalf("%q fake-ip-range6 = %v, want %v", test.profile, got, test.want)
+		}
+	}
+}
+
+func TestRenderTunRejectsResolverInsideFakeIPRange(t *testing.T) {
+	tun := config.Tun{Enabled: true, Stack: core.TunStackGVisor, DNSMode: core.TunDNSFakeIP}
+	for _, profile := range []string{
+		"dns:\n  nameserver: [198.18.0.53]\n",
+		"dns:\n  nameserver: [192.0.2.53]\n  default-nameserver: ['198.18.0.53:53']\n",
+		"dns:\n  nameserver: [192.0.2.53]\n  fallback: ['tls://198.18.0.53:853']\n",
+		"dns:\n  nameserver: [192.0.2.53]\n  nameserver-policy:\n    '+.example.com': 'https://198.18.0.53/dns-query'\n",
+		"dns:\n  nameserver: [192.0.2.53]\n  nameserver-policy:\n    '+.example.com': ['192.0.2.53', '198.18.0.53#DIRECT']\n",
+		"dns:\n  fake-ip-range: 198.19.0.1/16\n  nameserver: [198.19.255.1]\n",
+		"ipv6: true\ndns:\n  nameserver: ['https://[2001:2::53]/dns-query']\n",
+	} {
+		if _, err := renderTun(profile, config.Snapshot{Tun: tun}); err == nil || !strings.Contains(err.Error(), "fake-ip range") {
+			t.Fatalf("resolver inside the fake-ip range: %q error = %v", profile, err)
+		}
+	}
+	routed := config.Snapshot{Tun: tun, DNS: config.DNS{
+		ResolverSets: []config.ResolverSet{{ID: "local", Endpoints: []string{"udp://198.18.0.9:53"}}},
+		Routes:       []config.DNSRoute{{Suffix: "example.com", ResolverSet: "local"}},
+	}}
+	if _, err := renderTun(tunDNS, routed); err == nil || !strings.Contains(err.Error(), "fake-ip range") {
+		t.Fatal("accepted DNS route resolver inside the fake-ip range")
+	}
+	redirHost := config.Snapshot{Tun: config.Tun{Enabled: true, Stack: core.TunStackGVisor, DNSMode: core.TunDNSRedirHost}}
+	if _, err := renderTun("dns:\n  nameserver: [198.18.0.53]\n", redirHost); err != nil {
+		t.Fatalf("redir-host has no fake-ip range but rejected resolver: %v", err)
+	}
+}
+
+func TestRenderTunOffIsUnchanged(t *testing.T) {
+	profile := []byte(tunProfile + "tun:\n  enable: false\n  stack: system\ndns:\n  enable: false\n  enhanced-mode: redir-host\n  nameserver: [198.18.0.53]\n")
+	controller := ControllerSettings{Address: "127.0.0.1:9090", Secret: "secret"}
+	today, err := Render(profile, config.Snapshot{}, nil, controller, Capability{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	off := config.Snapshot{Tun: config.Tun{Stack: core.TunStackMixed, DNSMode: core.TunDNSFakeIP}}
+	got, err := Render(profile, off, nil, controller, Capability{SupportsTUN: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, today) {
+		t.Fatalf("disabled TUN changed output:\n%s\nwant:\n%s", got, today)
+	}
+}
+
+func TestExplainOverridesReportsTunKeysOnlyWhenChanged(t *testing.T) {
+	tunKeys := []string{"tun", "dns.enable", "dns.enhanced-mode", "dns.fake-ip-range", "dns.fake-ip-range6", "dns.fake-ip-filter"}
+	reported := func(t *testing.T, profile string) map[string]string {
+		t.Helper()
+		source := []byte(tunProfile + profile)
+		generated, err := Render(source, config.Snapshot{Tun: config.Tun{Enabled: true, Stack: core.TunStackGVisor, DNSMode: core.TunDNSFakeIP}}, nil, ControllerSettings{Address: "127.0.0.1:9090", Secret: "secret"}, Capability{SupportsTUN: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		overrides, err := ExplainOverrides(source, generated)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := make(map[string]string)
+		for _, override := range overrides {
+			if slices.Contains(tunKeys, override.Key) {
+				got[override.Key] = override.Change
+			}
+		}
+		return got
+	}
+	if got, want := reported(t, tunDNS), map[string]string{"tun": "added", "dns.enable": "added", "dns.enhanced-mode": "added", "dns.fake-ip-range": "added", "dns.fake-ip-filter": "added"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("overrides from empty DNS = %v, want %v", got, want)
+	}
+	complete := "ipv6: true\ntun:\n  enable: false\ndns:\n  enable: true\n  enhanced-mode: fake-ip\n  fake-ip-range: 198.19.0.1/16\n  fake-ip-range6: 2001:db8::/64\n  fake-ip-filter: [+.example.com]\n  nameserver: [192.0.2.53]\n"
+	if got, want := reported(t, complete), map[string]string{"tun": "replaced"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("overrides from complete fake-ip DNS = %v, want %v", got, want)
 	}
 }

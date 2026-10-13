@@ -32,6 +32,10 @@ func newRuntimeServiceWithResponseCapture(configDir, stateDir string, initial co
 	if err != nil {
 		return nil, err
 	}
+	grant, err := newTunGrant(stateDir)
+	if err != nil {
+		return nil, err
+	}
 	s := &runtimeService{
 		configDir: configDir, stateDir: stateDir, store: config.NewStore(initial), proxy: sysproxy.NewManager(),
 		intents: make(chan ipc.Command, intentQueueSize), changes: make(chan config.Change, 1), batches: make(chan monitor.Batch, 1),
@@ -40,7 +44,8 @@ func newRuntimeServiceWithResponseCapture(configDir, stateDir string, initial co
 		secret: hex.EncodeToString(secret), controllerAddress: fmt.Sprintf("127.0.0.1:%d", controllerPort), proxyPort: proxyPort,
 		groups: make(map[string]mihomo.Group), proxies: make(map[string]string), automation: make(map[string]bool),
 		lastSwitch: make(map[string]time.Time), manualOverride: make(map[string]bool), notifications: make(chan time.Duration, 1),
-		improvementNotifications: make(chan struct{}, 1), notify: notifyDesktop, notificationDone: make(chan struct{}),
+		improvementNotifications: make(chan struct{}, 1), testNotifications: make(chan struct{}, 1), notify: notifyDesktop, notificationDone: make(chan struct{}),
+		tun: grant,
 	}
 	for _, id := range initial.Monitor.AutomatedGroups {
 		s.automation[id] = true

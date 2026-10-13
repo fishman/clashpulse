@@ -40,6 +40,12 @@ other = "无法设置系统代理"
 ["system proxy is unsupported in this desktop environment"]
 other = "当前桌面环境不支持系统代理"
 
+["TUN privilege is not granted for the selected Mihomo binary"]
+other = "所选 Mihomo 程序尚未获得 TUN 权限"
+
+["Mihomo did not start the TUN interface"]
+other = "Mihomo 未能启动 TUN 网卡"
+
 ["private activation state could not be committed"]
 other = "无法保存本地启用状态"
 

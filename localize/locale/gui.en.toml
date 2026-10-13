@@ -4,6 +4,9 @@ other = "Mihomo binary"
 ["gui.settings.section.System Proxy"]
 other = "System Proxy"
 
+["gui.settings.section.TUN"]
+other = "TUN"
+
 ["gui.settings.section.Monitor"]
 other = "Monitor"
 

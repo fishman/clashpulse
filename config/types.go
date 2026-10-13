@@ -7,6 +7,7 @@ type Snapshot struct {
 	Mihomo        Mihomo
 	Monitor       Monitor
 	DNS           DNS
+	Tun           Tun
 	Subscriptions []Subscription
 	Resources     []Resource
 	Filters       []Filter
@@ -18,6 +19,14 @@ type App struct {
 
 type SystemProxy struct {
 	Enabled bool
+}
+
+// Tun is user intent for Mihomo's TUN inbound; [tun] in config.toml. Stack and
+// DNSMode take the core.TunStacks and core.TunDNSModes values.
+type Tun struct {
+	Enabled bool
+	Stack   string
+	DNSMode string
 }
 
 type Mihomo struct {
@@ -37,6 +46,9 @@ type Monitor struct {
 	Threshold             time.Duration
 	AlertThreshold        time.Duration
 	ConsecutiveBadSamples int
+	WindowSize            int
+	MinCandidateSamples   int
+	MaxFailures           int
 	MinImprovement        time.Duration
 	Cooldown              time.Duration
 	Jitter                time.Duration

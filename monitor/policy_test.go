@@ -343,3 +343,117 @@ func TestDefaultPolicyUsesApprovedHTTPProbeURL(t *testing.T) {
 		t.Fatal("probe URL credentials accepted")
 	}
 }
+
+func failedSample(policy Policy, group, proxy string, at int64) Sample {
+	sample := testSample(policy, group, proxy, 0, at)
+	sample.Outcome = OutcomeTimeout
+	return sample
+}
+
+// flaky alternates fast successes with failures: never three failures in a
+// row, but two failures in every five probes.
+func flaky(policy Policy, proxy string, latency time.Duration) []Sample {
+	return []Sample{
+		testSample(policy, "auto", proxy, latency, 1),
+		failedSample(policy, "auto", proxy, 2),
+		testSample(policy, "auto", proxy, latency, 3),
+		failedSample(policy, "auto", proxy, 4),
+		testSample(policy, "auto", proxy, latency, 5),
+	}
+}
+
+func steady(policy Policy, proxy string, latency time.Duration) []Sample {
+	var samples []Sample
+	for i := int64(1); i <= 5; i++ {
+		samples = append(samples, testSample(policy, "auto", proxy, latency, i))
+	}
+	return samples
+}
+
+func TestDecideFailsOverFromIntermittentlyFailingSelected(t *testing.T) {
+	policy := testPolicy()
+	samples := append(flaky(policy, "alpha", 80*time.Millisecond), steady(policy, "beta", 300*time.Millisecond)...)
+	decision := Decide(policy, testGroup(), samples, time.Unix(6, 0))
+	if !decision.Switch || decision.New != "beta" || decision.LowerLatency {
+		t.Fatalf("fast node failing two of five probes was kept: %+v", decision)
+	}
+
+	policy.MaxFailures = 3
+	if decision := Decide(policy, testGroup(), samples, time.Unix(6, 0)); decision.Switch || decision.Reason != ReasonSelectedHealthy {
+		t.Fatalf("failures below max_failures moved the selected node: %+v", decision)
+	}
+}
+
+func TestDecideDoesNotLeaveUnstableSelectedForEquallyUnstableCandidate(t *testing.T) {
+	policy := testPolicy()
+	samples := append(flaky(policy, "alpha", 300*time.Millisecond), flaky(policy, "beta", 80*time.Millisecond)...)
+	if decision := Decide(policy, testGroup(), samples, time.Unix(6, 0)); decision.Switch {
+		t.Fatalf("switched between equally unstable nodes: %+v", decision)
+	}
+}
+
+func TestDecidePrefersStableCandidateOverFasterFlakyOne(t *testing.T) {
+	policy := testPolicy()
+	state := testGroup()
+	state.Proxies = []string{"alpha", "beta", "gamma"}
+	samples := []Sample{
+		failedSample(policy, "auto", "alpha", 3),
+		failedSample(policy, "auto", "alpha", 4),
+		failedSample(policy, "auto", "alpha", 5),
+	}
+	samples = append(samples, flaky(policy, "beta", 80*time.Millisecond)...)
+	samples = append(samples, steady(policy, "gamma", 300*time.Millisecond)...)
+	decision := Decide(policy, state, samples, time.Unix(6, 0))
+	if !decision.Switch || decision.New != "gamma" {
+		t.Fatalf("faster candidate with failures outranked a stable one: %+v", decision)
+	}
+}
+
+func TestDecideLowestLatencyKeepsStableSelectedOverFasterFlakyCandidate(t *testing.T) {
+	policy := testPolicy()
+	policy.SwitchPolicy = SwitchLowestLatency
+	samples := append(steady(policy, "alpha", 400*time.Millisecond), flaky(policy, "beta", 80*time.Millisecond)...)
+	if decision := Decide(policy, testGroup(), samples, time.Unix(6, 0)); decision.Switch {
+		t.Fatalf("lowest_latency traded a stable node for a flaky one: %+v", decision)
+	}
+}
+
+func TestStabilityReportsFailuresMedianAndJitter(t *testing.T) {
+	policy := testPolicy()
+	samples := []Sample{
+		testSample(policy, "auto", "alpha", 100*time.Millisecond, 1),
+		testSample(policy, "auto", "alpha", 120*time.Millisecond, 2),
+		failedSample(policy, "auto", "alpha", 3),
+		testSample(policy, "auto", "alpha", 140*time.Millisecond, 4),
+		testSample(policy, "auto", "alpha", 500*time.Millisecond, 5),
+		testSample(policy, "auto", "alpha", 900*time.Millisecond, 0), // oldest; outside the window
+	}
+	got := MeasureStability(samples, policy.WindowSize)
+	want := Stability{Samples: 5, Failures: 1, Median: 130 * time.Millisecond, Jitter: 20 * time.Millisecond}
+	if got != want {
+		t.Fatalf("stability = %+v, want %+v", got, want)
+	}
+}
+
+func TestPolicyValidatesStabilityWindow(t *testing.T) {
+	for name, mutate := range map[string]func(*Policy){
+		"zero max failures":        func(p *Policy) { p.MaxFailures = 0 },
+		"max failures over window": func(p *Policy) { p.MaxFailures = p.WindowSize + 1 },
+	} {
+		policy := testPolicy()
+		mutate(&policy)
+		if err := policy.Validate(); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+}
+
+func TestDecideSlowSteadySelectedFailsOverToCandidateWithOneTimeout(t *testing.T) {
+	policy := testPolicy()
+	samples := append(steady(policy, "alpha", 900*time.Millisecond), steady(policy, "beta", 200*time.Millisecond)...)
+	samples[6] = failedSample(policy, "auto", "beta", 2)
+	decision := Decide(policy, testGroup(), samples, time.Unix(6, 0))
+	if !decision.Switch || decision.New != "beta" {
+		t.Fatalf("one timeout below max_failures blocked failover from a slow node: %+v", decision)
+	}
+}

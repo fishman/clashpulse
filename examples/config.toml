@@ -1,5 +1,5 @@
 # ClashPulse user intent. Save all four files together in the private config dir.
-# Defaults: system Mihomo, enabled health monitoring, disabled system proxy, loopback DNS.
+# Defaults: system Mihomo, enabled health monitoring, disabled system proxy and TUN, loopback DNS.
 [mihomo]
 binary = "system" # "bundled" is explicit fallback; or an executable path.
 # Delay settings for the url-test and fallback groups of the generated profile.
@@ -17,7 +17,10 @@ timeout = "5s"
 concurrency = 3 # Hard upper bound: 64 concurrent controller probes.
 threshold = "800ms" # Selected proxy latency threshold for automatic switching.
 alert_threshold = "250ms" # Notify only if all measured candidates exceed this.
-consecutive_bad_samples = 3
+window_size = 5 # Probes kept per node (2-20); the median, jitter, and failure count shown per node cover this window.
+consecutive_bad_samples = 3 # Bad probes of the selected node before failover; at most window_size.
+min_candidate_samples = 3 # Successful probes a candidate needs in the window before it can be chosen; 2 to window_size.
+max_failures = 2 # Failed probes in the window that mark the selected node unstable; 1 to window_size. This many Mihomo dial failures in a probed group also probe it early, at most every 15s.
 min_improvement = "100ms"
 cooldown = "5m"
 jitter = "10s" # Spreads each round so every probe does not fire at once.
@@ -28,3 +31,9 @@ listen = "127.0.0.1:1053" # No privileged port or system DNS redirect is enabled
 
 [system_proxy]
 enabled = false # Applied only after Mihomo controller and proxy are ready.
+
+[tun]
+enabled = false # Linux only. Routes all host traffic through Mihomo's TUN device clashpulse0.
+# Enabling grants cap_net_admin to a private Mihomo copy with one pkexec prompt; without a polkit agent, run the shown `sudo setcap` command.
+stack = "gvisor" # gvisor | mixed | system
+dns_mode = "profile" # profile keeps the profile's DNS mode (fake-ip if unset); fake-ip | redir-host force it.

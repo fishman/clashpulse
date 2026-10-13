@@ -167,3 +167,97 @@ func TestProcessExitedRemainsObservableAfterRapidExit(t *testing.T) {
 		t.Fatal("completed child exit signal was discarded")
 	}
 }
+
+// trappingChild starts a fake Mihomo that records each SIGTERM in the returned
+// file and exits on it only when exitOnTerm is set.
+func trappingChild(t *testing.T, ctx context.Context, process *Process, exitOnTerm bool) string {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skip("fake executable requires POSIX shell")
+	}
+	dir := t.TempDir()
+	ready, term := filepath.Join(dir, "ready"), filepath.Join(dir, "term")
+	exit := ""
+	if exitOnTerm {
+		exit = "; exit 0"
+	}
+	binary := filepath.Join(dir, "mihomo")
+	script := fmt.Sprintf("#!/bin/sh\ntrap 'echo term >> %q%s' TERM\n: > %q\nwhile :; do sleep 1 & wait $!; done\n", term, exit, ready)
+	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := process.Start(ctx, StartPlan{Capability: Capability{Path: binary}, ConfigPath: "/tmp/config.yaml"}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = process.Stop(context.Background()) })
+	for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		if _, err := os.Stat(ready); err == nil {
+			return term
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("fake mihomo did not install its TERM trap")
+		}
+	}
+}
+
+func receivedTerm(t *testing.T, term string) {
+	t.Helper()
+	if body, err := os.ReadFile(term); err != nil || len(body) == 0 {
+		t.Fatalf("child was not sent SIGTERM: %v", err)
+	}
+}
+
+func TestProcessStopTerminatesGracefully(t *testing.T) {
+	process := new(Process)
+	term := trappingChild(t, context.Background(), process, true)
+	started := time.Now()
+	if err := process.Stop(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(started); elapsed >= stopGrace {
+		t.Fatalf("graceful child was only stopped by escalation after %v", elapsed)
+	}
+	receivedTerm(t, term)
+}
+
+func TestProcessStopKillsChildIgnoringTermAfterGrace(t *testing.T) {
+	process := &Process{grace: 100 * time.Millisecond}
+	term := trappingChild(t, context.Background(), process, false)
+	started := time.Now()
+	if err := process.Stop(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(started); elapsed < process.grace {
+		t.Fatalf("child was killed after %v, before its grace", elapsed)
+	}
+	receivedTerm(t, term)
+}
+
+func TestProcessStopHonorsContextDuringGrace(t *testing.T) {
+	process := &Process{grace: time.Minute}
+	trappingChild(t, context.Background(), process, false)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if err := process.Stop(ctx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Stop() error = %v, want deadline", err)
+	}
+	select {
+	case <-process.Exited():
+	case <-time.After(2 * time.Second):
+		t.Fatal("canceled stop left the child running")
+	}
+}
+
+func TestProcessContextCancellationTerminatesGracefully(t *testing.T) {
+	process := &Process{grace: 100 * time.Millisecond}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	term := trappingChild(t, ctx, process, false)
+	cancel()
+	select {
+	case <-process.Exited():
+	case <-time.After(2 * time.Second):
+		t.Fatal("canceled child ignoring SIGTERM was never killed")
+	}
+	receivedTerm(t, term)
+}

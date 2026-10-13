@@ -12,6 +12,7 @@ import (
 func TestCommandValidationBoundsIdentifiersAndSettings(t *testing.T) {
 	validCommands := []Command{
 		{Kind: CommandStart},
+		{Kind: CommandTestNotification},
 		{Kind: CommandUpdateConfiguration, Config: &ConfigPatch{MonitorEnabled: new(true)}},
 		{Kind: CommandManualProbe, GroupID: "main"},
 		{Kind: CommandSelectGroup, GroupID: "main", ChoiceID: "proxy-a"},
@@ -32,6 +33,8 @@ func TestCommandValidationBoundsIdentifiersAndSettings(t *testing.T) {
 		{Kind: CommandRefreshSubscription, SubscriptionID: "https://secret.invalid/profile"},
 		{Kind: CommandRefreshResource, ResourceID: "resource", FilterID: "filter"},
 		{Kind: CommandUpdateConfiguration, Config: &ConfigPatch{MonitorIntervalSeconds: new(uint32(86401))}},
+		{Kind: CommandTestNotification, GroupID: "main"},
+		{Kind: CommandTestNotification, Config: &ConfigPatch{MonitorEnabled: new(true)}},
 	}
 	for _, command := range invalidCommands {
 		if err := command.validate(); err == nil {
@@ -130,6 +133,122 @@ func TestMonitorPolicyPatchBoundsControlInputs(t *testing.T) {
 			t.Fatalf("invalid concurrency %d accepted", value)
 		}
 	}
+	for name, patch := range map[string]ConfigPatch{
+		"window 2":       {MonitorWindowSize: new(uint32(2))},
+		"window 20":      {MonitorWindowSize: new(uint32(20))},
+		"candidates 2":   {MonitorMinCandidateSamples: new(uint32(2))},
+		"candidates 20":  {MonitorMinCandidateSamples: new(uint32(20))},
+		"failures 1":     {MonitorMaxFailures: new(uint32(1))},
+		"failures 20":    {MonitorMaxFailures: new(uint32(20))},
+		"bad samples 20": {MonitorConsecutiveBadSamples: new(uint32(20))},
+		"failover only":  {MonitorSwitchPolicy: new("failover")},
+		"lowest latency": {MonitorSwitchPolicy: new("lowest_latency")},
+		"url-test only":  {URLTestIntervalSeconds: new(uint32(60))},
+		"tolerance only": {URLTestToleranceMillis: new(uint32(50))},
+	} {
+		if err := (Command{Kind: CommandUpdateConfiguration, Config: &patch}).validate(); err != nil {
+			t.Errorf("%s rejected: %v", name, err)
+		}
+	}
+	for name, patch := range map[string]ConfigPatch{
+		"window 1":       {MonitorWindowSize: new(uint32(1))},
+		"window 21":      {MonitorWindowSize: new(uint32(21))},
+		"candidates 1":   {MonitorMinCandidateSamples: new(uint32(1))},
+		"candidates 21":  {MonitorMinCandidateSamples: new(uint32(21))},
+		"failures 0":     {MonitorMaxFailures: new(uint32(0))},
+		"failures 21":    {MonitorMaxFailures: new(uint32(21))},
+		"bad samples 0":  {MonitorConsecutiveBadSamples: new(uint32(0))},
+		"bad samples 21": {MonitorConsecutiveBadSamples: new(uint32(21))},
+		"unknown policy": {MonitorSwitchPolicy: new("fastest")},
+		"empty policy":   {MonitorSwitchPolicy: new("")},
+		"empty patch":    {},
+	} {
+		if err := (Command{Kind: CommandUpdateConfiguration, Config: &patch}).validate(); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+}
+
+func TestSnapshotBoundsProxyStability(t *testing.T) {
+	valid := []core.ProxySnapshot{
+		{ID: "a"},
+		{ID: "a", Samples: 20, Failures: 20},
+		{ID: "a", Samples: 5, Failures: 1, MedianMillis: 130, JitterMillis: 20},
+	}
+	for _, proxy := range valid {
+		if err := validateSnapshot(core.Snapshot{Proxies: []core.ProxySnapshot{proxy}}); err != nil {
+			t.Errorf("valid stability %+v rejected: %v", proxy, err)
+		}
+	}
+	invalid := []core.ProxySnapshot{
+		{ID: "a", Samples: 21, Failures: 0},
+		{ID: "a", Samples: 3, Failures: 4},
+		{ID: "a", Samples: -1},
+		{ID: "a", Samples: 2, Failures: -1},
+		{ID: "a", Samples: 2, MedianMillis: -1},
+		{ID: "a", Samples: 2, JitterMillis: -1},
+	}
+	for _, proxy := range invalid {
+		if err := validateSnapshot(core.Snapshot{Proxies: []core.ProxySnapshot{proxy}}); err == nil {
+			t.Errorf("invalid stability %+v accepted", proxy)
+		}
+	}
+}
+
+func TestTunPatchAndAuthorizeCommandValidation(t *testing.T) {
+	for name, command := range map[string]Command{
+		"authorize":      {Kind: CommandAuthorizeTun},
+		"enable only":    {Kind: CommandUpdateConfiguration, Config: &ConfigPatch{TunEnabled: new(false)}},
+		"stack gvisor":   {Kind: CommandUpdateConfiguration, Config: &ConfigPatch{TunStack: new("gvisor")}},
+		"stack mixed":    {Kind: CommandUpdateConfiguration, Config: &ConfigPatch{TunStack: new("mixed")}},
+		"stack system":   {Kind: CommandUpdateConfiguration, Config: &ConfigPatch{TunStack: new("system")}},
+		"dns profile":    {Kind: CommandUpdateConfiguration, Config: &ConfigPatch{TunDNSMode: new("profile")}},
+		"dns fake-ip":    {Kind: CommandUpdateConfiguration, Config: &ConfigPatch{TunDNSMode: new("fake-ip")}},
+		"dns redir-host": {Kind: CommandUpdateConfiguration, Config: &ConfigPatch{TunDNSMode: new("redir-host")}},
+	} {
+		if err := command.validate(); err != nil {
+			t.Errorf("%s rejected: %v", name, err)
+		}
+	}
+	for name, command := range map[string]Command{
+		"authorize with patch": {Kind: CommandAuthorizeTun, Config: &ConfigPatch{TunEnabled: new(true)}},
+		"authorize with group": {Kind: CommandAuthorizeTun, GroupID: "main"},
+		"unknown stack":        {Kind: CommandUpdateConfiguration, Config: &ConfigPatch{TunStack: new("lwip")}},
+		"empty stack":          {Kind: CommandUpdateConfiguration, Config: &ConfigPatch{TunStack: new("")}},
+		"unknown dns mode":     {Kind: CommandUpdateConfiguration, Config: &ConfigPatch{TunDNSMode: new("normal")}},
+		"empty dns mode":       {Kind: CommandUpdateConfiguration, Config: &ConfigPatch{TunDNSMode: new("")}},
+	} {
+		if err := command.validate(); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+}
+
+func TestSnapshotBoundsTunState(t *testing.T) {
+	valid := core.TunSnapshot{Enabled: true, Stack: "gvisor", DNSMode: "profile", Privilege: core.TunPrivilegeNoAgent, PrivilegedPath: "/tmp/clashpulse/tun/mihomo", Device: "clashpulse0", LastFailure: core.ActivationTunStart.Message()}
+	for _, tun := range []core.TunSnapshot{{}, valid} {
+		if err := validateSnapshot(core.Snapshot{Tun: tun}); err != nil {
+			t.Errorf("valid tun %+v rejected: %v", tun, err)
+		}
+	}
+	for name, mutate := range map[string]func(*core.TunSnapshot){
+		"unknown stack":     func(s *core.TunSnapshot) { s.Stack = "lwip" },
+		"unknown dns mode":  func(s *core.TunSnapshot) { s.DNSMode = "normal" },
+		"unknown privilege": func(s *core.TunSnapshot) { s.Privilege = "root" },
+		"relative path":     func(s *core.TunSnapshot) { s.PrivilegedPath = "tun/mihomo" },
+		"path newline":      func(s *core.TunSnapshot) { s.PrivilegedPath = "/tmp/mihomo\nsudo" },
+		"long path":         func(s *core.TunSnapshot) { s.PrivilegedPath = "/" + strings.Repeat("a", 4096) },
+		"device newline":    func(s *core.TunSnapshot) { s.Device = "clashpulse0\n" },
+		"long device":       func(s *core.TunSnapshot) { s.Device = strings.Repeat("a", 16) },
+		"failure newline":   func(s *core.TunSnapshot) { s.LastFailure = "failed\nprivate" },
+		"long failure":      func(s *core.TunSnapshot) { s.LastFailure = strings.Repeat("x", 161) },
+	} {
+		tun := valid
+		mutate(&tun)
+		if err := validateSnapshot(core.Snapshot{Tun: tun}); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
 }
 
 func TestDNSRoutingEditIsScopedAndUsesTypedResolverSets(t *testing.T) {
@@ -196,6 +315,25 @@ func TestConfigOverrideSnapshotRejectsPrivateValues(t *testing.T) {
 		if err == nil || strings.Contains(err.Error(), "private") || strings.Contains(err.Error(), "secret.invalid") {
 			t.Fatalf("unsafe override passed or leaked: %v", err)
 		}
+	}
+}
+
+func TestConfigOverrideSnapshotAcceptsEveryReportedField(t *testing.T) {
+	var overrides []core.ConfigOverrideSnapshot
+	for _, key := range []string{
+		"mixed-port", "port", "socks-port", "external-controller", "secret", "allow-lan", "bind-address",
+		"dns.listen", "external-controller-tls", "external-controller-cors", "external-ui", "dns.nameserver-policy",
+		"rule-providers", "proxy-groups", "rules",
+		"tun", "dns.enable", "dns.enhanced-mode", "dns.fake-ip-range", "dns.fake-ip-range6", "dns.fake-ip-filter",
+	} {
+		overrides = append(overrides, core.ConfigOverrideSnapshot{Key: key, Change: "replaced"})
+	}
+	if err := validateSnapshot(core.Snapshot{ConfigOverrides: overrides}); err != nil {
+		t.Fatalf("full override report rejected: %v", err)
+	}
+	overrides = append(overrides, overrides[0])
+	if validateSnapshot(core.Snapshot{ConfigOverrides: overrides}) == nil {
+		t.Fatal("override report beyond the reported field set accepted")
 	}
 }
 func TestReadFrameRejectsOversizedLengthBeforeBody(t *testing.T) {

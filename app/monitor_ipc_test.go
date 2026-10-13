@@ -32,20 +32,30 @@ func TestIPCMonitorPolicyPatchPreservesMillisecondTimeout(t *testing.T) {
 	timeout := uint32(750)
 	concurrency := uint32(2)
 	cooldown := uint32(0)
+	window, candidates, failures := uint32(8), uint32(4), uint32(3)
+	policy := "lowest_latency"
 	request, stop := context.WithTimeout(ctx, time.Second)
-	_, err := client.Send(request, ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{MonitorTimeoutMillis: &timeout, MonitorConcurrency: &concurrency, MonitorCooldownSeconds: &cooldown}})
+	_, err := client.Send(request, ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{MonitorTimeoutMillis: &timeout, MonitorConcurrency: &concurrency, MonitorCooldownSeconds: &cooldown, MonitorWindowSize: &window, MonitorMinCandidateSamples: &candidates, MonitorMaxFailures: &failures}})
 	stop()
 	if err != nil {
 		t.Fatal(err)
 	}
 	snapshot := waitAppSnapshot(t, ctx, client, func(s core.Snapshot) bool {
-		return s.Monitor.TimeoutMillis == 750 && s.Monitor.Concurrency == 2 && s.Monitor.CooldownSeconds == 0 && len(s.Jobs) == 0
+		return s.Monitor.TimeoutMillis == 750 && s.Monitor.Concurrency == 2 && s.Monitor.CooldownSeconds == 0 && s.Monitor.WindowSize == 8 && s.Monitor.MinCandidateSamples == 4 && s.Monitor.MaxFailures == 3 && len(s.Jobs) == 0
 	})
 	if len(snapshot.Errors) != 0 {
 		t.Fatalf("monitor policy reported error: %+v", snapshot.Errors)
 	}
 	stored, err := config.Load(configDir)
-	if err != nil || stored.Monitor.Timeout != 750*time.Millisecond || stored.Monitor.Concurrency != 2 || stored.Monitor.Cooldown != 0 {
+	if err != nil || stored.Monitor.Timeout != 750*time.Millisecond || stored.Monitor.Concurrency != 2 || stored.Monitor.Cooldown != 0 || stored.Monitor.WindowSize != 8 || stored.Monitor.MinCandidateSamples != 4 || stored.Monitor.MaxFailures != 3 {
 		t.Fatalf("monitor policy did not persist: %+v, %v", stored.Monitor, err)
 	}
+	// A patch carrying only the switch policy was once rejected as empty.
+	request, stop = context.WithTimeout(ctx, time.Second)
+	_, err = client.Send(request, ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{MonitorSwitchPolicy: &policy}})
+	stop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitAppSnapshot(t, ctx, client, func(s core.Snapshot) bool { return s.Monitor.SwitchPolicy == policy && len(s.Jobs) == 0 })
 }

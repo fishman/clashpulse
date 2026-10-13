@@ -23,6 +23,7 @@ type Capability struct {
 	SupportsGeoIPDat   bool
 	SupportsGeoSiteDat bool
 	SupportsMMDB       bool
+	SupportsTUN        bool
 }
 
 func Resolve(selection Selection) (string, error) {
@@ -68,25 +69,26 @@ func Inspect(ctx context.Context, selection Selection) (Capability, error) {
 	if err := exec.CommandContext(ctx, path, "-t", "-f", check).Run(); err != nil {
 		return Capability{}, fmt.Errorf("inspect mihomo: configuration check unsupported: %w", err)
 	}
-	geo := documentedGeodataVersion(version)
-	return Capability{Path: path, Version: version, SupportsGeoIPDat: geo, SupportsGeoSiteDat: geo, SupportsMMDB: geo}, nil
+	documented := documentedVersion(version)
+	return Capability{Path: path, Version: version, SupportsGeoIPDat: documented, SupportsGeoSiteDat: documented, SupportsMMDB: documented, SupportsTUN: documented}, nil
 }
 
 // Mihomo prints "Mihomo Meta 1.19.30 ... with go1.26.6"; the leading v is
 // optional and the anchor keeps the Go toolchain version from matching.
 var mihomoVersion = regexp.MustCompile(`(?:^|\s)v?(\d+)\.(\d+)\.(\d+)\b`)
 
-// ponytail: geoip.dat, geosite.dat, and Country.mmdb ship in every Mihomo
-// release, so this is a floor, not a pin. An exact-build check rejected working
-// binaries (1.19.30 failed a 1.19.31 pin) and would reject every later release.
-var minimumGeodataVersion = [3]int{1, 19, 0}
+// ponytail: geoip.dat, geosite.dat, Country.mmdb, and the gvisor, mixed, and
+// system TUN stacks ship in every Mihomo release, so this is a floor, not a
+// pin. An exact-build check rejected working binaries (1.19.30 failed a
+// 1.19.31 pin) and would reject every later release.
+var minimumDocumentedVersion = [3]int{1, 19, 0}
 
-func documentedGeodataVersion(identity string) bool {
+func documentedVersion(identity string) bool {
 	parts := mihomoVersion.FindStringSubmatch(identity)
 	if len(parts) != 4 {
 		return false
 	}
-	for i, floor := range minimumGeodataVersion {
+	for i, floor := range minimumDocumentedVersion {
 		value, err := strconv.Atoi(parts[i+1])
 		if err != nil {
 			return false

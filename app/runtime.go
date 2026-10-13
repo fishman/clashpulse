@@ -90,8 +90,16 @@ type runtimeService struct {
 	manualOverride            map[string]bool
 	notifications             chan time.Duration
 	improvementNotifications  chan struct{}
+	testNotifications         chan struct{}
 	notify                    func(desktopNotification) error
 	notificationDone          chan struct{}
+	tun                       tunGrant
+	tunHold                   bool
+	tunActive                 bool
+	tunPrepareRequested       bool
+	tunLeftover               bool
+	tunPrivilege              string
+	tunFailure                string
 }
 
 // RunAt hosts the single lifecycle owner; both desktop and terminal clients use IPC.
@@ -323,6 +331,7 @@ func (s *runtimeService) stateSnapshot() core.Snapshot {
 		IntervalSeconds:        int64(settings.Monitor.Interval.Seconds()), TimeoutMillis: settings.Monitor.Timeout.Milliseconds(),
 		Concurrency: settings.Monitor.Concurrency, ThresholdMillis: settings.Monitor.Threshold.Milliseconds(),
 		AlertThresholdMillis: settings.Monitor.AlertThreshold.Milliseconds(), ConsecutiveBadSamples: settings.Monitor.ConsecutiveBadSamples,
+		WindowSize: settings.Monitor.WindowSize, MinCandidateSamples: settings.Monitor.MinCandidateSamples, MaxFailures: settings.Monitor.MaxFailures,
 		MinImprovementMillis: settings.Monitor.MinImprovement.Milliseconds(), CooldownSeconds: int64(settings.Monitor.Cooldown.Seconds()),
 		JitterMillis: settings.Monitor.Jitter.Milliseconds(),
 	}
@@ -336,6 +345,7 @@ func (s *runtimeService) stateSnapshot() core.Snapshot {
 		state.DNS.Routes = append(state.DNS.Routes, core.DNSRouteSnapshot{Suffix: route.Suffix, GeoSite: route.GeoSite, Resource: route.Resource, ResolverSet: route.ResolverSet})
 	}
 	state.SystemProxy = core.SystemProxySnapshot{Enabled: settings.App.SystemProxy.Enabled, Active: s.proxyActive}
+	state.Tun = s.tunSnapshot(settings.Tun)
 	state.Binary.Desired = settings.Mihomo.Binary
 	state.Binary.ObservedVersion = s.cap.Version
 	state.Binary.Capabilities = nil
@@ -485,6 +495,9 @@ func (s *runtimeService) reportErrorScoped(kind, sourceID string, err error) {
 	}
 	if kind == "notification" {
 		message = "desktop notification unavailable"
+	}
+	if errors.Is(err, errTunNotEnabled) {
+		message = errTunNotEnabled.Error()
 	}
 	failure := core.ErrorSnapshot{Kind: kind, SourceID: sourceID, Key: kind, Message: message}
 	if message == "operation failed" && (kind == "config" || kind == "config_reload" || kind == "reload_configuration" || kind == "update_configuration" || kind == "set_dns_routing" || kind == "delete_subscription" || strings.HasPrefix(kind, "put_")) {
