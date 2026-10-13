@@ -13,6 +13,7 @@ func TestCommandValidationBoundsIdentifiersAndSettings(t *testing.T) {
 	validCommands := []Command{
 		{Kind: CommandStart},
 		{Kind: CommandTestNotification},
+		{Kind: CommandSetAutoFastest, Automation: &AutomationSetting{Enabled: true}},
 		{Kind: CommandUpdateConfiguration, Config: &ConfigPatch{MonitorEnabled: new(true)}},
 		{Kind: CommandManualProbe, GroupID: "main"},
 		{Kind: CommandSelectGroup, GroupID: "main", ChoiceID: "proxy-a"},
@@ -35,6 +36,8 @@ func TestCommandValidationBoundsIdentifiersAndSettings(t *testing.T) {
 		{Kind: CommandUpdateConfiguration, Config: &ConfigPatch{MonitorIntervalSeconds: new(uint32(86401))}},
 		{Kind: CommandTestNotification, GroupID: "main"},
 		{Kind: CommandTestNotification, Config: &ConfigPatch{MonitorEnabled: new(true)}},
+		{Kind: CommandSetAutoFastest},
+		{Kind: CommandSetAutoFastest, GroupID: "main", Automation: &AutomationSetting{Enabled: true}},
 	}
 	for _, command := range invalidCommands {
 		if err := command.validate(); err == nil {

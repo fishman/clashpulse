@@ -334,6 +334,7 @@ func (s *runtimeService) stateSnapshot() core.Snapshot {
 		WindowSize: settings.Monitor.WindowSize, MinCandidateSamples: settings.Monitor.MinCandidateSamples, MaxFailures: settings.Monitor.MaxFailures,
 		MinImprovementMillis: settings.Monitor.MinImprovement.Milliseconds(), CooldownSeconds: int64(settings.Monitor.Cooldown.Seconds()),
 		JitterMillis: settings.Monitor.Jitter.Milliseconds(),
+		AutoFastest:  s.autoFastest(settings.Monitor),
 	}
 	state.DNS.Listen = settings.DNS.Listen
 	state.DNS.ResolverSets = nil

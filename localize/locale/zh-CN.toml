@@ -223,6 +223,9 @@ other = "设置 DNS 分流"
 ["operation.test_notification"]
 other = "发送测试通知"
 
+["operation.set_auto_fastest"]
+other = "自动选择最快连接"
+
 ["operation.subscription"]
 other = "订阅"
 

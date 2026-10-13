@@ -49,6 +49,9 @@ const (
 	CommandSetDNSRouting        CommandKind = "set_dns_routing"
 	CommandTestNotification     CommandKind = "test_notification"
 	CommandAuthorizeTun         CommandKind = "authorize_tun"
+	// CommandSetAutoFastest turns automatic switching to the lowest-latency
+	// proxy on or off for every managed select group at once.
+	CommandSetAutoFastest CommandKind = "set_auto_fastest"
 )
 
 // Command is a deliberately narrow user-intent schema. Sensitive URLs may
@@ -250,6 +253,10 @@ func (c Command) validate() error {
 	case CommandSetAutomation:
 		if !validID(c.GroupID) || c.ChoiceID != "" || c.Config != nil || c.Automation == nil || hasOtherTarget("") {
 			return errors.New("invalid automation command")
+		}
+	case CommandSetAutoFastest:
+		if c.GroupID != "" || c.ChoiceID != "" || c.Config != nil || c.Automation == nil || hasOtherTarget("") {
+			return errors.New("invalid auto fastest command")
 		}
 	case CommandPutSubscription:
 		if !validID(c.SubscriptionID) || c.Subscription == nil || c.GroupID != "" || c.ChoiceID != "" || c.Config != nil || c.Automation != nil || hasOtherTarget("subscription") {

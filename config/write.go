@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
-	"sort"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -79,6 +78,7 @@ type SettingsPatch struct {
 	TunEnabled                   *bool
 	TunStack                     *string
 	TunDNSMode                   *string
+	MonitorAutomatedGroups       *[]string
 }
 
 // PatchSettings edits only the explicit user intent fields in config.toml.
@@ -189,6 +189,11 @@ func PatchSettings(path string, current Snapshot, patch SettingsPatch) error {
 		document.Tun.DNSMode = patch.TunDNSMode
 		next.Tun.DNSMode = *patch.TunDNSMode
 	}
+	if patch.MonitorAutomatedGroups != nil {
+		groups := slices.Compact(slices.Sorted(slices.Values(*patch.MonitorAutomatedGroups)))
+		document.Monitor.AutomatedGroups = groups
+		next.Monitor.AutomatedGroups = groups
+	}
 	if reflect.DeepEqual(next, current) {
 		return nil
 	}
@@ -200,29 +205,11 @@ func PatchSettings(path string, current Snapshot, patch SettingsPatch) error {
 
 // PatchAutomation persists explicit opt-in for a stable opaque group identity.
 func PatchAutomation(path string, current Snapshot, groupID string, enabled bool) error {
-	var document configDoc
-	if err := decodeStrict(path, &document); err != nil {
-		return err
-	}
-	groups := append([]string(nil), document.Monitor.AutomatedGroups...)
+	groups := slices.DeleteFunc(slices.Clone(current.Monitor.AutomatedGroups), func(id string) bool { return id == groupID })
 	if enabled {
-		if !slices.Contains(groups, groupID) {
-			groups = append(groups, groupID)
-		}
-	} else {
-		groups = slices.DeleteFunc(groups, func(id string) bool { return id == groupID })
+		groups = append(groups, groupID)
 	}
-	sort.Strings(groups)
-	next := cloneSnapshot(current)
-	next.Monitor.AutomatedGroups = groups
-	if reflect.DeepEqual(next, current) {
-		return nil
-	}
-	if err := validateSnapshot(next); err != nil {
-		return err
-	}
-	document.Monitor.AutomatedGroups = groups
-	return writeTOML(path, document)
+	return PatchSettings(path, current, SettingsPatch{MonitorAutomatedGroups: &groups})
 }
 
 func writeTOML(path string, document any) error {

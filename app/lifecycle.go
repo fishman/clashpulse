@@ -674,7 +674,7 @@ func (s *runtimeService) restorePrevious(ctx context.Context, candidate []byte, 
 func selectedGroups(groups map[string]mihomo.Group) map[string]string {
 	selected := make(map[string]string)
 	for _, group := range groups {
-		if group.Type == "Selector" || group.Type == "select" {
+		if selectorType(group.Type) {
 			selected[group.Name] = group.Selected
 		}
 	}
@@ -693,7 +693,7 @@ func (s *runtimeService) restoreSelections(ctx context.Context, selected map[str
 	changed := false
 	for _, name := range names {
 		group, ok := s.groups[opaqueID(name)]
-		if !ok || group.Type != "Selector" && group.Type != "select" {
+		if !ok || !selectorType(group.Type) {
 			continue
 		}
 		if group.Selected == selected[name] {
@@ -923,7 +923,7 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 			continue
 		}
 		id := opaqueID(group.Name)
-		managedSelector := group.Type == "Selector" || group.Type == "select"
+		managedSelector := selectorType(group.Type)
 		if s.automation[id] && !managedSelector {
 			return fmt.Errorf("clashpulse: automation group %q is not a managed select group", id)
 		}
@@ -1007,11 +1007,17 @@ func watchDialFailures(ctx context.Context, controller *mihomo.Controller, group
 // this application authority to move traffic. Mihomo's own url-test groups are
 // excluded: Mihomo keeps its native policy for them.
 func probeEnabled(groupType string, monitoring bool) bool {
-	return monitoring && (groupType == "Selector" || groupType == "select")
+	return monitoring && selectorType(groupType)
 }
 
 func automationEnabled(groupType string, monitoring, optedIn bool) bool {
 	return probeEnabled(groupType, monitoring) && optedIn
+}
+
+// selectorType reports a Mihomo select group, the only kind this application
+// may move traffic in.
+func selectorType(groupType string) bool {
+	return groupType == "Selector" || groupType == "select"
 }
 
 // Published node names advertise their provider's domain, and a displayed one

@@ -241,7 +241,12 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 	} else if snapshot.Tun.Enabled && !snapshot.Tun.Active {
 		tun.Label = localize.T("TUN (requested, inactive)")
 	}
-	return fyne.NewMenu("ClashPulse", status, profileMenu, proxyMenu, service, systemProxy, tun, fyne.NewMenuItemSeparator(), fyne.NewMenuItem(localize.T("Show ClashPulse"), d.window.Show), fyne.NewMenuItem(localize.T("Quit"), d.quit))
+	autoFastest := fyne.NewMenuItem(localize.T("Auto-select fastest connection"), func() {
+		d.enqueue(ipc.Command{Kind: ipc.CommandSetAutoFastest, Automation: &ipc.AutomationSetting{Enabled: !snapshot.Monitor.AutoFastest}})
+	})
+	autoFastest.Checked = snapshot.Monitor.AutoFastest
+	autoFastest.Disabled = !d.connected
+	return fyne.NewMenu("ClashPulse", status, profileMenu, proxyMenu, service, systemProxy, tun, autoFastest, fyne.NewMenuItemSeparator(), fyne.NewMenuItem(localize.T("Show ClashPulse"), d.window.Show), fyne.NewMenuItem(localize.T("Quit"), d.quit))
 }
 
 func trayStateSignature(snapshot core.Snapshot, connected bool) string {
@@ -253,6 +258,7 @@ func trayStateSignature(snapshot core.Snapshot, connected bool) string {
 	fmt.Fprintf(&key, "|service:%t", snapshot.ServiceRunning)
 	fmt.Fprintf(&key, "|system-proxy:%t:%t", snapshot.SystemProxy.Enabled, snapshot.SystemProxy.Active)
 	fmt.Fprintf(&key, "|tun:%t:%t:%t", snapshot.Tun.Enabled, snapshot.Tun.Active, snapshot.Tun.Privilege == core.TunPrivilegeUnsupported)
+	fmt.Fprintf(&key, "|auto-fastest:%t", snapshot.Monitor.AutoFastest)
 	for _, sub := range snapshot.Subscriptions {
 		fmt.Fprintf(&key, "|%s:%s:%t:%t:%t:%s", sub.ID, sub.SourceHost, sub.Enabled, sub.Active, sub.PendingActivation, sub.HashPrefix)
 	}

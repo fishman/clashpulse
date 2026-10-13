@@ -898,3 +898,6 @@ other = "TUN（此平台不支持）"
 
 ["TUN (requested, inactive)"]
 other = "TUN（已请求，未生效）"
+
+["Auto-select fastest connection"]
+other = "自动选择最快连接"

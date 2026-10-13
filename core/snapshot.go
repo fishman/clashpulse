@@ -127,6 +127,9 @@ type MonitorSnapshot struct {
 	MinImprovementMillis   int64
 	CooldownSeconds        int64
 	JitterMillis           int64
+	// AutoFastest is true when the monitor runs lowest_latency switching for
+	// every managed select group.
+	AutoFastest bool
 }
 
 type ResolverSetSnapshot struct {

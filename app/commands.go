@@ -10,6 +10,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"time"
 
@@ -136,7 +137,7 @@ func (s *runtimeService) execute(ctx context.Context, cmd ipc.Command) error {
 	case ipc.CommandSelectGroup:
 		group, ok := s.groups[cmd.GroupID]
 		proxy, found := s.proxies[cmd.ChoiceID]
-		if s.controller == nil || !ok || !found || (group.Type != "Selector" && group.Type != "select") {
+		if s.controller == nil || !ok || !found || !selectorType(group.Type) {
 			return fmt.Errorf("selection is unavailable")
 		}
 		eligible := false
@@ -159,20 +160,28 @@ func (s *runtimeService) execute(ctx context.Context, cmd ipc.Command) error {
 		return s.refreshGroups(ctx)
 	case ipc.CommandSetAutomation:
 		group, ok := s.groups[cmd.GroupID]
-		if !ok || (group.Type != "Selector" && group.Type != "select") {
+		if !ok || !selectorType(group.Type) {
 			return fmt.Errorf("group does not support automation")
 		}
-		if s.automation[cmd.GroupID] == cmd.Automation.Enabled && !s.manualOverride[cmd.GroupID] {
-			return nil
+		return s.setGroupAutomation(cmd.GroupID, cmd.Automation.Enabled)
+	case ipc.CommandSetAutoFastest:
+		// One settings write: per-group writes would each restart the monitor
+		// and discard its probe history.
+		managed := make([]string, 0, len(s.groups))
+		for id, group := range s.groups {
+			if selectorType(group.Type) {
+				managed = append(managed, id)
+			}
 		}
-		if err := s.persistGroupAutomation(cmd.GroupID, cmd.Automation.Enabled); err != nil {
-			return err
-		}
-		s.automation[cmd.GroupID] = cmd.Automation.Enabled
+		groups := slices.DeleteFunc(slices.Clone(s.store.Snapshot().Monitor.AutomatedGroups), func(id string) bool { return slices.Contains(managed, id) })
+		change := config.SettingsPatch{}
 		if cmd.Automation.Enabled {
-			s.manualOverride[cmd.GroupID] = false
+			groups = append(groups, managed...)
+			on, policy := true, monitor.SwitchLowestLatency
+			change.MonitorEnabled, change.MonitorSwitchPolicy = &on, &policy
 		}
-		return nil
+		change.MonitorAutomatedGroups = &groups
+		return s.applySettings(ctx, change)
 	case ipc.CommandTestNotification:
 		// A pending test already covers this request.
 		select {
@@ -183,6 +192,41 @@ func (s *runtimeService) execute(ctx context.Context, cmd ipc.Command) error {
 	default:
 		return fmt.Errorf("unsupported command")
 	}
+}
+
+// setGroupAutomation persists a group's automation opt-in; enabling it also
+// ends a manual override.
+func (s *runtimeService) setGroupAutomation(groupID string, enabled bool) error {
+	if s.automation[groupID] == enabled && !s.manualOverride[groupID] {
+		return nil
+	}
+	if err := s.persistGroupAutomation(groupID, enabled); err != nil {
+		return err
+	}
+	s.automation[groupID] = enabled
+	if enabled {
+		s.manualOverride[groupID] = false
+	}
+	return nil
+}
+
+// autoFastest reports whether every managed select group is switched to its
+// lowest-latency proxy automatically.
+func (s *runtimeService) autoFastest(settings config.Monitor) bool {
+	if !settings.Enabled || settings.SwitchPolicy != monitor.SwitchLowestLatency {
+		return false
+	}
+	managed := false
+	for id, group := range s.groups {
+		if !selectorType(group.Type) {
+			continue
+		}
+		if !s.automation[id] || s.manualOverride[id] {
+			return false
+		}
+		managed = true
+	}
+	return managed
 }
 
 func (s *runtimeService) persistGroupAutomation(groupID string, enabled bool) error {
@@ -224,21 +268,6 @@ func (s *runtimeService) patchSettings(ctx context.Context, patch *ipc.ConfigPat
 	if patch == nil {
 		return fmt.Errorf("empty configuration patch")
 	}
-	current := s.lastAppliedSettings
-	path := filepath.Join(s.configDir, "config.toml")
-	previous, readErr := os.ReadFile(path)
-	if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
-		return readErr
-	}
-	restore := func() error {
-		if readErr == nil {
-			return config.Write(path, previous)
-		}
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		return nil
-	}
 	change := config.SettingsPatch{
 		Binary:                       patch.Binary,
 		SystemProxyEnabled:           patch.SystemProxyEnabled,
@@ -264,6 +293,34 @@ func (s *runtimeService) patchSettings(ctx context.Context, patch *ipc.ConfigPat
 		TunStack:                     patch.TunStack,
 		TunDNSMode:                   patch.TunDNSMode,
 	}
+	if err := s.applySettings(ctx, change); err != nil {
+		return err
+	}
+	// Only a user's enable may prompt; the service loop runs Prepare off-loop.
+	if patch.TunEnabled != nil && *patch.TunEnabled && !s.tunActive && (s.controller == nil || s.tunPrivilege != core.TunPrivilegeReady) {
+		s.tunPrepareRequested = true
+	}
+	return nil
+}
+
+// applySettings writes change to config.toml and applies it transactionally;
+// a failed apply restores the previous file and settings.
+func (s *runtimeService) applySettings(ctx context.Context, change config.SettingsPatch) error {
+	current := s.lastAppliedSettings
+	path := filepath.Join(s.configDir, "config.toml")
+	previous, readErr := os.ReadFile(path)
+	if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
+		return readErr
+	}
+	restore := func() error {
+		if readErr == nil {
+			return config.Write(path, previous)
+		}
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return nil
+	}
 	if err := config.PatchSettings(path, current, change); err != nil {
 		return err
 	}
@@ -279,10 +336,6 @@ func (s *runtimeService) patchSettings(ctx context.Context, patch *ipc.ConfigPat
 			return errors.Join(err, fmt.Errorf("clashpulse: restore previous user config: %w", rollbackErr))
 		}
 		return err
-	}
-	// Only a user's enable may prompt; the service loop runs Prepare off-loop.
-	if patch.TunEnabled != nil && *patch.TunEnabled && !s.tunActive && (s.controller == nil || s.tunPrivilege != core.TunPrivilegeReady) {
-		s.tunPrepareRequested = true
 	}
 	return nil
 }
@@ -321,7 +374,7 @@ func (s *runtimeService) applyChange(ctx context.Context, _ config.Change) (resu
 	if monitorChanged && s.controller != nil {
 		for _, id := range change.After.Monitor.AutomatedGroups {
 			group, ok := s.groups[id]
-			if !ok || group.Type != "Selector" && group.Type != "select" {
+			if !ok || !selectorType(group.Type) {
 				return restoreBefore(fmt.Errorf("config.toml: monitor.automated_groups: group %q is not a managed select group", id))
 			}
 		}

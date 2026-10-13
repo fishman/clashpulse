@@ -180,3 +180,43 @@ func TestTrayTunToggleFollowsSnapshotAndPlatform(t *testing.T) {
 		t.Fatal("disconnected tray kept the TUN toggle live")
 	}
 }
+
+func TestTrayAutoFastestToggleSendsOneIntent(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	d := &desktopUI{connected: true, window: a.NewWindow("ClashPulse"), actions: make(chan ipc.Command, 2)}
+	itemFor := func(state core.Snapshot) *fyne.MenuItem {
+		for _, item := range d.trayMenu(state).Items {
+			if item.Label == "Auto-select fastest connection" {
+				return item
+			}
+		}
+		t.Fatal("tray has no auto-select fastest toggle")
+		return nil
+	}
+	off := core.Snapshot{}
+	item := itemFor(off)
+	if item.Checked || item.Disabled {
+		t.Fatalf("auto fastest off = %+v", item)
+	}
+	item.Action()
+	if command := <-d.actions; command.Kind != ipc.CommandSetAutoFastest || command.Automation == nil || !command.Automation.Enabled || command.GroupID != "" {
+		t.Fatalf("enable sent %+v", command)
+	}
+	on := core.Snapshot{Monitor: core.MonitorSnapshot{AutoFastest: true}}
+	if trayStateSignature(on, true) == trayStateSignature(off, true) {
+		t.Fatal("auto fastest change did not refresh tray menu")
+	}
+	item = itemFor(on)
+	if !item.Checked {
+		t.Fatal("auto fastest on is not checked")
+	}
+	item.Action()
+	if command := <-d.actions; command.Automation == nil || command.Automation.Enabled {
+		t.Fatalf("disable sent %+v", command)
+	}
+	d.connected = false
+	if item = itemFor(on); !item.Disabled {
+		t.Fatal("disconnected tray kept auto fastest live")
+	}
+}

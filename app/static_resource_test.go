@@ -404,6 +404,40 @@ func TestAutomaticLowerLatencySwitchQueuesNotificationAfterSelection(t *testing.
 	}
 }
 
+func TestAutoFastestToggleAutomatesEveryManagedGroup(t *testing.T) {
+	h := newStaticRuntime(t)
+	h.activate(t)
+	groupID := opaqueID("select-main")
+	h.service.manualOverride[groupID] = true
+	set := func(enabled bool) {
+		t.Helper()
+		if err := h.service.execute(h.ctx, ipc.Command{Kind: ipc.CommandSetAutoFastest, Automation: &ipc.AutomationSetting{Enabled: enabled}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	set(true)
+	settings := h.service.store.Snapshot().Monitor
+	if !settings.Enabled || settings.SwitchPolicy != monitor.SwitchLowestLatency || len(settings.AutomatedGroups) != 1 || settings.AutomatedGroups[0] != groupID {
+		t.Fatalf("auto fastest on: monitor = %+v", settings)
+	}
+	if !h.service.automation[groupID] || h.service.manualOverride[groupID] {
+		t.Fatal("auto fastest on left the group under manual override")
+	}
+	if !h.service.stateSnapshot().Monitor.AutoFastest {
+		t.Fatal("snapshot does not report auto fastest")
+	}
+
+	set(false)
+	settings = h.service.store.Snapshot().Monitor
+	if len(settings.AutomatedGroups) != 0 || h.service.automation[groupID] || h.service.stateSnapshot().Monitor.AutoFastest {
+		t.Fatalf("auto fastest off: monitor = %+v automation = %t", settings, h.service.automation[groupID])
+	}
+	if settings.SwitchPolicy != monitor.SwitchLowestLatency {
+		t.Fatal("turning auto fastest off changed the switch policy")
+	}
+}
+
 func TestStaticSystemProxyApplyFailureReportsSafeStage(t *testing.T) {
 	h := newStaticRuntime(t)
 	marker := filepath.Join(h.root, "fail-proxy-once")
