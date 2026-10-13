@@ -80,12 +80,22 @@ removes file capabilities when an unprivileged process writes the file.
    the candidate, start Mihomo from the privileged copy, wait for controller
    readiness, re-apply System Proxy if enabled.
 5. Confirm TUN with a new typed controller method `TunEnabled(ctx)`
-   (`GET /configs`, field `tun.enable`). Mihomo returns success from
-   reconfiguration even when the TUN listener failed and records
-   `enable: false`, so this read is the only reliable signal.
+   (`GET /configs`, field `tun.enable`). Verified 2026-10-13 with Mihomo
+   v1.19.31 started unprivileged with `tun.enable: true`: the process keeps
+   running, logs `Start TUN listening error: configure tun interface:
+   operation not permitted`, and `GET /configs` reports `tun.enable: false`.
+   This read is therefore the only reliable signal.
 6. Any failure in steps 2-5 restores the prior generated configuration and
    binary, restarts the prior runtime, and records `LastFailure`; intent stays
    saved and the snapshot reports `requested, inactive`.
+
+### Automatic starts
+
+Starts not initiated by a TUN command (login autostart, crash recovery,
+configuration or subscription reloads) never prompt. If `Check` is not
+`ready`, ClashPulse renders without TUN, starts the normally selected binary,
+and reports `requested, inactive` with the privilege reason; the user
+re-authorizes with `CommandAuthorizeTun`, which re-runs the enable flow.
 
 ### Disable flow
 
@@ -95,7 +105,8 @@ failure is reported separately. Disabling never prompts.
 
 ### Stopping Mihomo
 
-`Process.Stop` changes from SIGKILL to SIGTERM, then SIGKILL after 5 seconds,
+`Process.Stop` changes from SIGKILL to SIGTERM, then SIGKILL after 3 seconds
+(strictly shorter than the 5-second cleanup deadlines that wrap it),
 so Mihomo can remove its routes, ip rules, and nftables state. At start, if
 the `clashpulse0` device exists while no ClashPulse-owned Mihomo runs, the
 snapshot reports leftover TUN state with a fixed message; ClashPulse does
@@ -105,10 +116,11 @@ not tear down network state it did not just create.
 
 ### Capability
 
-`mihomo.Capability` gains `SupportsTUN bool` and `TunStacks []string`,
-derived from the documented version floor already used for geodata (1.19.0)
-and confirmed by validating the candidate with the privileged copy. A missing
-capability is a compatibility error naming `tun` (or `tun.stack`).
+`mihomo.Capability` gains `SupportsTUN bool`, derived from the documented
+version floor already used for geodata (1.19.0; every such version supports
+the `gvisor`, `mixed`, and `system` stacks) and confirmed by validating the
+candidate with the privileged copy. A missing capability is a compatibility
+error naming `tun`.
 
 ### User intent (`config.toml`)
 
@@ -159,6 +171,10 @@ secret, `allow-lan: false`, `bind-address: 127.0.0.1`, managed mixed port).
 - Unchanged: the loopback DNS listener (`127.0.0.1:1053` default), the
   managed `nameserver-policy` and its rule-providers, DNSCrypt endpoints.
 - New validation: no resolver endpoint may fall inside the fake-ip range.
+- Fail closed: TUN requires a non-empty `dns.nameserver`, and a non-empty
+  `dns.default-nameserver` when any nameserver or fallback is a hostname.
+  Otherwise Mihomo silently uses its built-in resolvers (doh.pub, 223.5.5.5,
+  114.114.114.114) for every hijacked query, which AGENTS.md forbids.
 
 When TUN is off, DNS renders exactly as today.
 
@@ -175,8 +191,9 @@ the profile.
 
 - `ConfigPatch`: `TunEnabled *bool`, `TunStack *string`,
   `TunDNSMode *string`; enum validation; included in the empty-patch check.
-- `CommandAuthorizeTun`: re-run `Prepare` without changing intent (for
-  example after a Mihomo upgrade). Enqueued to `app` like every command.
+- `CommandAuthorizeTun`: re-run `Prepare` without changing intent when
+  `Check` is not `ready` (for example after a Mihomo upgrade); a no-op when
+  it is, so a manual `sudo setcap` grant survives. Enqueued like every command.
 - `core.TunSnapshot`: `Enabled`, `Active`, `Stack`, `DNSMode`, `Privilege`
   (`ready|missing|stale|nosuid|no-agent|unsupported-platform`),
   `PrivilegedPath` (non-secret; used to show the manual setcap command),
@@ -189,7 +206,9 @@ the profile.
 Settings gains a "TUN" section: enable checkbox, stack and DNS-mode selects,
 a status line (`requested, inactive: Mihomo was updated, re-authorize`), an
 "Authorize" button when privilege is not `ready`, and a copyable manual
-command when privilege is `no-agent` or `nosuid`. The tray gets a TUN toggle,
+command (`core.TunSnapshot.ManualGrantCommand`) only when privilege is
+`no-agent`; on `nosuid` setcap cannot help because file capabilities are
+ignored on that mount, so only the reason is shown. The tray gets a TUN toggle,
 disabled with its reason on unsupported platforms. All actions are
 non-blocking sends; no I/O on the Fyne thread.
 
