@@ -80,7 +80,7 @@ func newStaticRuntime(t *testing.T) *staticRuntime {
 import json, os, sys
 path = os.environ['CLASHPULSE_FAKE_PROXY_STATE']
 args = sys.argv[1:]
-schemas = {'org.gnome.system.proxy': ['mode', 'use-same-proxy'], 'org.gnome.system.proxy.http': ['host', 'port'], 'org.gnome.system.proxy.https': ['host', 'port']}
+schemas = {'org.gnome.system.proxy': ['mode', 'use-same-proxy'], 'org.gnome.system.proxy.http': ['host', 'port'], 'org.gnome.system.proxy.https': ['host', 'port'], 'org.gnome.system.proxy.socks': ['host', 'port']}
 if os.getenv('CLASHPULSE_FAKE_GSETTINGS_NO_HTTPS_SCHEMA'):
     schemas.pop('org.gnome.system.proxy.https')
 def read():

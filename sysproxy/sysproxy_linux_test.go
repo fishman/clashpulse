@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -27,6 +28,8 @@ func TestApplyWritesChildSchemasAndRestoreResetsThem(t *testing.T) {
 		gnomeProxyHTTP + "|port|" + port,
 		gnomeProxyHTTPS + "|host|'127.0.0.1'",
 		gnomeProxyHTTPS + "|port|" + port,
+		gnomeProxySocks + "|host|'127.0.0.1'",
+		gnomeProxySocks + "|port|" + port,
 		gnomeProxySchema + "|use-same-proxy|false",
 		gnomeProxySchema + "|mode|'manual'",
 	}
@@ -44,6 +47,8 @@ func TestApplyWritesChildSchemasAndRestoreResetsThem(t *testing.T) {
 		gnomeProxyHTTP + "|port",
 		gnomeProxyHTTPS + "|host",
 		gnomeProxyHTTPS + "|port",
+		gnomeProxySocks + "|host",
+		gnomeProxySocks + "|port",
 	}
 	if got := runner.resetArgs(); !reflect.DeepEqual(got, wantReset) {
 		t.Fatalf("gsettings reset argv = %v, want %v", got, wantReset)
@@ -219,7 +224,7 @@ type fakeRunner struct {
 func newFakeRunner() *fakeRunner {
 	return &fakeRunner{
 		values:  initialProxySettings(),
-		schemas: []string{gnomeProxySchema, gnomeProxyHTTP, gnomeProxyHTTPS},
+		schemas: slices.Clone(requiredSchemas),
 	}
 }
 

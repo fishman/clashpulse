@@ -16,6 +16,7 @@ const (
 	gnomeProxySchema = "org.gnome.system.proxy"
 	gnomeProxyHTTP   = "org.gnome.system.proxy.http"
 	gnomeProxyHTTPS  = "org.gnome.system.proxy.https"
+	gnomeProxySocks  = "org.gnome.system.proxy.socks"
 )
 
 // The host and port keys belong to child schemas and are addressable only by
@@ -26,7 +27,7 @@ type proxyKey struct{ schema, key string }
 // requiredSchemas are probed before writing: they, not the desktop name, decide
 // whether this environment can hold a GNOME proxy configuration. A session that
 // merely is not GNOME still reads these keys through GLib/GIO.
-var requiredSchemas = []string{gnomeProxySchema, gnomeProxyHTTP, gnomeProxyHTTPS}
+var requiredSchemas = []string{gnomeProxySchema, gnomeProxyHTTP, gnomeProxyHTTPS, gnomeProxySocks}
 
 // resetKeys are the keys Apply owns. Reset returns each to its schema default
 // (no proxy), which is what turning the System Proxy off means.
@@ -37,6 +38,8 @@ var resetKeys = []proxyKey{
 	{gnomeProxyHTTP, "port"},
 	{gnomeProxyHTTPS, "host"},
 	{gnomeProxyHTTPS, "port"},
+	{gnomeProxySocks, "host"},
+	{gnomeProxySocks, "port"},
 }
 
 type setting struct {
@@ -44,7 +47,8 @@ type setting struct {
 }
 
 // applySettings disables the proxy while the endpoints are written, so a partial
-// write is never live, then enables manual mode.
+// write is never live, then enables manual mode. HTTP, HTTPS, and SOCKS all
+// point at Mihomo's one mixed port, which serves every protocol.
 func applySettings(host string, port int) []setting {
 	hostValue, portValue := variantString(host), strconv.Itoa(port)
 	return []setting{
@@ -53,6 +57,8 @@ func applySettings(host string, port int) []setting {
 		{gnomeProxyHTTP, "port", portValue},
 		{gnomeProxyHTTPS, "host", hostValue},
 		{gnomeProxyHTTPS, "port", portValue},
+		{gnomeProxySocks, "host", hostValue},
+		{gnomeProxySocks, "port", portValue},
 		{gnomeProxySchema, "use-same-proxy", "false"},
 		{gnomeProxySchema, "mode", "'manual'"},
 	}
