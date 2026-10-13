@@ -32,7 +32,7 @@ func switchPolicyLabel(value string) string {
 			return localize.T("gui.monitor.switch-policy." + id)
 		}
 	}
-	return localize.T("gui.monitor.switch-policy." + monitor.SwitchFailover)
+	return localize.T("gui.monitor.switch-policy." + monitor.DefaultPolicy().SwitchPolicy)
 }
 
 func switchPolicyValue(label string) (string, bool) {

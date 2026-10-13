@@ -93,7 +93,7 @@ func TestMonitorSwitchPolicySelectRoundTrips(t *testing.T) {
 			t.Fatalf("switch policy %q came back as %q", value, got)
 		}
 	}
-	if selects := switchPolicySelect(""); selects.Selected != switchPolicyLabel(monitor.SwitchFailover) {
+	if selects := switchPolicySelect(""); selects.Selected != switchPolicyLabel(monitor.DefaultPolicy().SwitchPolicy) || monitor.DefaultPolicy().SwitchPolicy != monitor.SwitchLowestLatency {
 		t.Fatalf("unset switch policy showed %q", selects.Selected)
 	}
 }

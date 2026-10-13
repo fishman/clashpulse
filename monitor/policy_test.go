@@ -5,8 +5,11 @@ import (
 	"time"
 )
 
+// testPolicy is failover-based: most Decide cases exercise failover rules, and
+// lowest_latency cases opt in explicitly.
 func testPolicy() Policy {
 	policy := DefaultPolicy()
+	policy.SwitchPolicy = SwitchFailover
 	policy.Jitter = 0
 	return policy
 }
@@ -320,7 +323,7 @@ func TestDecideLowestLatencyStillRequiresEvidenceAndCooling(t *testing.T) {
 
 func TestDefaultPolicyUsesApprovedHTTPProbeURL(t *testing.T) {
 	policy := DefaultPolicy()
-	if policy.SwitchPolicy != SwitchFailover {
+	if policy.SwitchPolicy != SwitchLowestLatency {
 		t.Fatalf("default switch policy = %q", policy.SwitchPolicy)
 	}
 	policy.SwitchPolicy = "fastest"

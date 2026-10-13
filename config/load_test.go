@@ -189,7 +189,7 @@ func TestLoadSwitchPolicyAndURLTestDelays(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if defaults.Monitor.SwitchPolicy != monitor.SwitchFailover {
+	if defaults.Monitor.SwitchPolicy != monitor.SwitchLowestLatency {
 		t.Fatalf("default switch policy = %q", defaults.Monitor.SwitchPolicy)
 	}
 	if defaults.Mihomo.URLTestInterval != 0 || defaults.Mihomo.URLTestTolerance != 0 {

@@ -80,7 +80,7 @@ func applyDefaults(s *Snapshot) {
 		s.Monitor.TestURL = "http://cp.cloudflare.com/generate_204"
 	}
 	if s.Monitor.SwitchPolicy == "" {
-		s.Monitor.SwitchPolicy = monitor.SwitchFailover
+		s.Monitor.SwitchPolicy = monitor.DefaultPolicy().SwitchPolicy
 	}
 	if s.Monitor.Interval == 0 {
 		s.Monitor.Interval = time.Minute

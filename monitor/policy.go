@@ -38,7 +38,7 @@ type Policy struct {
 func DefaultPolicy() Policy {
 	return Policy{
 		TestURL:               "http://cp.cloudflare.com/generate_204",
-		SwitchPolicy:          SwitchFailover,
+		SwitchPolicy:          SwitchLowestLatency,
 		Interval:              1 * time.Minute,
 		Timeout:               5 * time.Second,
 		Concurrency:           3,

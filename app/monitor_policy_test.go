@@ -14,7 +14,7 @@ import (
 
 func TestLoadedMonitorPolicyControlsDecisionAndConcurrency(t *testing.T) {
 	configuredDir := t.TempDir()
-	configured := "[monitor]\ntest_url = \"https://example.com/204\"\ninterval = \"1s\"\ntimeout = \"200ms\"\nconcurrency = 2\nthreshold = \"500ms\"\nconsecutive_bad_samples = 2\nmin_improvement = \"250ms\"\ncooldown = \"0s\"\njitter = \"0s\"\n"
+	configured := "[monitor]\nswitch_policy = \"failover\"\ntest_url = \"https://example.com/204\"\ninterval = \"1s\"\ntimeout = \"200ms\"\nconcurrency = 2\nthreshold = \"500ms\"\nconsecutive_bad_samples = 2\nmin_improvement = \"250ms\"\ncooldown = \"0s\"\njitter = \"0s\"\n"
 	if err := os.WriteFile(filepath.Join(configuredDir, "config.toml"), []byte(configured), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestLoadedMonitorPolicyControlsDecisionAndConcurrency(t *testing.T) {
 
 func TestLoadedStabilityWindowControlsDecision(t *testing.T) {
 	dir := t.TempDir()
-	configured := "[monitor]\ntest_url = \"https://example.com/204\"\nthreshold = \"500ms\"\ncooldown = \"0s\"\nwindow_size = 8\nmin_candidate_samples = 4\nmax_failures = 3\n"
+	configured := "[monitor]\nswitch_policy = \"failover\"\ntest_url = \"https://example.com/204\"\nthreshold = \"500ms\"\ncooldown = \"0s\"\nwindow_size = 8\nmin_candidate_samples = 4\nmax_failures = 3\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(configured), 0o600); err != nil {
 		t.Fatal(err)
 	}

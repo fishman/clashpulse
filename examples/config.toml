@@ -11,7 +11,7 @@ binary = "system" # "bundled" is explicit fallback; or an executable path.
 [monitor]
 enabled = true # Every managed select group is measured; manual probes need no opt-in.
 test_url = "http://cp.cloudflare.com/generate_204" # Plain HTTP probes can be intercepted; use HTTPS for probe integrity.
-switch_policy = "failover" # "lowest_latency" switches to any node that is faster by min_improvement, even while the current one is healthy.
+switch_policy = "lowest_latency" # Moves an automated group to any node faster by min_improvement; "failover" moves only when the current node is unhealthy.
 interval = "1m" # Three rounds of probes are needed before a switch, so a shorter interval shortens the reaction time.
 timeout = "5s"
 concurrency = 3 # Hard upper bound: 64 concurrent controller probes.
