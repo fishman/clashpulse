@@ -217,6 +217,20 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 	}
 	proxyMenu := fyne.NewMenuItem(localize.T("Proxies"), nil)
 	proxyMenu.ChildMenu = fyne.NewMenu(localize.T("Proxies"), groups...)
+	modes := make([]*fyne.MenuItem, 0, len(core.ProxyModes))
+	for _, mode := range core.ProxyModes {
+		item := fyne.NewMenuItem(localize.Code("proxy.mode", mode), nil)
+		item.Checked = mode == snapshot.ProxyMode
+		item.Disabled = !d.connected
+		if !item.Checked {
+			item.Action = func() {
+				d.enqueue(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{ProxyMode: &mode}})
+			}
+		}
+		modes = append(modes, item)
+	}
+	modeMenu := fyne.NewMenuItem(localize.T("Proxy mode"), nil)
+	modeMenu.ChildMenu = fyne.NewMenu(localize.T("Proxy mode"), modes...)
 	service := fyne.NewMenuItem(localize.T("Service"), func() {
 		kind := ipc.CommandStart
 		if snapshot.ServiceRunning {
@@ -255,7 +269,7 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 	})
 	autoFastest.Checked = snapshot.Monitor.AutoFastest
 	autoFastest.Disabled = !d.connected
-	return fyne.NewMenu("ClashPulse", status, profileMenu, proxyMenu, service, systemProxy, tun, autoFastest, fyne.NewMenuItemSeparator(), fyne.NewMenuItem(localize.T("Show ClashPulse"), d.window.Show), fyne.NewMenuItem(localize.T("Quit"), d.quit))
+	return fyne.NewMenu("ClashPulse", status, profileMenu, proxyMenu, modeMenu, service, systemProxy, tun, autoFastest, fyne.NewMenuItemSeparator(), fyne.NewMenuItem(localize.T("Show ClashPulse"), d.window.Show), fyne.NewMenuItem(localize.T("Quit"), d.quit))
 }
 
 func trayStateSignature(snapshot core.Snapshot, connected bool) string {
@@ -264,7 +278,7 @@ func trayStateSignature(snapshot core.Snapshot, connected bool) string {
 	}
 	var key strings.Builder
 	key.WriteString(profileTrayTitle(snapshot))
-	fmt.Fprintf(&key, "|service:%t", snapshot.ServiceRunning)
+	fmt.Fprintf(&key, "|service:%t|mode:%s", snapshot.ServiceRunning, snapshot.ProxyMode)
 	fmt.Fprintf(&key, "|system-proxy:%t:%t", snapshot.SystemProxy.Enabled, snapshot.SystemProxy.Active)
 	fmt.Fprintf(&key, "|tun:%t:%t:%t", snapshot.Tun.Enabled, snapshot.Tun.Active, snapshot.Tun.Privilege == core.TunPrivilegeUnsupported)
 	fmt.Fprintf(&key, "|monitor:%t|auto-fastest:%t", snapshot.Monitor.Enabled, snapshot.Monitor.AutoFastest)

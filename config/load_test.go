@@ -374,3 +374,33 @@ func TestPatchSettingsPersistsTunIntent(t *testing.T) {
 		t.Fatalf("rejected patch rewrote config.toml: %v\n%s", err, after)
 	}
 }
+
+func TestLoadProxyModeDefaultsToRule(t *testing.T) {
+	dir := t.TempDir()
+	if defaults, err := Load(dir); err != nil || defaults.Mihomo.Mode != core.ProxyModeRule {
+		t.Fatalf("default mode = %q, %v", defaults.Mihomo.Mode, err)
+	}
+	writeFile(t, dir, "config.toml", "[mihomo]\nmode = \"global\"\n")
+	current, err := Load(dir)
+	if err != nil || current.Mihomo.Mode != core.ProxyModeGlobal {
+		t.Fatalf("configured mode = %q, %v", current.Mihomo.Mode, err)
+	}
+	for _, mode := range []string{"", "Rule", "script"} {
+		writeFile(t, dir, "config.toml", "[mihomo]\nmode = \""+mode+"\"\n")
+		if _, err := Load(dir); err == nil || !strings.Contains(err.Error(), "config.toml: mihomo.mode") {
+			t.Errorf("mode %q: error = %v", mode, err)
+		}
+	}
+	writeFile(t, dir, "config.toml", "[mihomo]\n")
+	current, err = Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	direct := core.ProxyModeDirect
+	if err := PatchSettings(filepath.Join(dir, "config.toml"), current, SettingsPatch{MihomoMode: &direct}); err != nil {
+		t.Fatal(err)
+	}
+	if updated, err := Load(dir); err != nil || updated.Mihomo.Mode != direct {
+		t.Fatalf("persisted mode = %q, %v", updated.Mihomo.Mode, err)
+	}
+}

@@ -36,6 +36,8 @@ type Mihomo struct {
 	URLTestTolerance time.Duration
 	// MixedPort is the loopback port Mihomo serves HTTP, HTTPS, and SOCKS on.
 	MixedPort int
+	// Mode is Mihomo's routing mode, one of core.ProxyModes.
+	Mode string
 }
 
 // DefaultMixedPort is the fixed loopback port used when config.toml sets none.

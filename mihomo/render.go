@@ -124,6 +124,9 @@ func Render(profile []byte, intent config.Snapshot, paths ManagedPaths, controll
 	document["allow-lan"] = false
 	document["geo-auto-update"] = false
 	document["bind-address"] = "127.0.0.1"
+	if intent.Mihomo.Mode != "" {
+		document["mode"] = intent.Mihomo.Mode
+	}
 
 	resources := append([]config.Resource(nil), intent.Resources...)
 	sort.Slice(resources, func(i, j int) bool { return resources[i].ID < resources[j].ID })
@@ -239,30 +242,6 @@ func ExplainOverrides(source, generated []byte) ([]ConfigOverride, error) {
 	if yaml.Unmarshal(source, &original) != nil || yaml.Unmarshal(generated, &effective) != nil || original == nil || effective == nil {
 		return nil, errors.New("mihomo: cannot explain invalid configuration")
 	}
-	fields := [...]struct{ key, section, name string }{
-		{"mixed-port", "", "mixed-port"},
-		{"port", "", "port"},
-		{"socks-port", "", "socks-port"},
-		{"external-controller", "", "external-controller"},
-		{"secret", "", "secret"},
-		{"allow-lan", "", "allow-lan"},
-		{"bind-address", "", "bind-address"},
-		{"tun", "", "tun"},
-		{"dns.listen", "dns", "listen"},
-		{"dns.enable", "dns", "enable"},
-		{"dns.enhanced-mode", "dns", "enhanced-mode"},
-		{"dns.fake-ip-range", "dns", "fake-ip-range"},
-		{"dns.fake-ip-range6", "dns", "fake-ip-range6"},
-		{"dns.fake-ip-filter", "dns", "fake-ip-filter"},
-		{"external-controller-unix", "", "external-controller-unix"},
-		{"external-controller-tls", "", "external-controller-tls"},
-		{"external-controller-cors", "", "external-controller-cors"},
-		{"external-ui", "", "external-ui"},
-		{"dns.nameserver-policy", "dns", "nameserver-policy"},
-		{"rule-providers", "", "rule-providers"},
-		{"proxy-groups", "", "proxy-groups"},
-		{"rules", "", "rules"},
-	}
 	value := func(document map[string]any, section, name string) (any, bool) {
 		if section != "" {
 			parent, ok := document[section].(map[string]any)
@@ -275,9 +254,14 @@ func ExplainOverrides(source, generated []byte) ([]ConfigOverride, error) {
 		return result, ok
 	}
 	var overrides []ConfigOverride
-	for _, field := range fields {
-		before, existed := value(original, field.section, field.name)
-		after, present := value(effective, field.section, field.name)
+	for _, key := range core.ConfigOverrideKeys {
+		// A dotted key names one field inside a top-level section.
+		section, name, nested := strings.Cut(key, ".")
+		if !nested {
+			section, name = "", key
+		}
+		before, existed := value(original, section, name)
+		after, present := value(effective, section, name)
 		if existed == present && reflect.DeepEqual(before, after) {
 			continue
 		}
@@ -287,7 +271,7 @@ func ExplainOverrides(source, generated []byte) ([]ConfigOverride, error) {
 		} else if !present {
 			change = "removed"
 		}
-		overrides = append(overrides, ConfigOverride{Key: field.key, Change: change})
+		overrides = append(overrides, ConfigOverride{Key: key, Change: change})
 	}
 	return overrides, nil
 }
@@ -570,4 +554,21 @@ func MixedPort(generated []byte) (int, error) {
 		return 0, fmt.Errorf("mihomo: generated configuration has no mixed port")
 	}
 	return document.MixedPort, nil
+}
+
+// ModeChange reports whether two generated configurations differ only in their
+// routing mode, which Mihomo can switch live without a restart.
+func ModeChange(before, after []byte) (from, to string, ok bool) {
+	var old, next map[string]any
+	if yaml.Unmarshal(before, &old) != nil || yaml.Unmarshal(after, &next) != nil || old == nil || next == nil {
+		return "", "", false
+	}
+	from, _ = old["mode"].(string)
+	to, _ = next["mode"].(string)
+	delete(old, "mode")
+	delete(next, "mode")
+	if from == to || to == "" || !reflect.DeepEqual(old, next) {
+		return "", "", false
+	}
+	return from, to, true
 }

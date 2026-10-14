@@ -51,6 +51,7 @@
 "e" = { fun = "system_proxy_enable", desc = "enable system proxy", show = true }
 "d" = { fun = "system_proxy_disable", desc = "disable system proxy", show = true }
 "P" = { fun = "edit_mixed_port", desc = "set mixed proxy port", show = true }
+"R" = { fun = "cycle_proxy_mode", desc = "cycle proxy mode", show = true }
 "m" = { fun = "monitor_enable", desc = "enable monitor", show = true }
 "n" = { fun = "monitor_disable", desc = "disable monitor", show = true }
 "b" = { fun = "edit_binary", desc = "select Mihomo binary", show = true }

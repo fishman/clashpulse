@@ -1151,6 +1151,7 @@ type settingsPage struct {
 	mixedPort           *widget.Label
 	mixedPortEditor     *widget.Entry
 	mixedPortDialog     *dialog.FormDialog
+	proxyMode           *widget.Select
 	tunEnabled          *widget.Check
 	tunStack            *widget.Select
 	tunDNSMode          *widget.Select
@@ -1186,6 +1187,22 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 	})
 	p.proxyStatus = widget.NewLabel(localize.T("System proxy inactive"))
 	p.mixedPort = widget.NewLabel("")
+	modeLabels := make([]string, len(core.ProxyModes))
+	for i, mode := range core.ProxyModes {
+		modeLabels[i] = localize.Code("proxy.mode", mode)
+	}
+	p.proxyMode = widget.NewSelect(modeLabels, func(label string) {
+		if p.refreshing {
+			return
+		}
+		for i, option := range modeLabels {
+			if option == label {
+				mode := core.ProxyModes[i]
+				p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{ProxyMode: &mode}})
+				return
+			}
+		}
+	})
 	p.tunEnabled = widget.NewCheck(localize.T("Enable TUN"), func(enabled bool) {
 		if p.refreshing {
 			return
@@ -1264,6 +1281,7 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 			p.systemProxy, p.proxyStatus,
 			container.NewHBox(widget.NewLabel(localize.T("Mixed port")), p.mixedPort, widget.NewButton(localize.T("Change"), p.editMixedPort)),
 			widget.NewLabel(localize.T("HTTP, HTTPS, and SOCKS proxy port on 127.0.0.1")),
+			container.NewHBox(widget.NewLabel(localize.T("Proxy mode")), p.proxyMode),
 		),
 		sections[2]: p.tunView,
 		sections[3]: container.NewVBox(
@@ -1377,6 +1395,15 @@ func (p *settingsPage) editMixedPort() {
 func (p *settingsPage) updateMixedPort(port int) {
 	if text := strconv.Itoa(port); p.mixedPort.Text != text {
 		p.mixedPort.SetText(text)
+	}
+}
+
+// updateProxyMode selects the configured mode without echoing it back as intent.
+func (p *settingsPage) updateProxyMode(mode string) {
+	if label := localize.Code("proxy.mode", mode); p.proxyMode.Selected != label {
+		p.refreshing = true
+		p.proxyMode.SetSelected(label)
+		p.refreshing = false
 	}
 }
 

@@ -1017,3 +1017,6 @@ other = "设置 TUN 协议栈"
 
 ["set TUN DNS mode"]
 other = "设置 TUN DNS 模式"
+
+["cycle proxy mode"]
+other = "切换代理模式"

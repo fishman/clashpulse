@@ -548,3 +548,32 @@ func TestMixedPortReadsGeneratedConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderSetsProxyModeAndReportsOverride(t *testing.T) {
+	profile := []byte("mode: rule\nproxies:\n  - name: alpha\n    type: direct\n")
+	intent := config.Snapshot{Mihomo: config.Mihomo{Mode: core.ProxyModeGlobal}}
+	got, err := Render(profile, intent, ManagedPaths{}, ControllerSettings{Address: "127.0.0.1:9090", Secret: "s"}, Capability{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rendered map[string]any
+	if err := yaml.Unmarshal(got, &rendered); err != nil || rendered["mode"] != core.ProxyModeGlobal {
+		t.Fatalf("rendered mode = %v, %v", rendered["mode"], err)
+	}
+	overrides, err := ExplainOverrides(profile, got)
+	if err != nil || !slices.Contains(overrides, ConfigOverride{Key: "mode", Change: "replaced"}) {
+		t.Fatalf("mode override not reported: %+v, %v", overrides, err)
+	}
+}
+
+func TestModeChangeDetectsModeOnlyDifference(t *testing.T) {
+	before := []byte("mode: rule\nmixed-port: 7899\n")
+	if from, to, ok := ModeChange(before, []byte("mixed-port: 7899\nmode: direct\n")); !ok || from != "rule" || to != "direct" {
+		t.Fatalf("mode-only change = %q -> %q, %v", from, to, ok)
+	}
+	for _, after := range []string{"mode: rule\nmixed-port: 7899\n", "mode: global\nmixed-port: 7900\n", "not yaml: ["} {
+		if _, _, ok := ModeChange(before, []byte(after)); ok {
+			t.Errorf("ModeChange accepted %q", after)
+		}
+	}
+}

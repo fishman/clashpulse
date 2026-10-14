@@ -1077,6 +1077,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             selected[0] = json.loads(self.rfile.read(int(self.headers.get('Content-Length','0'))))['name']
             self.send_response(204); self.end_headers(); return
         self.send_error(404)
+    def do_PATCH(self):
+        if self.headers.get('Authorization') != 'Bearer ' + secret:
+            self.send_error(401); return
+        if self.path == '/configs':
+            self.rfile.read(int(self.headers.get('Content-Length','0')))
+            self.send_response(204); self.end_headers(); return
+        self.send_error(404)
     def log_message(self, *args): pass
 class UnixHTTPServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     daemon_threads = True
@@ -1161,4 +1168,29 @@ func readStartRecords(t *testing.T, path string) []map[string]string {
 func hash(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+func TestProxyModeSwitchesLiveWithoutRestart(t *testing.T) {
+	h := newStaticRuntime(t)
+	h.activate(t)
+	starts := len(readStartRecords(t, h.startLog))
+	global := core.ProxyModeGlobal
+	if err := h.service.patchSettings(h.ctx, &ipc.ConfigPatch{ProxyMode: &global}); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(readStartRecords(t, h.startLog)); got != starts {
+		t.Fatalf("mode switch restarted Mihomo: %d starts, want %d", got, starts)
+	}
+	onDisk, err := os.ReadFile(h.service.configPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, generated := range map[string][]byte{"running": h.service.generated, "on disk": onDisk} {
+		if !bytes.Contains(generated, []byte("mode: global")) {
+			t.Fatalf("%s generated config lacks the new mode", name)
+		}
+	}
+	if got := h.service.stateSnapshot().ProxyMode; got != core.ProxyModeGlobal {
+		t.Fatalf("snapshot proxy mode = %q", got)
+	}
 }

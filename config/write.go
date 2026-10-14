@@ -61,6 +61,7 @@ type SettingsPatch struct {
 	MihomoURLTestInterval        *time.Duration
 	MihomoURLTestTolerance       *time.Duration
 	MihomoMixedPort              *int
+	MihomoMode                   *string
 	MonitorEnabled               *bool
 	MonitorTestURL               *string
 	MonitorSwitchPolicy          *string
@@ -114,6 +115,10 @@ func PatchSettings(path string, current Snapshot, patch SettingsPatch) error {
 		value := patch.MihomoURLTestInterval.String()
 		document.Mihomo.URLTestInterval = &value
 		next.Mihomo.URLTestInterval = *patch.MihomoURLTestInterval
+	}
+	if patch.MihomoMode != nil {
+		document.Mihomo.Mode = patch.MihomoMode
+		next.Mihomo.Mode = *patch.MihomoMode
 	}
 	if patch.MihomoMixedPort != nil {
 		document.Mihomo.MixedPort = patch.MihomoMixedPort

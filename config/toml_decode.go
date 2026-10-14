@@ -16,6 +16,7 @@ type configDoc struct {
 		URLTestInterval  *string `toml:"url_test_interval"`
 		URLTestTolerance *string `toml:"url_test_tolerance"`
 		MixedPort        *int    `toml:"mixed_port"`
+		Mode             *string `toml:"mode"`
 	} `toml:"mihomo"`
 	Monitor struct {
 		Enabled               *bool    `toml:"enabled"`
@@ -240,6 +241,10 @@ func loadConfig(path string) (Snapshot, error) {
 		tun.DNSMode = *doc.Tun.DNSMode
 	}
 	// An explicit zero stays zero so validation rejects it.
+	mode := core.ProxyModeRule
+	if doc.Mihomo.Mode != nil {
+		mode = *doc.Mihomo.Mode
+	}
 	mixedPort := DefaultMixedPort
 	if doc.Mihomo.MixedPort != nil {
 		mixedPort = *doc.Mihomo.MixedPort
@@ -251,6 +256,7 @@ func loadConfig(path string) (Snapshot, error) {
 			URLTestInterval:  urlTestInterval,
 			URLTestTolerance: urlTestTolerance,
 			MixedPort:        mixedPort,
+			Mode:             mode,
 		},
 		Monitor: Monitor{
 			Enabled:               enabled,

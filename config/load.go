@@ -328,6 +328,9 @@ func validateMihomo(m Mihomo) error {
 	if m.URLTestTolerance > 0 && (m.URLTestTolerance < time.Millisecond || m.URLTestTolerance > time.Minute) {
 		return fmt.Errorf("config.toml: mihomo.url_test_tolerance: must be between one millisecond and one minute")
 	}
+	if !slices.Contains(core.ProxyModes, m.Mode) {
+		return fmt.Errorf("config.toml: mihomo.mode: must be one of %s", strings.Join(core.ProxyModes, ", "))
+	}
 	if m.MixedPort < core.MixedPortMin || m.MixedPort > core.MixedPortMax {
 		return fmt.Errorf("config.toml: mihomo.mixed_port: must be between %d and %d", core.MixedPortMin, core.MixedPortMax)
 	}

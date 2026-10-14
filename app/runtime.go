@@ -334,6 +334,7 @@ func (s *runtimeService) stateSnapshot() core.Snapshot {
 		state.DNS.Routes = append(state.DNS.Routes, core.DNSRouteSnapshot{Suffix: route.Suffix, GeoSite: route.GeoSite, Resource: route.Resource, ResolverSet: route.ResolverSet})
 	}
 	state.MixedPort = settings.Mihomo.MixedPort
+	state.ProxyMode = settings.Mihomo.Mode
 	state.SystemProxy = core.SystemProxySnapshot{Enabled: settings.App.SystemProxy.Enabled, Active: s.proxyActive}
 	state.Tun = s.tunSnapshot(settings.Tun)
 	state.Binary.Desired = settings.Mihomo.Binary

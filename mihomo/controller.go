@@ -163,6 +163,16 @@ func (c *Controller) Select(ctx context.Context, group, proxy string) error {
 	return err
 }
 
+// SetMode switches the running routing mode; open connections survive it.
+func (c *Controller) SetMode(ctx context.Context, mode string) error {
+	body, err := json.Marshal(map[string]string{"mode": mode})
+	if err != nil {
+		return err
+	}
+	_, err = c.do(ctx, http.MethodPatch, "/configs", bytes.NewReader(body))
+	return err
+}
+
 func (c *Controller) Reload(ctx context.Context) error {
 	_, err := c.do(ctx, http.MethodPut, "/configs", strings.NewReader("{}"))
 	return err

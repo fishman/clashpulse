@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -119,7 +120,7 @@ func TestTrayKeepsEverySectionWhileDisconnected(t *testing.T) {
 		Proxies:        []core.ProxySnapshot{{GroupID: "main", ID: "alpha", Outcome: "success"}},
 	}
 	items := d.trayMenu(state).Items
-	for _, label := range []string{"Profiles", "Proxies", "Service", "System Proxy"} {
+	for _, label := range []string{"Profiles", "Proxies", "Proxy mode", "Service", "System Proxy"} {
 		if item := itemAt(items, label); item == nil {
 			t.Fatalf("disconnected tray dropped the %s section", label)
 		}
@@ -127,7 +128,7 @@ func TestTrayKeepsEverySectionWhileDisconnected(t *testing.T) {
 	if !strings.Contains(items[0].Label, "Disconnected") {
 		t.Fatalf("disconnected tray reported live state: %q", items[0].Label)
 	}
-	for _, section := range []string{"Profiles", "Proxies"} {
+	for _, section := range []string{"Profiles", "Proxies", "Proxy mode"} {
 		for _, item := range itemAt(items, section).ChildMenu.Items {
 			if item.Action != nil && !item.Disabled {
 				t.Fatalf("%s kept an action while disconnected: %q", section, item.Label)
@@ -160,6 +161,45 @@ func indexOf(items []*fyne.MenuItem, label string) int {
 		}
 	}
 	return -1
+}
+
+func TestTrayProxyModeSubmenuChecksCurrentAndSendsOthers(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	d := &desktopUI{connected: true, window: a.NewWindow("ClashPulse"), actions: make(chan ipc.Command, 2)}
+	state := core.Snapshot{ProxyMode: core.ProxyModeGlobal}
+	items := d.trayMenu(state).Items
+	menu := itemAt(items, "Proxy mode")
+	if menu == nil || menu.ChildMenu == nil || indexOf(items, "Proxies")+1 != indexOf(items, "Proxy mode") {
+		t.Fatalf("proxy mode submenu missing or not after Proxies: %+v", menu)
+	}
+	choices := menu.ChildMenu.Items
+	labels := []string{"Rule", "Global", "Direct"}
+	if len(choices) != len(core.ProxyModes) {
+		t.Fatalf("proxy mode choices = %d, want %d", len(choices), len(core.ProxyModes))
+	}
+	for i, mode := range core.ProxyModes {
+		if choices[i].Label != labels[i] || choices[i].Checked != (mode == state.ProxyMode) || choices[i].Disabled {
+			t.Errorf("choice %d = %q checked %t disabled %t", i, choices[i].Label, choices[i].Checked, choices[i].Disabled)
+		}
+	}
+	if choices[1].Action != nil {
+		choices[1].Action()
+	}
+	select {
+	case command := <-d.actions:
+		t.Fatalf("current mode sent %+v", command)
+	default:
+	}
+	choices[2].Action()
+	if command, want := <-d.actions, (ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{ProxyMode: new(core.ProxyModeDirect)}}); !reflect.DeepEqual(command, want) {
+		t.Fatalf("direct mode sent %+v, want %+v", command, want)
+	}
+	before := trayStateSignature(state, true)
+	state.ProxyMode = core.ProxyModeDirect
+	if trayStateSignature(state, true) == before {
+		t.Fatal("proxy mode change did not refresh tray menu")
+	}
 }
 
 func TestTrayProxyOrderRanksMeasuredBeforeUnknownAndUnavailable(t *testing.T) {

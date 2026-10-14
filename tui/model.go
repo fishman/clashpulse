@@ -478,6 +478,9 @@ func (m Model) HandleKey(key string) (Model, *ipc.Command, bool) {
 		return m.openDNSListenModal(), nil, false
 	case "edit_mixed_port":
 		return m.openMixedPortModal(), nil, false
+	case "cycle_proxy_mode":
+		next := core.ProxyModes[(slices.Index(core.ProxyModes, m.snapshot.Snapshot.ProxyMode)+1)%len(core.ProxyModes)]
+		return m, configCommand(&ipc.ConfigPatch{ProxyMode: &next}), false
 	case "new_dns_resolver":
 		return m.openDNSResolverModal(false, ""), nil, false
 	case "new_dns_route":
@@ -1826,10 +1829,12 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 		if monitor.Enabled {
 			monitorAction = "monitor_disable"
 		}
+		mode := localize.Code("proxy.mode", snapshot.ProxyMode)
 		rows := []Row{
 			{ID: "setting:binary", Title: localize.T("Mihomo binary"), Detail: binaryDetail, Cells: []string{localize.T("Mihomo binary"), fallback(snapshot.Binary.Desired, localize.T("unspecified")), ""}, kind: rowSettingBinary, action: "edit_binary"},
 			{ID: "setting:system-proxy", Title: localize.T("System proxy"), Detail: fmt.Sprintf(localize.T("System proxy requested %s; currently active %s."), localizedBool(snapshot.SystemProxy.Enabled), localizedBool(snapshot.SystemProxy.Active)), Cells: []string{localize.T("System proxy"), fmt.Sprintf(localize.T("requested %s; active %s"), localizedBool(snapshot.SystemProxy.Enabled), localizedBool(snapshot.SystemProxy.Active)), ""}, action: proxyAction},
 			{ID: "setting:mixed-port", Title: localize.T("Mixed port"), Detail: localize.T("HTTP, HTTPS, and SOCKS proxy port on 127.0.0.1"), Cells: []string{localize.T("Mixed port"), strconv.Itoa(snapshot.MixedPort), ""}, kind: rowSettingMixedPort, action: "edit_mixed_port"},
+			{ID: "setting:proxy-mode", Title: localize.T("Proxy mode"), Detail: mode, Cells: []string{localize.T("Proxy mode"), mode, ""}, action: "cycle_proxy_mode"},
 			{ID: "setting:monitor", Title: localize.T("Monitor"), Detail: enabledLabel(monitor.Enabled), Cells: []string{localize.T("Monitor"), enabledLabel(monitor.Enabled), ""}, action: monitorAction},
 		}
 		rows = append(rows, tunRows(snapshot.Tun)...)

@@ -545,6 +545,22 @@ func (s *runtimeService) applyCandidateAt(ctx context.Context, candidate []byte,
 		s.snapshot.Binary.LastCompatibilityFailure = ""
 		return nil
 	}
+	// A mode change alone is switched live, so open connections survive it. A
+	// failed switch falls through to the restart below.
+	if from, to, ok := mihomo.ModeChange(s.generated, candidate); ok && !s.forceRestart && activePath == oldPath && s.controller != nil && capability == s.cap && home == s.resourceHome {
+		if err := s.controller.SetMode(ctx, to); err == nil {
+			if err := config.Write(activePath, candidate); err != nil {
+				if from == "" {
+					from = core.ProxyModeRule
+				}
+				_ = s.controller.SetMode(context.WithoutCancel(ctx), from)
+				return core.WrapActivation(core.ActivationStateCommit, err)
+			}
+			s.generated = bytes.Clone(candidate)
+			s.snapshot.Binary.LastCompatibilityFailure = ""
+			return nil
+		}
+	}
 	priorReportPending := s.configReportPending
 	s.configReportPending = true
 	s.publish()

@@ -277,3 +277,23 @@ func TestControllerTunEnabledReadsRunningConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestControllerSetModePatchesRunningConfig(t *testing.T) {
+	var body map[string]string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch || r.URL.Path != "/configs" || r.Header.Get("Authorization") != "Bearer secret" {
+			http.Error(w, "unexpected", http.StatusBadRequest)
+			return
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	controller, err := NewController(server.URL, "secret", server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.SetMode(context.Background(), "global"); err != nil || body["mode"] != "global" {
+		t.Fatalf("SetMode sent %v, %v", body, err)
+	}
+}

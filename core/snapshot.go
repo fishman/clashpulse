@@ -1,6 +1,8 @@
 package core
 
 import (
+	"slices"
+
 	"fmt"
 
 	"github.com/fishman/clashpulse/localize"
@@ -89,17 +91,21 @@ type ConfigOverrideSnapshot struct {
 	Key, Change string
 }
 
+// ConfigOverrideKeys are the profile keys the generated configuration may
+// override, in report order.
+var ConfigOverrideKeys = []string{
+	"mixed-port", "port", "socks-port", "external-controller", "secret", "allow-lan", "bind-address",
+	"dns.listen", "external-controller-unix", "external-controller-tls", "external-controller-cors", "external-ui", "dns.nameserver-policy",
+	"rule-providers", "proxy-groups", "rules",
+	"tun", "dns.enable", "dns.enhanced-mode", "dns.fake-ip-range", "dns.fake-ip-range6", "dns.fake-ip-filter",
+	"mode",
+}
+
 func (o ConfigOverrideSnapshot) Valid() bool {
 	if o.Change != "added" && o.Change != "replaced" && o.Change != "removed" {
 		return false
 	}
-	switch o.Key {
-	case "mixed-port", "port", "socks-port", "external-controller", "secret", "allow-lan", "bind-address", "dns.listen", "external-controller-unix", "external-controller-tls", "external-controller-cors", "external-ui", "dns.nameserver-policy", "rule-providers", "proxy-groups", "rules",
-		"tun", "dns.enable", "dns.enhanced-mode", "dns.fake-ip-range", "dns.fake-ip-range6", "dns.fake-ip-filter":
-		return true
-	default:
-		return false
-	}
+	return slices.Contains(ConfigOverrideKeys, o.Key)
 }
 
 func (o ConfigOverrideSnapshot) Description() string {
@@ -181,6 +187,10 @@ const (
 	MixedPortMin = 1024
 	MixedPortMax = 65535
 
+	ProxyModeRule   = "rule"
+	ProxyModeGlobal = "global"
+	ProxyModeDirect = "direct"
+
 	TunStackGVisor = "gvisor"
 	TunStackMixed  = "mixed"
 	TunStackSystem = "system"
@@ -192,6 +202,8 @@ const (
 
 // TunStacks and TunDNSModes are every valid [tun] stack and dns_mode.
 var (
+	// ProxyModes are Mihomo's routing modes; rule is the default.
+	ProxyModes  = []string{ProxyModeRule, ProxyModeGlobal, ProxyModeDirect}
 	TunStacks   = []string{TunStackGVisor, TunStackMixed, TunStackSystem}
 	TunDNSModes = []string{TunDNSProfile, TunDNSFakeIP, TunDNSRedirHost}
 )
@@ -254,7 +266,9 @@ type Snapshot struct {
 	DNS             DNSSnapshot
 	SystemProxy     SystemProxySnapshot
 	// MixedPort is the configured loopback port for HTTP, HTTPS, and SOCKS.
-	MixedPort   int
+	MixedPort int
+	// ProxyMode is the configured Mihomo routing mode.
+	ProxyMode   string
 	Tun         TunSnapshot
 	Jobs        []JobSnapshot
 	Switches    []SwitchSnapshot

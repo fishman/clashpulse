@@ -64,6 +64,9 @@ other = "明确配置的 DNS 分流规则"
 ["override.external-controller-unix"]
 other = "私有控制接口套接字"
 
+["override.mode"]
+other = "代理模式"
+
 ["override.external-controller-tls"]
 other = "隔离控制接口"
 
@@ -333,3 +336,15 @@ other = "中位数 %d 毫秒 ±%d 毫秒"
 
 ["%d/%d failed"]
 other = "%d/%d 次失败"
+
+["Proxy mode"]
+other = "代理模式"
+
+["proxy.mode.rule"]
+other = "规则"
+
+["proxy.mode.global"]
+other = "全局"
+
+["proxy.mode.direct"]
+other = "直连"

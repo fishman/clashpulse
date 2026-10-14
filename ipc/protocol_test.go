@@ -327,12 +327,7 @@ func TestConfigOverrideSnapshotRejectsPrivateValues(t *testing.T) {
 
 func TestConfigOverrideSnapshotAcceptsEveryReportedField(t *testing.T) {
 	var overrides []core.ConfigOverrideSnapshot
-	for _, key := range []string{
-		"mixed-port", "port", "socks-port", "external-controller", "secret", "allow-lan", "bind-address",
-		"dns.listen", "external-controller-unix", "external-controller-tls", "external-controller-cors", "external-ui", "dns.nameserver-policy",
-		"rule-providers", "proxy-groups", "rules",
-		"tun", "dns.enable", "dns.enhanced-mode", "dns.fake-ip-range", "dns.fake-ip-range6", "dns.fake-ip-filter",
-	} {
+	for _, key := range core.ConfigOverrideKeys {
 		overrides = append(overrides, core.ConfigOverrideSnapshot{Key: key, Change: "replaced"})
 	}
 	if err := validateSnapshot(core.Snapshot{ConfigOverrides: overrides}); err != nil {
@@ -349,5 +344,18 @@ func TestReadFrameRejectsOversizedLengthBeforeBody(t *testing.T) {
 	var frame clientFrame
 	if err := readFrame(bytes.NewReader(header[:]), &frame); err != errFrameTooLarge {
 		t.Fatalf("readFrame error = %v, want %v", err, errFrameTooLarge)
+	}
+}
+
+func TestProxyModePatchAcceptsOnlyMihomoModes(t *testing.T) {
+	for _, mode := range core.ProxyModes {
+		if err := (Command{Kind: CommandUpdateConfiguration, Config: &ConfigPatch{ProxyMode: new(mode)}}).validate(); err != nil {
+			t.Errorf("mode %q rejected: %v", mode, err)
+		}
+	}
+	for _, mode := range []string{"", "Rule", "script"} {
+		if err := (Command{Kind: CommandUpdateConfiguration, Config: &ConfigPatch{ProxyMode: new(mode)}}).validate(); err == nil {
+			t.Errorf("mode %q accepted", mode)
+		}
 	}
 }

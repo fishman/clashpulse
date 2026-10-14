@@ -3,6 +3,7 @@
 [mihomo]
 binary = "system" # "bundled" is explicit fallback; or an executable path.
 mixed_port = 7899 # HTTP, HTTPS, and SOCKS on 127.0.0.1; 1024-65535. Start fails if the port is taken.
+mode = "rule" # "global" sends everything through the GLOBAL group; "direct" bypasses all proxies. Switched live.
 # Delay settings for the url-test and fallback groups of the generated profile.
 # Unset keeps whatever each group already declares. This is Mihomo's own health
 # check, which owns those groups; ClashPulse never probes or switches them.

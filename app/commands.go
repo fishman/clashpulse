@@ -275,6 +275,7 @@ func (s *runtimeService) patchSettings(ctx context.Context, patch *ipc.ConfigPat
 		MihomoURLTestInterval:        durationPatch(patch.URLTestIntervalSeconds, time.Second),
 		MihomoURLTestTolerance:       durationPatch(patch.URLTestToleranceMillis, time.Millisecond),
 		MihomoMixedPort:              intPatch(patch.MixedPort),
+		MihomoMode:                   patch.ProxyMode,
 		MonitorEnabled:               patch.MonitorEnabled,
 		MonitorTestURL:               patch.MonitorTestURL,
 		MonitorSwitchPolicy:          patch.MonitorSwitchPolicy,

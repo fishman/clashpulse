@@ -28,6 +28,9 @@ other = "explicit DNS routing policy"
 ["override.external-controller-unix"]
 other = "private controller socket"
 
+["override.mode"]
+other = "proxy mode"
+
 ["override.external-controller-tls"]
 other = "controller isolation"
 
@@ -72,3 +75,12 @@ other = "Connection improved"
 
 ["Switched to a lower-latency connection"]
 other = "Automatically switched to a lower-latency connection"
+
+["proxy.mode.rule"]
+other = "Rule"
+
+["proxy.mode.global"]
+other = "Global"
+
+["proxy.mode.direct"]
+other = "Direct"

@@ -92,12 +92,7 @@ func TestConfigOverrideDescriptionUsesSharedMainlandCatalog(t *testing.T) {
 
 func TestConfigOverrideReportedFieldsHaveCatalogDescriptions(t *testing.T) {
 	t.Cleanup(func() { localize.SetLanguage("en") })
-	for _, key := range []string{
-		"mixed-port", "port", "socks-port", "external-controller", "secret", "allow-lan", "bind-address",
-		"dns.listen", "external-controller-unix", "external-controller-tls", "external-controller-cors", "external-ui", "dns.nameserver-policy",
-		"rule-providers", "proxy-groups", "rules",
-		"tun", "dns.enable", "dns.enhanced-mode", "dns.fake-ip-range", "dns.fake-ip-range6", "dns.fake-ip-filter",
-	} {
+	for _, key := range ConfigOverrideKeys {
 		entry := ConfigOverrideSnapshot{Key: key, Change: "replaced"}
 		for _, language := range []string{"en", "zh-CN"} {
 			localize.SetLanguage(language)

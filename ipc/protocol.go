@@ -14,7 +14,7 @@ import (
 
 const (
 	// ProtocolVersion is negotiated in the first frame on every connection.
-	ProtocolVersion uint16 = 8
+	ProtocolVersion uint16 = 9
 	// MaxFrameSize bounds both incoming and outgoing JSON frames.
 	MaxFrameSize = 1 << 20
 )
@@ -95,6 +95,7 @@ type ConfigPatch struct {
 	URLTestIntervalSeconds       *uint32 `json:"url_test_interval_seconds,omitempty"`
 	URLTestToleranceMillis       *uint32 `json:"url_test_tolerance_millis,omitempty"`
 	MixedPort                    *uint32 `json:"mixed_port,omitempty"`
+	ProxyMode                    *string `json:"proxy_mode,omitempty"`
 	TunEnabled                   *bool   `json:"tun_enabled,omitempty"`
 	TunStack                     *string `json:"tun_stack,omitempty"`
 	TunDNSMode                   *string `json:"tun_dns_mode,omitempty"`
@@ -221,6 +222,9 @@ func (c Command) validate() error {
 		}
 		if p.TunStack != nil && !validTunStack(*p.TunStack) || p.TunDNSMode != nil && !validTunDNSMode(*p.TunDNSMode) {
 			return errors.New("invalid TUN mode setting")
+		}
+		if p.ProxyMode != nil && !slices.Contains(core.ProxyModes, *p.ProxyMode) {
+			return errors.New("invalid proxy mode")
 		}
 		if p.MixedPort != nil && (*p.MixedPort < core.MixedPortMin || *p.MixedPort > core.MixedPortMax) {
 			return errors.New("mixed port out of range")
@@ -352,7 +356,7 @@ func validateSnapshot(snapshot core.Snapshot) error {
 	default:
 		return errors.New("ipc: invalid active source")
 	}
-	if len(snapshot.ConfigOverrides) > 22 {
+	if len(snapshot.ConfigOverrides) > len(core.ConfigOverrideKeys) {
 		return errors.New("ipc: invalid config override report")
 	}
 	for _, item := range snapshot.ConfigOverrides {
