@@ -15,6 +15,7 @@ type configDoc struct {
 		Binary           string  `toml:"binary"`
 		URLTestInterval  *string `toml:"url_test_interval"`
 		URLTestTolerance *string `toml:"url_test_tolerance"`
+		MixedPort        *int    `toml:"mixed_port"`
 	} `toml:"mihomo"`
 	Monitor struct {
 		Enabled               *bool    `toml:"enabled"`
@@ -238,12 +239,18 @@ func loadConfig(path string) (Snapshot, error) {
 	if doc.Tun.DNSMode != nil {
 		tun.DNSMode = *doc.Tun.DNSMode
 	}
+	// An explicit zero stays zero so validation rejects it.
+	mixedPort := DefaultMixedPort
+	if doc.Mihomo.MixedPort != nil {
+		mixedPort = *doc.Mihomo.MixedPort
+	}
 	return Snapshot{
 		App: App{SystemProxy: SystemProxy{Enabled: doc.SystemProxy.Enabled}},
 		Mihomo: Mihomo{
 			Binary:           doc.Mihomo.Binary,
 			URLTestInterval:  urlTestInterval,
 			URLTestTolerance: urlTestTolerance,
+			MixedPort:        mixedPort,
 		},
 		Monitor: Monitor{
 			Enabled:               enabled,

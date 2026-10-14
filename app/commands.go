@@ -274,6 +274,7 @@ func (s *runtimeService) patchSettings(ctx context.Context, patch *ipc.ConfigPat
 		DNSListen:                    patch.DNSListen,
 		MihomoURLTestInterval:        durationPatch(patch.URLTestIntervalSeconds, time.Second),
 		MihomoURLTestTolerance:       durationPatch(patch.URLTestToleranceMillis, time.Millisecond),
+		MihomoMixedPort:              intPatch(patch.MixedPort),
 		MonitorEnabled:               patch.MonitorEnabled,
 		MonitorTestURL:               patch.MonitorTestURL,
 		MonitorSwitchPolicy:          patch.MonitorSwitchPolicy,
@@ -426,7 +427,7 @@ func (s *runtimeService) applyChange(ctx context.Context, _ config.Change) (resu
 		if runtimeAttempted || proxyAttempted {
 			var err error
 			if runtimeBefore.proxyActive {
-				err = s.proxy.Apply(rollbackCtx, fmt.Sprintf("127.0.0.1:%d", s.proxyPort))
+				err = s.applySystemProxy(rollbackCtx)
 			} else {
 				err = s.proxy.Restore(rollbackCtx)
 			}
@@ -489,7 +490,7 @@ func (s *runtimeService) applyChange(ctx context.Context, _ config.Change) (resu
 		proxyAttempted = true
 		var err error
 		if change.After.App.SystemProxy.Enabled {
-			err = s.proxy.Apply(ctx, fmt.Sprintf("127.0.0.1:%d", s.proxyPort))
+			err = s.applySystemProxy(ctx)
 		} else {
 			err = s.proxy.Restore(ctx)
 		}

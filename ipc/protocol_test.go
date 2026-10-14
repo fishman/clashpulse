@@ -137,34 +137,38 @@ func TestMonitorPolicyPatchBoundsControlInputs(t *testing.T) {
 		}
 	}
 	for name, patch := range map[string]ConfigPatch{
-		"window 2":       {MonitorWindowSize: new(uint32(2))},
-		"window 20":      {MonitorWindowSize: new(uint32(20))},
-		"candidates 2":   {MonitorMinCandidateSamples: new(uint32(2))},
-		"candidates 20":  {MonitorMinCandidateSamples: new(uint32(20))},
-		"failures 1":     {MonitorMaxFailures: new(uint32(1))},
-		"failures 20":    {MonitorMaxFailures: new(uint32(20))},
-		"bad samples 20": {MonitorConsecutiveBadSamples: new(uint32(20))},
-		"failover only":  {MonitorSwitchPolicy: new("failover")},
-		"lowest latency": {MonitorSwitchPolicy: new("lowest_latency")},
-		"url-test only":  {URLTestIntervalSeconds: new(uint32(60))},
-		"tolerance only": {URLTestToleranceMillis: new(uint32(50))},
+		"window 2":         {MonitorWindowSize: new(uint32(2))},
+		"window 20":        {MonitorWindowSize: new(uint32(20))},
+		"candidates 2":     {MonitorMinCandidateSamples: new(uint32(2))},
+		"candidates 20":    {MonitorMinCandidateSamples: new(uint32(20))},
+		"failures 1":       {MonitorMaxFailures: new(uint32(1))},
+		"failures 20":      {MonitorMaxFailures: new(uint32(20))},
+		"bad samples 20":   {MonitorConsecutiveBadSamples: new(uint32(20))},
+		"failover only":    {MonitorSwitchPolicy: new("failover")},
+		"lowest latency":   {MonitorSwitchPolicy: new("lowest_latency")},
+		"url-test only":    {URLTestIntervalSeconds: new(uint32(60))},
+		"tolerance only":   {URLTestToleranceMillis: new(uint32(50))},
+		"mixed port 1024":  {MixedPort: new(uint32(1024))},
+		"mixed port 65535": {MixedPort: new(uint32(65535))},
 	} {
 		if err := (Command{Kind: CommandUpdateConfiguration, Config: &patch}).validate(); err != nil {
 			t.Errorf("%s rejected: %v", name, err)
 		}
 	}
 	for name, patch := range map[string]ConfigPatch{
-		"window 1":       {MonitorWindowSize: new(uint32(1))},
-		"window 21":      {MonitorWindowSize: new(uint32(21))},
-		"candidates 1":   {MonitorMinCandidateSamples: new(uint32(1))},
-		"candidates 21":  {MonitorMinCandidateSamples: new(uint32(21))},
-		"failures 0":     {MonitorMaxFailures: new(uint32(0))},
-		"failures 21":    {MonitorMaxFailures: new(uint32(21))},
-		"bad samples 0":  {MonitorConsecutiveBadSamples: new(uint32(0))},
-		"bad samples 21": {MonitorConsecutiveBadSamples: new(uint32(21))},
-		"unknown policy": {MonitorSwitchPolicy: new("fastest")},
-		"empty policy":   {MonitorSwitchPolicy: new("")},
-		"empty patch":    {},
+		"window 1":         {MonitorWindowSize: new(uint32(1))},
+		"window 21":        {MonitorWindowSize: new(uint32(21))},
+		"candidates 1":     {MonitorMinCandidateSamples: new(uint32(1))},
+		"candidates 21":    {MonitorMinCandidateSamples: new(uint32(21))},
+		"failures 0":       {MonitorMaxFailures: new(uint32(0))},
+		"failures 21":      {MonitorMaxFailures: new(uint32(21))},
+		"bad samples 0":    {MonitorConsecutiveBadSamples: new(uint32(0))},
+		"bad samples 21":   {MonitorConsecutiveBadSamples: new(uint32(21))},
+		"unknown policy":   {MonitorSwitchPolicy: new("fastest")},
+		"empty policy":     {MonitorSwitchPolicy: new("")},
+		"mixed port 80":    {MixedPort: new(uint32(80))},
+		"mixed port 65536": {MixedPort: new(uint32(65536))},
+		"empty patch":      {},
 	} {
 		if err := (Command{Kind: CommandUpdateConfiguration, Config: &patch}).validate(); err == nil {
 			t.Errorf("%s accepted", name)

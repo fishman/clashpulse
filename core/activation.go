@@ -10,6 +10,7 @@ const (
 	ActivationResources           ActivationStage = "resources"
 	ActivationConfigValidation    ActivationStage = "config_validation"
 	ActivationProcessStart        ActivationStage = "process_start"
+	ActivationMixedPort           ActivationStage = "mixed_port"
 	ActivationControllerReadiness ActivationStage = "controller_readiness"
 	ActivationSystemProxy         ActivationStage = "system_proxy"
 	// ActivationSystemProxyUnsupported separates a desktop environment this
@@ -28,6 +29,7 @@ var activationMessages = map[ActivationStage]string{
 	ActivationResources:              "managed resources could not be validated",
 	ActivationConfigValidation:       "generated Mihomo configuration was rejected",
 	ActivationProcessStart:           "Mihomo process could not start",
+	ActivationMixedPort:              "the configured mixed port is already in use",
 	ActivationControllerReadiness:    "Mihomo controller did not become ready",
 	ActivationSystemProxy:            "System Proxy could not be applied",
 	ActivationSystemProxyUnsupported: "system proxy is unsupported in this desktop environment",

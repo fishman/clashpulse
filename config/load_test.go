@@ -205,6 +205,37 @@ func TestLoadSwitchPolicyAndURLTestDelays(t *testing.T) {
 	}
 }
 
+func TestLoadMixedPortDefaultBoundsAndPatch(t *testing.T) {
+	dir := t.TempDir()
+	defaults, err := Load(dir)
+	if err != nil || defaults.Mihomo.MixedPort != 7899 {
+		t.Fatalf("default mixed port = %d, %v", defaults.Mihomo.MixedPort, err)
+	}
+	writeFile(t, dir, "config.toml", "[mihomo]\nmixed_port = 7890\n")
+	if configured, err := Load(dir); err != nil || configured.Mihomo.MixedPort != 7890 {
+		t.Fatalf("configured mixed port = %d, %v", configured.Mihomo.MixedPort, err)
+	}
+	// Ports below 1024 need privilege the unprivileged Mihomo does not have.
+	for _, port := range []string{"0", "80", "1023", "65536"} {
+		writeFile(t, dir, "config.toml", "[mihomo]\nmixed_port = "+port+"\n")
+		if _, err := Load(dir); err == nil || !strings.Contains(err.Error(), "config.toml: mihomo.mixed_port") {
+			t.Errorf("mixed_port = %s: error = %v", port, err)
+		}
+	}
+	writeFile(t, dir, "config.toml", "[mihomo]\n")
+	current, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := 18080
+	if err := PatchSettings(filepath.Join(dir, "config.toml"), current, SettingsPatch{MihomoMixedPort: &port}); err != nil {
+		t.Fatal(err)
+	}
+	if updated, err := Load(dir); err != nil || updated.Mihomo.MixedPort != port {
+		t.Fatalf("persisted mixed port = %d, %v", updated.Mihomo.MixedPort, err)
+	}
+}
+
 func TestPatchSettingsPersistsSwitchPolicyAndURLTestDelays(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "config.toml", "[monitor]\n")

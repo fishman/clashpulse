@@ -60,6 +60,7 @@ type SettingsPatch struct {
 	DNSListen                    *string
 	MihomoURLTestInterval        *time.Duration
 	MihomoURLTestTolerance       *time.Duration
+	MihomoMixedPort              *int
 	MonitorEnabled               *bool
 	MonitorTestURL               *string
 	MonitorSwitchPolicy          *string
@@ -113,6 +114,10 @@ func PatchSettings(path string, current Snapshot, patch SettingsPatch) error {
 		value := patch.MihomoURLTestInterval.String()
 		document.Mihomo.URLTestInterval = &value
 		next.Mihomo.URLTestInterval = *patch.MihomoURLTestInterval
+	}
+	if patch.MihomoMixedPort != nil {
+		document.Mihomo.MixedPort = patch.MihomoMixedPort
+		next.Mihomo.MixedPort = *patch.MihomoMixedPort
 	}
 	if patch.MihomoURLTestTolerance != nil {
 		value := patch.MihomoURLTestTolerance.String()

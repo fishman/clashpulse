@@ -516,3 +516,14 @@ func TestExplainOverridesReportsTunKeysOnlyWhenChanged(t *testing.T) {
 		t.Fatalf("overrides from complete fake-ip DNS = %v, want %v", got, want)
 	}
 }
+
+func TestMixedPortReadsGeneratedConfig(t *testing.T) {
+	if port, err := MixedPort([]byte("mixed-port: 7899\nport: 0\n")); err != nil || port != 7899 {
+		t.Fatalf("MixedPort = %d, %v", port, err)
+	}
+	for _, generated := range []string{"", "port: 7890\n", "mixed-port: 0\n", "mixed-port: nope\n", ": not yaml"} {
+		if _, err := MixedPort([]byte(generated)); err == nil {
+			t.Errorf("MixedPort(%q) accepted a config without a usable mixed port", generated)
+		}
+	}
+}

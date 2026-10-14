@@ -147,7 +147,7 @@ func validateSnapshot(s Snapshot) error {
 	if err := validateMonitor(s.Monitor); err != nil {
 		return err
 	}
-	if err := validateMihomoURLTest(s.Mihomo); err != nil {
+	if err := validateMihomo(s.Mihomo); err != nil {
 		return err
 	}
 	if err := validateDNS(s.DNS); err != nil {
@@ -321,12 +321,15 @@ func validateSnapshot(s Snapshot) error {
 
 // Mihomo reads these as whole seconds and milliseconds, so a finer value would be
 // silently rounded down.
-func validateMihomoURLTest(m Mihomo) error {
+func validateMihomo(m Mihomo) error {
 	if m.URLTestInterval > 0 && (m.URLTestInterval < time.Second || m.URLTestInterval > maxMonitorInterval) {
 		return fmt.Errorf("config.toml: mihomo.url_test_interval: must be between one second and 24 hours")
 	}
 	if m.URLTestTolerance > 0 && (m.URLTestTolerance < time.Millisecond || m.URLTestTolerance > time.Minute) {
 		return fmt.Errorf("config.toml: mihomo.url_test_tolerance: must be between one millisecond and one minute")
+	}
+	if m.MixedPort < core.MixedPortMin || m.MixedPort > core.MixedPortMax {
+		return fmt.Errorf("config.toml: mihomo.mixed_port: must be between %d and %d", core.MixedPortMin, core.MixedPortMax)
 	}
 	return nil
 }

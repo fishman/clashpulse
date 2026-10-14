@@ -48,7 +48,7 @@ func TestRunSubscriptionRefreshDoesNotBlockStop(t *testing.T) {
 	root := t.TempDir()
 	binary := fakeAppMihomo(t, root, python)
 	configDir := filepath.Join(root, "config")
-	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\n[monitor]\nenabled = false\n", binary))); err != nil {
+	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\nmixed_port = %d\n[monitor]\nenabled = false\n", binary, freeLoopbackPort(t)))); err != nil {
 		t.Fatal(err)
 	}
 	if err := config.Write(filepath.Join(configDir, "subscriptions.toml"), []byte(fmt.Sprintf(dailySubscriptionTOML, server.URL+"/subscription"))); err != nil {
@@ -120,7 +120,7 @@ func TestRunSubscriptionRefreshDoesNotBlockStop(t *testing.T) {
 	if err := os.WriteFile(blockedBinary, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\n[monitor]\nenabled = false\n", blockedBinary))); err != nil {
+	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\nmixed_port = %d\n[monitor]\nenabled = false\n", blockedBinary, freeLoopbackPort(t)))); err != nil {
 		t.Fatal(err)
 	}
 	waitAppSnapshot(t, ctx, client, func(state core.Snapshot) bool { return state.Binary.Desired == blockedBinary })

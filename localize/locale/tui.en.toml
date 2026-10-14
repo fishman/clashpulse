@@ -31,6 +31,9 @@ other = "TUN stack"
 ["tui.modal.title.tun_dns_mode"]
 other = "TUN DNS mode"
 
+["tui.modal.title.mixed_port"]
+other = "Mixed port"
+
 ["tui.modal.prompt.binary"]
 other = "system, bundled, or an absolute executable path"
 
@@ -42,6 +45,9 @@ other = "confirm DNS policy removal"
 
 ["tui.modal.prompt.dns_listen"]
 other = "DNS listener address"
+
+["tui.modal.prompt.mixed_port"]
+other = "HTTP, HTTPS, and SOCKS proxy port on 127.0.0.1"
 
 ["tui.modal.notice.binary"]
 other = "Enter system, bundled, or an absolute executable path."

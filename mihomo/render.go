@@ -541,3 +541,18 @@ func ValidateInHome(ctx context.Context, capability Capability, configPath, home
 	}
 	return nil
 }
+
+// MixedPort reads the loopback mixed port from a generated configuration, so
+// callers use the port of the runtime that actually runs.
+func MixedPort(generated []byte) (int, error) {
+	var document struct {
+		MixedPort int `yaml:"mixed-port"`
+	}
+	if err := yaml.Unmarshal(generated, &document); err != nil {
+		return 0, fmt.Errorf("mihomo: invalid generated configuration: %w", err)
+	}
+	if document.MixedPort <= 0 || document.MixedPort > 65535 {
+		return 0, fmt.Errorf("mihomo: generated configuration has no mixed port")
+	}
+	return document.MixedPort, nil
+}

@@ -62,44 +62,45 @@ type runtimeService struct {
 	notificationErrors        chan error
 	controller                *mihomo.Controller
 	controllerAddress, secret string
-	proxyPort                 int
-	cap                       mihomo.Capability
-	exited                    <-chan struct{}
-	running                   atomic.Bool
-	proxyActive               bool
-	generated                 []byte
-	resourceHome              string
-	configOverrides           []core.ConfigOverrideSnapshot
-	configReportPending       bool
-	localProfile              []byte
-	generatedPath             string
-	foreground                bool
-	forceRestart              bool
-	activationBackup          *runtimeBackup
-	groups                    map[string]mihomo.Group
-	proxies                   map[string]string
-	automation                map[string]bool
-	monitor                   *monitor.Scheduler
-	stopMonitor               context.CancelFunc
-	monitorDone               chan error
-	snapshot                  core.Snapshot
-	lastPublished             core.Snapshot
-	alertHigh                 bool
-	jobID                     uint64
-	lastSwitch                map[string]time.Time
-	manualOverride            map[string]bool
-	notifications             chan time.Duration
-	improvementNotifications  chan struct{}
-	testNotifications         chan struct{}
-	notify                    func(desktopNotification) error
-	notificationDone          chan struct{}
-	tun                       tunGrant
-	tunHold                   bool
-	tunActive                 bool
-	tunPrepareRequested       bool
-	tunLeftover               bool
-	tunPrivilege              string
-	tunFailure                string
+	// mixedPort is the running Mihomo's mixed listener port.
+	mixedPort                atomic.Int32
+	cap                      mihomo.Capability
+	exited                   <-chan struct{}
+	running                  atomic.Bool
+	proxyActive              bool
+	generated                []byte
+	resourceHome             string
+	configOverrides          []core.ConfigOverrideSnapshot
+	configReportPending      bool
+	localProfile             []byte
+	generatedPath            string
+	foreground               bool
+	forceRestart             bool
+	activationBackup         *runtimeBackup
+	groups                   map[string]mihomo.Group
+	proxies                  map[string]string
+	automation               map[string]bool
+	monitor                  *monitor.Scheduler
+	stopMonitor              context.CancelFunc
+	monitorDone              chan error
+	snapshot                 core.Snapshot
+	lastPublished            core.Snapshot
+	alertHigh                bool
+	jobID                    uint64
+	lastSwitch               map[string]time.Time
+	manualOverride           map[string]bool
+	notifications            chan time.Duration
+	improvementNotifications chan struct{}
+	testNotifications        chan struct{}
+	notify                   func(desktopNotification) error
+	notificationDone         chan struct{}
+	tun                      tunGrant
+	tunHold                  bool
+	tunActive                bool
+	tunPrepareRequested      bool
+	tunLeftover              bool
+	tunPrivilege             string
+	tunFailure               string
 }
 
 // RunAt hosts the single lifecycle owner; both desktop and terminal clients use IPC.
@@ -189,18 +190,22 @@ func sweepLocalGenerated(stateDir string) error {
 	return nil
 }
 
-func reserveLoopbackPorts() (int, int, error) {
-	controller, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, 0, fmt.Errorf("clashpulse: reserve controller port: %w", err)
+// reserveControllerPort picks a random free loopback port for the private
+// controller. It never equals the user's fixed mixed port.
+func reserveControllerPort(mixedPort int) (int, error) {
+	for {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			return 0, fmt.Errorf("clashpulse: reserve controller port: %w", err)
+		}
+		port := listener.Addr().(*net.TCPAddr).Port
+		if err := listener.Close(); err != nil {
+			return 0, fmt.Errorf("clashpulse: reserve controller port: %w", err)
+		}
+		if port != mixedPort {
+			return port, nil
+		}
 	}
-	defer controller.Close()
-	proxy, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, 0, fmt.Errorf("clashpulse: reserve proxy port: %w", err)
-	}
-	defer proxy.Close()
-	return controller.Addr().(*net.TCPAddr).Port, proxy.Addr().(*net.TCPAddr).Port, nil
 }
 
 func (s *runtimeService) transport(route download.Route, allowInvalidTLS bool) (http.RoundTripper, error) {
@@ -244,7 +249,7 @@ func (s *runtimeService) transport(route download.Route, allowInvalidTLS bool) (
 		if !s.running.Load() {
 			return nil, fmt.Errorf("clashpulse: Mihomo proxy route is unavailable")
 		}
-		proxyURL := &url.URL{Scheme: "http", Host: fmt.Sprintf("127.0.0.1:%d", s.proxyPort)}
+		proxyURL := &url.URL{Scheme: "http", Host: s.proxyAddress()}
 		tr.Proxy = http.ProxyURL(proxyURL)
 	default:
 		return nil, fmt.Errorf("clashpulse: unsupported download route")
@@ -345,6 +350,7 @@ func (s *runtimeService) stateSnapshot() core.Snapshot {
 	for _, route := range settings.DNS.Routes {
 		state.DNS.Routes = append(state.DNS.Routes, core.DNSRouteSnapshot{Suffix: route.Suffix, GeoSite: route.GeoSite, Resource: route.Resource, ResolverSet: route.ResolverSet})
 	}
+	state.MixedPort = settings.Mihomo.MixedPort
 	state.SystemProxy = core.SystemProxySnapshot{Enabled: settings.App.SystemProxy.Enabled, Active: s.proxyActive}
 	state.Tun = s.tunSnapshot(settings.Tun)
 	state.Binary.Desired = settings.Mihomo.Binary

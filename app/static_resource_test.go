@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -24,6 +26,7 @@ import (
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/download"
 	"github.com/fishman/clashpulse/ipc"
+	"github.com/fishman/clashpulse/mihomo"
 	"github.com/fishman/clashpulse/monitor"
 	"github.com/fishman/clashpulse/resources"
 	"github.com/fishman/clashpulse/subscriptions"
@@ -122,7 +125,7 @@ elif args[0] in ('set', 'reset'):
 	if err := os.Mkdir(configDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\n[monitor]\nenabled = false\n[system_proxy]\nenabled = true\n", binary))); err != nil {
+	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\nmixed_port = %d\n[monitor]\nenabled = false\n[system_proxy]\nenabled = true\n", binary, freeLoopbackPort(t)))); err != nil {
 		t.Fatal(err)
 	}
 	resourceTOML := fmt.Sprintf("[[resource]]\nid = \"list-a\"\nkind = \"rule-set\"\nformat = \"text\"\nrule_type = \"domain\"\nurl = %q\nenabled = true\n\n[[resource]]\nid = \"list-b\"\nkind = \"rule-set\"\nformat = \"text\"\nrule_type = \"domain\"\nurl = %q\nenabled = true\n", resourceFiles["list-a"], resourceFiles["list-b"])
@@ -192,6 +195,64 @@ func (h *staticRuntime) activate(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(h.service.registry.Home(), ".resources.txn")); !os.IsNotExist(err) {
 		t.Fatalf("activation left an unfinished resource transaction: %v", err)
+	}
+}
+
+// freeLoopbackPort is a currently unused loopback port, so a test never
+// depends on the fixed default being free on the host.
+func freeLoopbackPort(t *testing.T) int {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	return listener.Addr().(*net.TCPAddr).Port
+}
+
+func TestMixedPortFollowsConfigAndMovesSystemProxy(t *testing.T) {
+	h := newStaticRuntime(t)
+	h.activate(t)
+	assertPort := func(want int) {
+		t.Helper()
+		if got, err := mihomo.MixedPort(h.service.generated); err != nil || got != want {
+			t.Fatalf("running mixed port = %d, %v; want %d", got, err, want)
+		}
+		state := readJSONFile(t, h.proxyState)
+		for _, schema := range []string{"http", "https", "socks"} {
+			if got := state["org.gnome.system.proxy."+schema+" port"]; got != strconv.Itoa(want) {
+				t.Fatalf("%s system proxy port = %q, want %d", schema, got, want)
+			}
+		}
+	}
+	assertPort(h.service.store.Snapshot().Mihomo.MixedPort)
+
+	moved := uint32(freeLoopbackPort(t))
+	if err := h.service.patchSettings(h.ctx, &ipc.ConfigPatch{MixedPort: &moved}); err != nil {
+		t.Fatal(err)
+	}
+	assertPort(int(moved))
+	if got := h.service.stateSnapshot().MixedPort; got != int(moved) {
+		t.Fatalf("snapshot mixed port = %d", got)
+	}
+}
+
+func TestMixedPortInUseKeepsPriorRuntime(t *testing.T) {
+	h := newStaticRuntime(t)
+	h.activate(t)
+	before := bytes.Clone(h.service.generated)
+	busy, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer busy.Close()
+	port := uint32(busy.Addr().(*net.TCPAddr).Port)
+	err = h.service.patchSettings(h.ctx, &ipc.ConfigPatch{MixedPort: &port})
+	if public, ok := core.PublicActivation(err); !ok || public.Stage != core.ActivationMixedPort {
+		t.Fatalf("busy mixed port error = %v", err)
+	}
+	if h.service.controller == nil || !bytes.Equal(h.service.generated, before) || !h.service.proxyActive {
+		t.Fatal("busy mixed port replaced the running runtime")
 	}
 }
 

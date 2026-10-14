@@ -25,6 +25,9 @@ other = "DNS 路由设置"
 ["tui.modal.title.delete_dns"]
 other = "删除 DNS 策略"
 
+["tui.modal.title.mixed_port"]
+other = "混合端口"
+
 ["tui.modal.prompt.binary"]
 other = "system、bundled 或绝对可执行文件路径"
 
@@ -36,6 +39,9 @@ other = "确认移除 DNS 策略"
 
 ["tui.modal.prompt.dns_listen"]
 other = "DNS 监听地址"
+
+["tui.modal.prompt.mixed_port"]
+other = "127.0.0.1 上的 HTTP、HTTPS 和 SOCKS 代理端口"
 
 ["tui.modal.notice.binary"]
 other = "输入 system、bundled 或绝对可执行文件路径。"
@@ -849,6 +855,12 @@ other = "选择 Mihomo 内核"
 
 ["set DNS listener"]
 other = "设置 DNS 监听器"
+
+["set mixed proxy port"]
+other = "设置混合代理端口"
+
+["Mixed port must be between %d and %d."]
+other = "混合端口必须介于 %d 至 %d 之间。"
 
 ["set alert threshold in milliseconds"]
 other = "设置告警阈值（毫秒）"

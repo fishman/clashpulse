@@ -53,6 +53,7 @@ const (
 	ModalDeleteDNS          ModalKind = "delete_dns"
 	ModalTunStack           ModalKind = "tun_stack"
 	ModalTunDNSMode         ModalKind = "tun_dns_mode"
+	ModalMixedPort          ModalKind = "mixed_port"
 )
 
 type monitorField string
@@ -120,6 +121,7 @@ const (
 	rowSettingBinary
 	rowSettingMonitor
 	rowSettingDNSListen
+	rowSettingMixedPort
 	rowDNSResolver
 	rowDNSRoute
 	rowSettingTunManual
@@ -220,7 +222,7 @@ func tabRowsChanged(before, after ipc.Event, tab Tab) bool {
 	case TabResources:
 		return !reflect.DeepEqual(old.Resources, next.Resources)
 	case TabSettings:
-		return !reflect.DeepEqual(old.Binary, next.Binary) || old.Monitor != next.Monitor || old.SystemProxy != next.SystemProxy || old.Tun != next.Tun || !reflect.DeepEqual(old.DNS, next.DNS)
+		return !reflect.DeepEqual(old.Binary, next.Binary) || old.Monitor != next.Monitor || old.SystemProxy != next.SystemProxy || old.MixedPort != next.MixedPort || old.Tun != next.Tun || !reflect.DeepEqual(old.DNS, next.DNS)
 	default:
 		return true
 	}
@@ -474,6 +476,8 @@ func (m Model) HandleKey(key string) (Model, *ipc.Command, bool) {
 		return m.openMonitorModal(monitorMaxFailures), nil, false
 	case "edit_dns_listen":
 		return m.openDNSListenModal(), nil, false
+	case "edit_mixed_port":
+		return m.openMixedPortModal(), nil, false
 	case "new_dns_resolver":
 		return m.openDNSResolverModal(false, ""), nil, false
 	case "new_dns_route":
@@ -588,6 +592,17 @@ func (m Model) handleModalKey(key string) (Model, *ipc.Command, bool) {
 			m.Modal = nil
 			m.Focus = FocusContent
 			return m, configCommand(&ipc.ConfigPatch{Binary: &value}), false
+		}
+		if m.Modal.Kind == ModalMixedPort {
+			port, err := strconv.ParseUint(m.Modal.Input, 10, 32)
+			if err != nil || port < core.MixedPortMin || port > core.MixedPortMax {
+				m.Notice = mixedPortRangeNotice()
+				return m, nil, false
+			}
+			value := uint32(port)
+			m.Modal = nil
+			m.Focus = FocusContent
+			return m, configCommand(&ipc.ConfigPatch{MixedPort: &value}), false
 		}
 		m.Notice = localize.T("Unsupported settings dialog.")
 		return m, nil, false
@@ -780,6 +795,20 @@ func (m Model) openDNSListenModal() Model {
 	m.Focus = FocusModal
 	m.Notice = localize.T("Edit the DNS listener; backend validates address and routing conflicts.")
 	return m
+}
+
+func (m Model) openMixedPortModal() Model {
+	m.Modal = &Modal{Kind: ModalMixedPort}
+	if port := m.snapshot.Snapshot.MixedPort; port > 0 {
+		m.Modal.Input = strconv.Itoa(port)
+	}
+	m.Focus = FocusModal
+	m.Notice = mixedPortRangeNotice()
+	return m
+}
+
+func mixedPortRangeNotice() string {
+	return fmt.Sprintf(localize.T("Mixed port must be between %d and %d."), core.MixedPortMin, core.MixedPortMax)
 }
 
 func (m Model) handleDNSListenKey(key string) (Model, *ipc.Command, bool) {
@@ -1539,6 +1568,8 @@ func (m Model) activate() (Model, *ipc.Command, bool) {
 		return m.openMonitorModal(row.monitor), nil, false
 	case rowSettingDNSListen:
 		return m.openDNSListenModal(), nil, false
+	case rowSettingMixedPort:
+		return m.openMixedPortModal(), nil, false
 	case rowDNSResolver:
 		return m.openDNSResolverModal(true, row.dnsID), nil, false
 	case rowDNSRoute:
@@ -1798,6 +1829,7 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 		rows := []Row{
 			{ID: "setting:binary", Title: localize.T("Mihomo binary"), Detail: binaryDetail, Cells: []string{localize.T("Mihomo binary"), fallback(snapshot.Binary.Desired, localize.T("unspecified")), ""}, kind: rowSettingBinary, action: "edit_binary"},
 			{ID: "setting:system-proxy", Title: localize.T("System proxy"), Detail: fmt.Sprintf(localize.T("System proxy requested %s; currently active %s."), localizedBool(snapshot.SystemProxy.Enabled), localizedBool(snapshot.SystemProxy.Active)), Cells: []string{localize.T("System proxy"), fmt.Sprintf(localize.T("requested %s; active %s"), localizedBool(snapshot.SystemProxy.Enabled), localizedBool(snapshot.SystemProxy.Active)), ""}, action: proxyAction},
+			{ID: "setting:mixed-port", Title: localize.T("Mixed port"), Detail: localize.T("HTTP, HTTPS, and SOCKS proxy port on 127.0.0.1"), Cells: []string{localize.T("Mixed port"), strconv.Itoa(snapshot.MixedPort), ""}, kind: rowSettingMixedPort, action: "edit_mixed_port"},
 			{ID: "setting:monitor", Title: localize.T("Monitor"), Detail: enabledLabel(monitor.Enabled), Cells: []string{localize.T("Monitor"), enabledLabel(monitor.Enabled), ""}, action: monitorAction},
 		}
 		rows = append(rows, tunRows(snapshot.Tun)...)

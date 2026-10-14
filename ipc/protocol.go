@@ -14,7 +14,7 @@ import (
 
 const (
 	// ProtocolVersion is negotiated in the first frame on every connection.
-	ProtocolVersion uint16 = 7
+	ProtocolVersion uint16 = 8
 	// MaxFrameSize bounds both incoming and outgoing JSON frames.
 	MaxFrameSize = 1 << 20
 )
@@ -94,6 +94,7 @@ type ConfigPatch struct {
 	Binary                       *string `json:"binary,omitempty"`
 	URLTestIntervalSeconds       *uint32 `json:"url_test_interval_seconds,omitempty"`
 	URLTestToleranceMillis       *uint32 `json:"url_test_tolerance_millis,omitempty"`
+	MixedPort                    *uint32 `json:"mixed_port,omitempty"`
 	TunEnabled                   *bool   `json:"tun_enabled,omitempty"`
 	TunStack                     *string `json:"tun_stack,omitempty"`
 	TunDNSMode                   *string `json:"tun_dns_mode,omitempty"`
@@ -220,6 +221,9 @@ func (c Command) validate() error {
 		}
 		if p.TunStack != nil && !validTunStack(*p.TunStack) || p.TunDNSMode != nil && !validTunDNSMode(*p.TunDNSMode) {
 			return errors.New("invalid TUN mode setting")
+		}
+		if p.MixedPort != nil && (*p.MixedPort < core.MixedPortMin || *p.MixedPort > core.MixedPortMax) {
+			return errors.New("mixed port out of range")
 		}
 		if p.DNSListen != nil && (len(*p.DNSListen) > 128 || strings.ContainsAny(*p.DNSListen, "\x00\r\n")) {
 			return errors.New("invalid DNS listener")

@@ -91,7 +91,7 @@ func (s *runtimeService) renderWithHome(ctx context.Context, profile []byte, int
 		return nil, core.WrapActivation(core.ActivationConfigValidation, err)
 	}
 	candidate, err := mihomo.Render(profile, intent, mihomo.ManagedPaths(paths), mihomo.ControllerSettings{
-		Address: s.controllerAddress, Secret: s.secret, HomeDir: home, ProxyPort: s.proxyPort,
+		Address: s.controllerAddress, Secret: s.secret, HomeDir: home, ProxyPort: intent.Mihomo.MixedPort,
 	}, capability)
 	if err != nil {
 		var missing *mihomo.CapabilityError
@@ -435,7 +435,7 @@ func (s *runtimeService) restoreResourceRuntime(ctx context.Context, backup *run
 			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("clashpulse: restore proxy selection: %w", err))
 		}
 		if backup.proxyActive && !s.proxyActive {
-			if err := s.proxy.Apply(cleanup, fmt.Sprintf("127.0.0.1:%d", s.proxyPort)); err != nil {
+			if err := s.applySystemProxy(cleanup); err != nil {
 				cleanupErr = errors.Join(cleanupErr, fmt.Errorf("clashpulse: restore system proxy: %w", err))
 			} else {
 				s.proxyActive = true
@@ -510,7 +510,7 @@ func (s *runtimeService) restoreActivation(ctx context.Context, previousProfile 
 		return err
 	}
 	if backup.proxyActive && !s.proxyActive {
-		if err := s.proxy.Apply(ctx, fmt.Sprintf("127.0.0.1:%d", s.proxyPort)); err != nil {
+		if err := s.applySystemProxy(ctx); err != nil {
 			return err
 		}
 		s.proxyActive = true
@@ -607,7 +607,7 @@ func (s *runtimeService) applyCandidateAt(ctx context.Context, candidate []byte,
 		}
 	}
 	if s.store.Snapshot().App.SystemProxy.Enabled {
-		if err := s.proxy.Apply(ctx, fmt.Sprintf("127.0.0.1:%d", s.proxyPort)); err != nil {
+		if err := s.applySystemProxy(ctx); err != nil {
 			cleanup, done := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			restoreErr := s.proxy.Restore(cleanup)
 			done()
@@ -661,7 +661,7 @@ func (s *runtimeService) restorePrevious(ctx context.Context, candidate []byte, 
 		restored = false
 	}
 	if enableProxy {
-		if err := s.proxy.Apply(ctx, fmt.Sprintf("127.0.0.1:%d", s.proxyPort)); err != nil {
+		if err := s.applySystemProxy(ctx); err != nil {
 			s.reportError("rollback", err)
 			restored = false
 		} else {
@@ -724,6 +724,23 @@ func (s *runtimeService) startProcess(ctx context.Context, capability mihomo.Cap
 	if home != s.registry.Home() {
 		return core.WrapActivation(core.ActivationResources, fmt.Errorf("clashpulse: invalid managed data home"))
 	}
+	generated, err := os.ReadFile(path)
+	if err != nil {
+		return core.WrapActivation(core.ActivationProcessStart, err)
+	}
+	port, err := mihomo.MixedPort(generated)
+	if err != nil {
+		return core.WrapActivation(core.ActivationProcessStart, err)
+	}
+	// Mihomo logs a failed listener bind and keeps running without its proxy,
+	// so a taken port must be refused before start.
+	probe, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		return core.WrapActivation(core.ActivationMixedPort, err)
+	}
+	if err := probe.Close(); err != nil {
+		return core.WrapActivation(core.ActivationMixedPort, err)
+	}
 	plan := mihomo.StartPlan{Capability: capability, ConfigPath: path, Args: []string{"-d", home}}
 	if s.tunCapability(capability) {
 		plan.Env = tunEnviron()
@@ -748,6 +765,7 @@ func (s *runtimeService) startProcess(ctx context.Context, capability mihomo.Cap
 		}
 	}
 	s.controller = controller
+	s.mixedPort.Store(int32(port))
 	s.running.Store(true)
 	if err := s.refreshGroups(ctx); err != nil {
 		s.running.Store(false)
@@ -762,6 +780,17 @@ func (s *runtimeService) startProcess(ctx context.Context, capability mihomo.Cap
 		}
 	}
 	return nil
+}
+
+// proxyAddress is the running Mihomo's mixed listener; it is read off the
+// service loop by download workers, hence the atomic port.
+func (s *runtimeService) proxyAddress() string {
+	return fmt.Sprintf("127.0.0.1:%d", s.mixedPort.Load())
+}
+
+// applySystemProxy points the desktop proxy at the running mixed port.
+func (s *runtimeService) applySystemProxy(ctx context.Context) error {
+	return s.proxy.Apply(ctx, s.proxyAddress())
 }
 
 func (s *runtimeService) confirmTun(ctx context.Context) bool {

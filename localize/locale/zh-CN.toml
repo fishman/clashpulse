@@ -109,6 +109,12 @@ other = "连续异常样本数"
 ["DNS listener"]
 other = "DNS 监听地址"
 
+["Mixed port"]
+other = "混合端口"
+
+["HTTP, HTTPS, and SOCKS proxy port on 127.0.0.1"]
+other = "127.0.0.1 上的 HTTP、HTTPS 和 SOCKS 代理端口"
+
 ["Display name"]
 other = "显示名称"
 

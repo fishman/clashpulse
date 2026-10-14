@@ -1148,6 +1148,9 @@ type settingsPage struct {
 	systemProxy         *widget.Check
 	systemProxyState    core.SystemProxySnapshot
 	proxyStatus         *widget.Label
+	mixedPort           *widget.Label
+	mixedPortEditor     *widget.Entry
+	mixedPortDialog     *dialog.FormDialog
 	tunEnabled          *widget.Check
 	tunStack            *widget.Select
 	tunDNSMode          *widget.Select
@@ -1182,6 +1185,7 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{SystemProxyEnabled: &value}})
 	})
 	p.proxyStatus = widget.NewLabel(localize.T("System proxy inactive"))
+	p.mixedPort = widget.NewLabel("")
 	p.tunEnabled = widget.NewCheck(localize.T("Enable TUN"), func(enabled bool) {
 		if p.refreshing {
 			return
@@ -1258,6 +1262,8 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 		sections[1]: container.NewVBox(
 			widget.NewLabelWithStyle(localize.T("System proxy"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 			p.systemProxy, p.proxyStatus,
+			container.NewHBox(widget.NewLabel(localize.T("Mixed port")), p.mixedPort, widget.NewButton(localize.T("Change"), p.editMixedPort)),
+			widget.NewLabel(localize.T("HTTP, HTTPS, and SOCKS proxy port on 127.0.0.1")),
 		),
 		sections[2]: p.tunView,
 		sections[3]: container.NewVBox(
@@ -1344,6 +1350,34 @@ func (p *settingsPage) editThreshold() {
 		value := uint32(parsed)
 		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{AlertThresholdMillis: &value}})
 	}, p.window).Show()
+}
+
+func (p *settingsPage) editMixedPort() {
+	input := widget.NewEntry()
+	input.SetText(p.mixedPort.Text)
+	input.SetPlaceHolder(fmt.Sprintf("%d-%d", core.MixedPortMin, core.MixedPortMax))
+	p.mixedPortEditor = input
+	p.mixedPortDialog = dialog.NewForm(localize.T("Mixed port"), localize.T("Apply"), localize.T("Cancel"), []*widget.FormItem{widget.NewFormItem(localize.T("Port"), input)}, func(confirmed bool) {
+		p.mixedPortDialog = nil
+		if !confirmed {
+			return
+		}
+		parsed, err := strconv.ParseUint(strings.TrimSpace(input.Text), 10, 32)
+		if err != nil || parsed < core.MixedPortMin || parsed > core.MixedPortMax {
+			dialog.ShowError(fmt.Errorf(localize.T("mixed port must be %d-%d"), core.MixedPortMin, core.MixedPortMax), p.window)
+			return
+		}
+		value := uint32(parsed)
+		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{MixedPort: &value}})
+	}, p.window)
+	p.mixedPortDialog.Show()
+}
+
+// updateMixedPort shows the configured port; an unchanged value leaves the label untouched.
+func (p *settingsPage) updateMixedPort(port int) {
+	if text := strconv.Itoa(port); p.mixedPort.Text != text {
+		p.mixedPort.SetText(text)
+	}
 }
 
 func (p *settingsPage) update(binary core.BinarySnapshot, monitor core.MonitorSnapshot, systemProxy core.SystemProxySnapshot, dns core.DNSSnapshot) {

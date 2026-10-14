@@ -31,6 +31,9 @@ other = "生成的 Mihomo 配置未通过验证"
 ["Mihomo process could not start"]
 other = "Mihomo 进程无法启动"
 
+["the configured mixed port is already in use"]
+other = "配置的混合端口已被占用"
+
 ["Mihomo controller did not become ready"]
 other = "Mihomo 控制接口未就绪"
 

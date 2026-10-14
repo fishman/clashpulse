@@ -103,16 +103,6 @@ func waitConfigError(t *testing.T, ctx context.Context, client *ipc.Client, file
 	t.Fatalf("invalid config error for %s was not published", file)
 }
 
-func TestReserveLoopbackPortsDistinct(t *testing.T) {
-	controller, proxy, err := reserveLoopbackPorts()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if controller == proxy || controller == 0 || proxy == 0 {
-		t.Fatalf("ports overlap: controller %d proxy %d", controller, proxy)
-	}
-}
-
 func TestRunAtClearsConfigReloadIssueAfterNoopCorrection(t *testing.T) {
 	root := t.TempDir()
 	configDir, stateDir := filepath.Join(root, "config"), filepath.Join(root, "state")

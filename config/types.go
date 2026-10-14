@@ -34,7 +34,12 @@ type Mihomo struct {
 	// Zero leaves each group's own delay setting in the source profile untouched.
 	URLTestInterval  time.Duration
 	URLTestTolerance time.Duration
+	// MixedPort is the loopback port Mihomo serves HTTP, HTTPS, and SOCKS on.
+	MixedPort int
 }
+
+// DefaultMixedPort is the fixed loopback port used when config.toml sets none.
+const DefaultMixedPort = 7899
 
 type Monitor struct {
 	Enabled               bool

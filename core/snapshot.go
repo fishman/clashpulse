@@ -176,6 +176,11 @@ const (
 	TunPrivilegeNoAgent     = "no-agent"
 	TunPrivilegeUnsupported = "unsupported-platform"
 
+	// MixedPortMin and MixedPortMax bound the configured mixed port; Mihomo runs
+	// unprivileged and cannot bind below 1024.
+	MixedPortMin = 1024
+	MixedPortMax = 65535
+
 	TunStackGVisor = "gvisor"
 	TunStackMixed  = "mixed"
 	TunStackSystem = "system"
@@ -248,11 +253,13 @@ type Snapshot struct {
 	Monitor         MonitorSnapshot
 	DNS             DNSSnapshot
 	SystemProxy     SystemProxySnapshot
-	Tun             TunSnapshot
-	Jobs            []JobSnapshot
-	Switches        []SwitchSnapshot
-	Errors          []ErrorSnapshot
-	Diagnostics     []DiagnosticSnapshot
+	// MixedPort is the configured loopback port for HTTP, HTTPS, and SOCKS.
+	MixedPort   int
+	Tun         TunSnapshot
+	Jobs        []JobSnapshot
+	Switches    []SwitchSnapshot
+	Errors      []ErrorSnapshot
+	Diagnostics []DiagnosticSnapshot
 }
 
 func NewSnapshot(groups []GroupSnapshot) Snapshot {

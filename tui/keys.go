@@ -95,7 +95,7 @@ func knownAction(action string) bool {
 		"tab_overview", "tab_proxies", "tab_subscriptions", "tab_filters", "tab_resources", "tab_settings",
 		"start", "stop", "reload_configuration", "test_notification", "manual_probe", "toggle_automation",
 		"refresh_subscription", "activate_subscription", "new_subscription", "edit_subscription", "delete_subscription", "refresh_filter", "refresh_resource", "new_filter", "edit_filter", "new_resource", "edit_resource",
-		"system_proxy_enable", "system_proxy_disable", "monitor_enable", "monitor_disable", "edit_monitor_interval", "edit_alert_threshold", "edit_binary",
+		"system_proxy_enable", "system_proxy_disable", "edit_mixed_port", "monitor_enable", "monitor_disable", "edit_monitor_interval", "edit_alert_threshold", "edit_binary",
 		"edit_monitor_url", "edit_monitor_timeout", "edit_monitor_concurrency", "edit_monitor_threshold", "edit_monitor_bad_samples", "edit_monitor_improvement", "edit_monitor_cooldown", "edit_monitor_jitter",
 		"edit_monitor_window", "edit_monitor_candidates", "edit_monitor_max_failures",
 		"edit_dns_listen", "new_dns_resolver", "new_dns_route", "edit_dns_entry", "delete_dns_entry",

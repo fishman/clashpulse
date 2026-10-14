@@ -375,6 +375,12 @@ other = "应用"
 ["alert threshold must be 1-60000 ms"]
 other = "告警阈值必须为 1-60000 毫秒"
 
+["mixed port must be %d-%d"]
+other = "混合端口必须为 %d-%d"
+
+["Port"]
+other = "端口"
+
 ["Active on the local Mihomo listener"]
 other = "已在本机 Mihomo 监听地址启用"
 

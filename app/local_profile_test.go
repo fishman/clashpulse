@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -84,7 +85,7 @@ func localOwnerFixture(t *testing.T) (string, string, string, string) {
 	root := t.TempDir()
 	binary := fakeAppMihomo(t, root, python)
 	configDir, stateDir := filepath.Join(root, "config"), filepath.Join(root, "state")
-	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte("[mihomo]\nbinary = \""+binary+"\"\n[monitor]\nenabled = false\n")); err != nil {
+	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\nmixed_port = %d\n[monitor]\nenabled = false\n", binary, freeLoopbackPort(t)))); err != nil {
 		t.Fatal(err)
 	}
 	if err := config.Write(filepath.Join(configDir, "resources.toml"), []byte("# no resources\n")); err != nil {

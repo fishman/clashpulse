@@ -28,7 +28,7 @@ func TestRunAtRefreshActivateSelectAndStop(t *testing.T) {
 	}))
 	defer server.Close()
 	configDir := filepath.Join(root, "config")
-	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\n[monitor]\nenabled = true\n", binary))); err != nil {
+	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\nmixed_port = %d\n[monitor]\nenabled = true\n", binary, freeLoopbackPort(t)))); err != nil {
 		t.Fatal(err)
 	}
 	secretURL := server.URL + "/subscription?token=short-lived-secret"
@@ -164,7 +164,7 @@ func TestRunAtRefreshActivateSelectAndStop(t *testing.T) {
 		t.Fatal(err)
 	}
 	badGroup := strings.Repeat("b", 64)
-	badConfig := fmt.Sprintf("[mihomo]\nbinary = %q\n[monitor]\nenabled = true\nautomated_groups = [%q]\n", candidateBinary, badGroup)
+	badConfig := fmt.Sprintf("[mihomo]\nbinary = %q\nmixed_port = %d\n[monitor]\nenabled = true\nautomated_groups = [%q]\n", candidateBinary, freeLoopbackPort(t), badGroup)
 	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(badConfig)); err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +176,7 @@ func TestRunAtRefreshActivateSelectAndStop(t *testing.T) {
 	if len(state.Groups) != 1 || state.Groups[0].Selected != opaqueID("node-b") {
 		t.Fatalf("invalid automation destroyed prior runtime: %+v", state.Groups)
 	}
-	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\n[monitor]\nenabled = true\n", binary))); err != nil {
+	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\nmixed_port = %d\n[monitor]\nenabled = true\n", binary, freeLoopbackPort(t)))); err != nil {
 		t.Fatal(err)
 	}
 	rejectedBinary := filepath.Join(root, "mihomo-reject")
@@ -267,7 +267,7 @@ func TestDownloadedProfileActivatesAfterDesktopStarts(t *testing.T) {
 	}))
 	defer server.Close()
 	configDir, stateDir := filepath.Join(root, "config"), filepath.Join(root, "state")
-	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\n", binary))); err != nil {
+	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\nmixed_port = %d\n", binary, freeLoopbackPort(t)))); err != nil {
 		t.Fatal(err)
 	}
 	if err := config.Write(filepath.Join(configDir, "subscriptions.toml"), []byte(fmt.Sprintf(dailySubscriptionTOML, server.URL+"/profile?token=private"))); err != nil {

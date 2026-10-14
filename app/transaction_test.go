@@ -29,7 +29,7 @@ func TestFailedMixedReloadPreservesInactiveSubscriptionSnapshot(t *testing.T) {
 	subscriptionsPath := filepath.Join(configDir, "subscriptions.toml")
 	writeConfig := func(binaryPath string) {
 		t.Helper()
-		if err := config.Write(configPath, []byte(fmt.Sprintf("[mihomo]\nbinary = %q\n[monitor]\nenabled = true\n", binaryPath))); err != nil {
+		if err := config.Write(configPath, []byte(fmt.Sprintf("[mihomo]\nbinary = %q\nmixed_port = %d\n[monitor]\nenabled = true\n", binaryPath, freeLoopbackPort(t)))); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -167,7 +167,7 @@ func TestFailedPostRestartRefreshRestoresRuntimeState(t *testing.T) {
 	defer source.Close()
 	configDir, stateDir := filepath.Join(root, "config"), filepath.Join(root, "state")
 	configPath := filepath.Join(configDir, "config.toml")
-	if err := config.Write(configPath, []byte(fmt.Sprintf("[mihomo]\nbinary = %q\n[monitor]\nenabled = true\n", binary))); err != nil {
+	if err := config.Write(configPath, []byte(fmt.Sprintf("[mihomo]\nbinary = %q\nmixed_port = %d\n[monitor]\nenabled = true\n", binary, freeLoopbackPort(t)))); err != nil {
 		t.Fatal(err)
 	}
 	if err := config.Write(filepath.Join(configDir, "subscriptions.toml"), []byte(fmt.Sprintf(dailySubscriptionTOML, source.URL))); err != nil {
@@ -213,7 +213,7 @@ func TestFailedPostRestartRefreshRestoresRuntimeState(t *testing.T) {
 	if err := os.WriteFile(marker, nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := config.Write(configPath, []byte(fmt.Sprintf("[mihomo]\nbinary = %q\n[monitor]\nenabled = false\n", candidateBinary))); err != nil {
+	if err := config.Write(configPath, []byte(fmt.Sprintf("[mihomo]\nbinary = %q\nmixed_port = %d\n[monitor]\nenabled = false\n", candidateBinary, freeLoopbackPort(t)))); err != nil {
 		t.Fatal(err)
 	}
 	command(ipc.Command{Kind: ipc.CommandReloadConfiguration})

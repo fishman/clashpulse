@@ -401,6 +401,7 @@ func (d *desktopUI) postSnapshot(snapshot core.Snapshot) {
 			d.settingsPage.update(immutable.Binary, immutable.Monitor, immutable.SystemProxy, immutable.DNS)
 		}
 		d.settingsPage.updateTun(immutable.Tun)
+		d.settingsPage.updateMixedPort(immutable.MixedPort)
 		if !reflect.DeepEqual(previous.Diagnostics, immutable.Diagnostics) {
 			d.activity.update(immutable.Diagnostics)
 		}
