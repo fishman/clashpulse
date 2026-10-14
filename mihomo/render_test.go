@@ -36,6 +36,27 @@ func TestRenderPreservesProfileAndControlsLocalController(t *testing.T) {
 	}
 }
 
+func TestRenderPutsControllerOnUnixSocketOnly(t *testing.T) {
+	profile := []byte("proxies:\n  - name: alpha\n    type: direct\nexternal-controller: 0.0.0.0:9090\nexternal-controller-unix: /tmp/other.sock\nsecret: old\n")
+	socket := "/home/user/.local/state/clashpulse/mihomo.sock"
+	got, err := Render(profile, config.Snapshot{}, ManagedPaths{}, ControllerSettings{Socket: socket, Secret: "new-secret"}, Capability{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rendered map[string]any
+	if err := yaml.Unmarshal(got, &rendered); err != nil {
+		t.Fatal(err)
+	}
+	if _, tcp := rendered["external-controller"]; tcp || rendered["external-controller-unix"] != socket || rendered["secret"] != "new-secret" {
+		t.Fatalf("controller not confined to the private socket: %v", rendered)
+	}
+	for _, bad := range []string{"relative.sock", "/" + strings.Repeat("a", 108)} {
+		if _, err := Render(profile, config.Snapshot{}, ManagedPaths{}, ControllerSettings{Socket: bad, Secret: "s"}, Capability{}); err == nil {
+			t.Errorf("socket %q accepted", bad)
+		}
+	}
+}
+
 func TestRenderRejectsMissingManagedResourceAndNeverMutatesSource(t *testing.T) {
 	profile := []byte("proxies:\n  - name: alpha\n    type: direct\n")
 	s := config.Snapshot{Resources: []config.Resource{{ID: "cn", Kind: "rule-set", Enabled: true}}}

@@ -61,6 +61,9 @@ other = "代理仅绑定本机"
 ["override.dns.nameserver-policy"]
 other = "明确配置的 DNS 分流规则"
 
+["override.external-controller-unix"]
+other = "私有控制接口套接字"
+
 ["override.external-controller-tls"]
 other = "隔离控制接口"
 

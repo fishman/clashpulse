@@ -13,7 +13,7 @@ import (
 )
 
 func TestIPCResourceAndFilterEditsPersistCrossFileIntent(t *testing.T) {
-	root := t.TempDir()
+	root := shortTempDir(t)
 	source := filepath.Join(root, "cn.yaml")
 	if err := os.WriteFile(source, []byte("payload:\n  - +.example.cn\n"), 0600); err != nil {
 		t.Fatal(err)

@@ -21,7 +21,7 @@ import (
 
 func TestRunAtRefreshActivateSelectAndStop(t *testing.T) {
 	python := requireFakeMihomo(t)
-	root := t.TempDir()
+	root := shortTempDir(t)
 	binary := fakeAppMihomo(t, root, python)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(twoNodeProfile))
@@ -260,7 +260,7 @@ func TestRunAtRefreshActivateSelectAndStop(t *testing.T) {
 
 func TestDownloadedProfileActivatesAfterDesktopStarts(t *testing.T) {
 	python := requireFakeMihomo(t)
-	root := t.TempDir()
+	root := shortTempDir(t)
 	binary := fakeAppMihomo(t, root, python)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(twoNodeProfile))
@@ -375,9 +375,9 @@ func waitAppSnapshot(t *testing.T, ctx context.Context, client *ipc.Client, read
 func fakeAppMihomo(t *testing.T, root, python string) string {
 	t.Helper()
 	server := filepath.Join(root, "fake.py")
-	source := `import http.server, json, re, sys
+	source := `import http.server, json, re, socketserver, sys
 text = open(sys.argv[1], encoding='utf-8').read()
-address = re.search(r'^external-controller:\s*(\S+)', text, re.M).group(1)
+controller_socket = re.search(r'^external-controller-unix:\s*(\S+)', text, re.M).group(1).strip('"\'')
 secret = re.search(r'^secret:\s*(\S+)', text, re.M).group(1)
 selected = ['node-a']
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -400,7 +400,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(204); self.end_headers(); return
         self.send_error(404)
     def log_message(self, *args): pass
-http.server.HTTPServer(('127.0.0.1', int(address.rsplit(':',1)[1])), Handler).serve_forever()
+class UnixHTTPServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+    daemon_threads = True
+    def get_request(self):
+        request, _ = super().get_request()
+        return request, ('mihomo', 0)
+UnixHTTPServer(controller_socket, Handler).serve_forever()
 `
 	if err := os.WriteFile(server, []byte(source), 0600); err != nil {
 		t.Fatal(err)

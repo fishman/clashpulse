@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -91,7 +90,7 @@ func (s *runtimeService) renderWithHome(ctx context.Context, profile []byte, int
 		return nil, core.WrapActivation(core.ActivationConfigValidation, err)
 	}
 	candidate, err := mihomo.Render(profile, intent, mihomo.ManagedPaths(paths), mihomo.ControllerSettings{
-		Address: s.controllerAddress, Secret: s.secret, HomeDir: home, ProxyPort: intent.Mihomo.MixedPort,
+		Address: s.controllerAddress, Socket: s.controllerSocket, Secret: s.secret, HomeDir: home, ProxyPort: intent.Mihomo.MixedPort,
 	}, capability)
 	if err != nil {
 		var missing *mihomo.CapabilityError
@@ -741,6 +740,9 @@ func (s *runtimeService) startProcess(ctx context.Context, capability mihomo.Cap
 	if err := probe.Close(); err != nil {
 		return core.WrapActivation(core.ActivationMixedPort, err)
 	}
+	if err := s.clearControllerEndpoint(); err != nil {
+		return core.WrapActivation(core.ActivationProcessStart, err)
+	}
 	plan := mihomo.StartPlan{Capability: capability, ConfigPath: path, Args: []string{"-d", home}}
 	if s.tunCapability(capability) {
 		plan.Env = tunEnviron()
@@ -748,7 +750,7 @@ func (s *runtimeService) startProcess(ctx context.Context, capability mihomo.Cap
 	if err := s.process.Start(s.processCtx, plan); err != nil {
 		return core.WrapActivation(core.ActivationProcessStart, err)
 	}
-	controller, err := mihomo.NewController("http://"+s.controllerAddress, s.secret, &http.Client{Timeout: time.Second})
+	controller, err := s.newController()
 	if err != nil {
 		return s.stopStartedProcess(ctx, core.WrapActivation(core.ActivationControllerReadiness, err))
 	}

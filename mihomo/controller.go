@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -62,6 +63,32 @@ func NewController(baseURL, secret string, client *http.Client) (*Controller, er
 	copy := *client
 	copy.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &Controller{BaseURL: strings.TrimRight(baseURL, "/"), Secret: secret, Client: &copy}, nil
+}
+
+// maxControllerSocket is the usable sun_path length on both Linux (107) and
+// macOS (103).
+const maxControllerSocket = 103
+
+// NewUnixController talks to Mihomo's controller over a Unix socket, so the
+// controller listens on no TCP port. Mihomo does not check the secret on the
+// socket; the caller must keep it in a directory only its user can enter.
+func NewUnixController(socket, secret string, client *http.Client) (*Controller, error) {
+	if !filepath.IsAbs(socket) || len(socket) > maxControllerSocket {
+		return nil, fmt.Errorf("controller: invalid socket path")
+	}
+	if client == nil {
+		client = http.DefaultClient
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	transport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
+		var dialer net.Dialer
+		return dialer.DialContext(ctx, "unix", socket)
+	}
+	copy := *client
+	copy.Transport = transport
+	copy.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &Controller{BaseURL: "http://mihomo", Secret: secret, Client: &copy}, nil
 }
 
 func (c *Controller) Proxies(ctx context.Context) ([]Proxy, []Group, error) {

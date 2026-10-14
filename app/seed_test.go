@@ -14,7 +14,7 @@ import (
 )
 
 func TestRunAtSeedsPrivateConfigWithoutReplacingUserEdits(t *testing.T) {
-	root := t.TempDir()
+	root := shortTempDir(t)
 	configDir := filepath.Join(root, "config")
 	endpoint := filepath.Join(root, "socket", "ipc.sock")
 	start := func() {

@@ -5,13 +5,43 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestUnixControllerTalksOverPrivateSocket(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "mihomo.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer secret" || r.URL.Path != "/proxies" {
+			http.Error(w, "unexpected", http.StatusUnauthorized)
+			return
+		}
+		_, _ = w.Write([]byte(`{"proxies":{"main":{"name":"main","type":"Selector","all":["node-a"],"now":"node-a"},"node-a":{"name":"node-a","type":"Direct"}}}`))
+	})}
+	go func() { _ = server.Serve(listener) }()
+	defer server.Close()
+
+	controller, err := NewUnixController(socket, "secret", &http.Client{Timeout: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, groups, err := controller.Proxies(context.Background()); err != nil || len(groups) != 1 || groups[0].Selected != "node-a" {
+		t.Fatalf("Proxies over socket = %+v, %v", groups, err)
+	}
+	if _, err := NewUnixController("relative.sock", "secret", nil); err == nil {
+		t.Fatal("relative controller socket accepted")
+	}
+}
 
 func TestWatchDialFailuresReportsOnlyManagedGroupDials(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

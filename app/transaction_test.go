@@ -19,7 +19,7 @@ import (
 
 func TestFailedMixedReloadPreservesInactiveSubscriptionSnapshot(t *testing.T) {
 	python := requireFakeMihomo(t)
-	root := t.TempDir()
+	root := shortTempDir(t)
 	binary := fakeAppMihomo(t, root, python)
 	profile := []byte(twoNodeProfile)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(profile) }))
@@ -155,7 +155,7 @@ func TestFailedMixedReloadPreservesInactiveSubscriptionSnapshot(t *testing.T) {
 
 func TestFailedPostRestartRefreshRestoresRuntimeState(t *testing.T) {
 	python := requireFakeMihomo(t)
-	root := t.TempDir()
+	root := shortTempDir(t)
 	marker := filepath.Join(root, "fail-third-proxy-read")
 	binary := fakeAppMihomoFailingThirdProxyRead(t, root, python, marker)
 	candidateBinary := filepath.Join(root, "mihomo-candidate")
@@ -244,9 +244,9 @@ func TestFailedPostRestartRefreshRestoresRuntimeState(t *testing.T) {
 func fakeAppMihomoFailingThirdProxyRead(t *testing.T, root, python, marker string) string {
 	t.Helper()
 	server := filepath.Join(root, "fake-failure.py")
-	source := fmt.Sprintf(`import http.server, json, os, re, sys
+	source := fmt.Sprintf(`import http.server, json, os, re, socketserver, sys
 text = open(sys.argv[1], encoding='utf-8').read()
-address = re.search(r'^external-controller:\s*(\S+)', text, re.M).group(1)
+controller_socket = re.search(r'^external-controller-unix:\s*(\S+)', text, re.M).group(1).strip('"\'')
 secret = re.search(r'^secret:\s*(\S+)', text, re.M).group(1)
 marker = %q
 proxy_reads = 0
@@ -275,7 +275,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(204); self.end_headers(); return
         self.send_error(404)
     def log_message(self, *args): pass
-http.server.HTTPServer(('127.0.0.1', int(address.rsplit(':',1)[1])), Handler).serve_forever()
+class UnixHTTPServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+    daemon_threads = True
+    def get_request(self):
+        request, _ = super().get_request()
+        return request, ('mihomo', 0)
+UnixHTTPServer(controller_socket, Handler).serve_forever()
 `, marker)
 	if err := os.WriteFile(server, []byte(source), 0600); err != nil {
 		t.Fatal(err)

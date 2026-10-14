@@ -58,7 +58,7 @@ func newStaticRuntime(t *testing.T) *staticRuntime {
 	if err != nil {
 		t.Skip("python3 unavailable for fake controller")
 	}
-	root := t.TempDir()
+	root := shortTempDir(t)
 	binDir := filepath.Join(root, "bin")
 	if err := os.Mkdir(binDir, 0o700); err != nil {
 		t.Fatal(err)
@@ -208,6 +208,18 @@ func freeLoopbackPort(t *testing.T) int {
 	}
 	defer listener.Close()
 	return listener.Addr().(*net.TCPAddr).Port
+}
+
+// shortTempDir is a private test root whose path does not grow with the test
+// name, so the controller socket inside it stays under the sun_path limit.
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "cp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
 }
 
 func TestMixedPortFollowsConfigAndMovesSystemProxy(t *testing.T) {
@@ -1027,7 +1039,7 @@ if sys.argv[1] == '--watch':
     raise SystemExit(0)
 text = open(sys.argv[1], encoding='utf-8').read()
 home = sys.argv[2]
-address = re.search(r'^external-controller:\s*(\S+)', text, re.M).group(1)
+controller_socket = re.search(r'^external-controller-unix:\s*(\S+)', text, re.M).group(1).strip('"\'')
 secret = re.search(r'^secret:\s*(\S+)', text, re.M).group(1)
 port = int(re.search(r'^mixed-port:\s*(\d+)', text, re.M).group(1))
 paths = [v.strip().strip('"\'') for v in re.findall(r'^\s*path:\s*(.+?)\s*$', text, re.M)]
@@ -1066,7 +1078,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(204); self.end_headers(); return
         self.send_error(404)
     def log_message(self, *args): pass
-http.server.ThreadingHTTPServer(('127.0.0.1', int(address.rsplit(':',1)[1])), Handler).serve_forever()
+class UnixHTTPServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+    daemon_threads = True
+    def get_request(self):
+        request, _ = super().get_request()
+        return request, ('mihomo', 0)
+UnixHTTPServer(controller_socket, Handler).serve_forever()
 `
 	if err := os.WriteFile(server, []byte(source), 0o600); err != nil {
 		t.Fatal(err)

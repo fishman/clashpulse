@@ -13,7 +13,7 @@ import (
 )
 
 func TestRunAtPublishesConfigChangesOverLocalIPC(t *testing.T) {
-	root := t.TempDir()
+	root := shortTempDir(t)
 	configDir, stateDir := filepath.Join(root, "config"), filepath.Join(root, "state")
 	endpoint := filepath.Join(root, "socket", "ipc.sock")
 	ctx, cancel := context.WithCancel(context.Background())
@@ -104,7 +104,7 @@ func waitConfigError(t *testing.T, ctx context.Context, client *ipc.Client, file
 }
 
 func TestRunAtClearsConfigReloadIssueAfterNoopCorrection(t *testing.T) {
-	root := t.TempDir()
+	root := shortTempDir(t)
 	configDir, stateDir := filepath.Join(root, "config"), filepath.Join(root, "state")
 	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatal(err)

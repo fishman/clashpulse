@@ -24,7 +24,7 @@ func TestRunAtCancelsStaleURLWhileIntentIsRunning(t *testing.T) {
 	if err != nil {
 		t.Skip("python3 unavailable")
 	}
-	root := t.TempDir()
+	root := shortTempDir(t)
 	binary := fakeAppMihomo(t, root, python)
 	oldStarted, oldCanceled := make(chan struct{}, 1), make(chan struct{}, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

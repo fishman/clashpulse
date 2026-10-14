@@ -329,7 +329,7 @@ func TestConfigOverrideSnapshotAcceptsEveryReportedField(t *testing.T) {
 	var overrides []core.ConfigOverrideSnapshot
 	for _, key := range []string{
 		"mixed-port", "port", "socks-port", "external-controller", "secret", "allow-lan", "bind-address",
-		"dns.listen", "external-controller-tls", "external-controller-cors", "external-ui", "dns.nameserver-policy",
+		"dns.listen", "external-controller-unix", "external-controller-tls", "external-controller-cors", "external-ui", "dns.nameserver-policy",
 		"rule-providers", "proxy-groups", "rules",
 		"tun", "dns.enable", "dns.enhanced-mode", "dns.fake-ip-range", "dns.fake-ip-range6", "dns.fake-ip-filter",
 	} {

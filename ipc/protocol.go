@@ -352,7 +352,7 @@ func validateSnapshot(snapshot core.Snapshot) error {
 	default:
 		return errors.New("ipc: invalid active source")
 	}
-	if len(snapshot.ConfigOverrides) > 21 {
+	if len(snapshot.ConfigOverrides) > 22 {
 		return errors.New("ipc: invalid config override report")
 	}
 	for _, item := range snapshot.ConfigOverrides {

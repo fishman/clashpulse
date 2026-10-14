@@ -534,7 +534,7 @@ func TestTunPrivilegedPathAbsoluteForRelativeStateDir(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("PrivilegedPath is reported on Linux only")
 	}
-	root := t.TempDir()
+	root := shortTempDir(t)
 	t.Chdir(root)
 	initial, err := config.Load(filepath.Join(root, "config"))
 	if err != nil {

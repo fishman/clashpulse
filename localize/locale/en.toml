@@ -25,6 +25,9 @@ other = "loopback-only proxy binding"
 ["override.dns.nameserver-policy"]
 other = "explicit DNS routing policy"
 
+["override.external-controller-unix"]
+other = "private controller socket"
+
 ["override.external-controller-tls"]
 other = "controller isolation"
 

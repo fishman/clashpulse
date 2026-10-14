@@ -82,7 +82,7 @@ func localOwnerFixture(t *testing.T) (string, string, string, string) {
 	if err != nil {
 		t.Skip("python3 unavailable")
 	}
-	root := t.TempDir()
+	root := shortTempDir(t)
 	binary := fakeAppMihomo(t, root, python)
 	configDir, stateDir := filepath.Join(root, "config"), filepath.Join(root, "state")
 	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\nmixed_port = %d\n[monitor]\nenabled = false\n", binary, freeLoopbackPort(t)))); err != nil {
@@ -311,7 +311,10 @@ func TestLocalProfileUnexpectedChildExit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	original := "http.server.HTTPServer(('127.0.0.1', int(address.rsplit(':',1)[1])), Handler).serve_forever()"
+	original := "UnixHTTPServer(controller_socket, Handler).serve_forever()"
+	if !strings.Contains(string(data), original) {
+		t.Fatal("fake controller start line not found; crash injection would be skipped")
+	}
 	data = []byte(strings.Replace(string(data), original, "import os, threading\nthreading.Timer(1, lambda: os._exit(1)).start()\n"+original, 1))
 	if err := os.WriteFile(server, data, 0o600); err != nil {
 		t.Fatal(err)

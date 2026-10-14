@@ -213,7 +213,7 @@ func TestResourceResponseForKeepsBodiesWithTheirSource(t *testing.T) {
 }
 
 func TestRefreshResourceWithoutActiveProfileCachesEnabledResources(t *testing.T) {
-	root := t.TempDir()
+	root := shortTempDir(t)
 	configDir, stateDir := filepath.Join(root, "config"), filepath.Join(root, "state")
 	if err := privateDirectory(configDir); err != nil {
 		t.Fatal(err)

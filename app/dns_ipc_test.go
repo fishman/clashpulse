@@ -12,7 +12,7 @@ import (
 )
 
 func TestIPCDNSRoutingIntentPersistsAndPublishes(t *testing.T) {
-	root := t.TempDir()
+	root := shortTempDir(t)
 	configDir := filepath.Join(root, "config")
 	endpoint := filepath.Join(root, "socket", "ipc.sock")
 	ctx, cancel := context.WithCancel(context.Background())

@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -34,34 +33,36 @@ const intentQueueSize = 32
 var errSubscriptionDeletionCommitted = errors.New("clashpulse: subscription deletion committed")
 
 type runtimeService struct {
-	configDir, stateDir       string
-	store                     *config.Store
-	lastAppliedSettings       config.Snapshot
-	subs                      *subscriptions.Service
-	subScheduler              *subscriptions.Scheduler
-	registry                  *resources.Registry
-	process                   mihomo.Process
-	processCtx                context.Context
-	proxy                     *sysproxy.Manager
-	server                    *ipc.Server
-	intents                   chan ipc.Command
-	operationMu               sync.Mutex
-	operationCancel           context.CancelFunc
-	operationKind             ipc.CommandKind
-	stopRequested             bool
-	changes                   chan config.Change
-	batches                   chan monitor.Batch
-	resourceRefresh           chan []string
-	stateChanged              chan struct{}
-	resourceDirty             atomic.Bool
-	resourceScheduleMu        sync.Mutex
-	resourceAttempts          map[string]time.Time
-	backgroundErrors          chan error
-	configErrors              chan error
-	configResults             chan error
-	notificationErrors        chan error
-	controller                *mihomo.Controller
-	controllerAddress, secret string
+	configDir, stateDir string
+	store               *config.Store
+	lastAppliedSettings config.Snapshot
+	subs                *subscriptions.Service
+	subScheduler        *subscriptions.Scheduler
+	registry            *resources.Registry
+	process             mihomo.Process
+	processCtx          context.Context
+	proxy               *sysproxy.Manager
+	server              *ipc.Server
+	intents             chan ipc.Command
+	operationMu         sync.Mutex
+	operationCancel     context.CancelFunc
+	operationKind       ipc.CommandKind
+	stopRequested       bool
+	changes             chan config.Change
+	batches             chan monitor.Batch
+	resourceRefresh     chan []string
+	stateChanged        chan struct{}
+	resourceDirty       atomic.Bool
+	resourceScheduleMu  sync.Mutex
+	resourceAttempts    map[string]time.Time
+	backgroundErrors    chan error
+	configErrors        chan error
+	configResults       chan error
+	notificationErrors  chan error
+	controller          *mihomo.Controller
+	// Exactly one is set: the controller socket, or a loopback address where
+	// no Unix-socket controller exists.
+	controllerAddress, controllerSocket, secret string
 	// mixedPort is the running Mihomo's mixed listener port.
 	mixedPort                atomic.Int32
 	cap                      mihomo.Capability
@@ -188,24 +189,6 @@ func sweepLocalGenerated(stateDir string) error {
 		}
 	}
 	return nil
-}
-
-// reserveControllerPort picks a random free loopback port for the private
-// controller. It never equals the user's fixed mixed port.
-func reserveControllerPort(mixedPort int) (int, error) {
-	for {
-		listener, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			return 0, fmt.Errorf("clashpulse: reserve controller port: %w", err)
-		}
-		port := listener.Addr().(*net.TCPAddr).Port
-		if err := listener.Close(); err != nil {
-			return 0, fmt.Errorf("clashpulse: reserve controller port: %w", err)
-		}
-		if port != mixedPort {
-			return port, nil
-		}
-	}
 }
 
 func (s *runtimeService) transport(route download.Route, allowInvalidTLS bool) (http.RoundTripper, error) {

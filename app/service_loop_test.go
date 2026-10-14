@@ -45,7 +45,7 @@ func TestRunSubscriptionRefreshDoesNotBlockStop(t *testing.T) {
 	defer server.Close()
 	defer releaseSubscriptionNow()
 
-	root := t.TempDir()
+	root := shortTempDir(t)
 	binary := fakeAppMihomo(t, root, python)
 	configDir := filepath.Join(root, "config")
 	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\nmixed_port = %d\n[monitor]\nenabled = false\n", binary, freeLoopbackPort(t)))); err != nil {
@@ -148,7 +148,7 @@ func TestRunSubscriptionRefreshDoesNotBlockStop(t *testing.T) {
 }
 
 func TestRunWaitsForRefreshWorkerOnShutdown(t *testing.T) {
-	root := t.TempDir()
+	root := shortTempDir(t)
 	configDir := filepath.Join(root, "config")
 	profile := "proxies:\n  - name: node-a\n    type: direct\n"
 	var fetches atomic.Int32

@@ -34,8 +34,11 @@ func (e *CapabilityError) Error() string {
 	return fmt.Sprintf("mihomo: resource %q requires %s capability", e.ResourceID, e.Kind)
 }
 
+// ControllerSettings places the controller on Socket (a Unix socket) when set,
+// otherwise on the loopback TCP Address.
 type ControllerSettings struct {
 	Address   string
+	Socket    string
 	Secret    string
 	HomeDir   string
 	ProxyPort int
@@ -47,8 +50,14 @@ const TunDevice = "clashpulse0"
 
 // Render generates a new configuration without modifying the source profile.
 func Render(profile []byte, intent config.Snapshot, paths ManagedPaths, controller ControllerSettings, capability Capability) ([]byte, error) {
-	host, _, err := net.SplitHostPort(controller.Address)
-	if err != nil || net.ParseIP(host) == nil || !net.ParseIP(host).IsLoopback() || controller.Secret == "" {
+	if controller.Secret == "" {
+		return nil, fmt.Errorf("mihomo: controller requires a secret")
+	}
+	if controller.Socket != "" {
+		if !filepath.IsAbs(controller.Socket) || len(controller.Socket) > maxControllerSocket {
+			return nil, fmt.Errorf("mihomo: controller socket must be an absolute path of at most %d bytes", maxControllerSocket)
+		}
+	} else if host, _, err := net.SplitHostPort(controller.Address); err != nil || net.ParseIP(host) == nil || !net.ParseIP(host).IsLoopback() {
 		return nil, fmt.Errorf("mihomo: controller requires a loopback address and secret")
 	}
 	var document map[string]any
@@ -105,7 +114,12 @@ func Render(profile []byte, intent config.Snapshot, paths ManagedPaths, controll
 	for _, key := range []string{"external-controller-unix", "external-controller-pipe", "external-controller-tls", "external-controller-cors", "external-controller-routing-mark", "external-doh-server", "external-ui", "external-ui-name", "external-ui-url"} {
 		delete(document, key)
 	}
-	document["external-controller"] = controller.Address
+	if controller.Socket != "" {
+		delete(document, "external-controller")
+		document["external-controller-unix"] = controller.Socket
+	} else {
+		document["external-controller"] = controller.Address
+	}
 	document["secret"] = controller.Secret
 	document["allow-lan"] = false
 	document["geo-auto-update"] = false
@@ -240,6 +254,7 @@ func ExplainOverrides(source, generated []byte) ([]ConfigOverride, error) {
 		{"dns.fake-ip-range", "dns", "fake-ip-range"},
 		{"dns.fake-ip-range6", "dns", "fake-ip-range6"},
 		{"dns.fake-ip-filter", "dns", "fake-ip-filter"},
+		{"external-controller-unix", "", "external-controller-unix"},
 		{"external-controller-tls", "", "external-controller-tls"},
 		{"external-controller-cors", "", "external-controller-cors"},
 		{"external-ui", "", "external-ui"},

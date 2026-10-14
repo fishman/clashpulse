@@ -82,7 +82,7 @@ func TestRunNotificationsDeliversLocalizedMessages(t *testing.T) {
 }
 
 func TestTestNotificationCommandReportsDesktopDelivery(t *testing.T) {
-	root := t.TempDir()
+	root := shortTempDir(t)
 	configDir := filepath.Join(root, "config")
 	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte("[monitor]\nenabled = false\n")); err != nil {
 		t.Fatal(err)
