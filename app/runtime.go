@@ -64,7 +64,10 @@ type runtimeService struct {
 	// no Unix-socket controller exists.
 	controllerAddress, controllerSocket, secret string
 	// mixedPort is the running Mihomo's mixed listener port.
-	mixedPort                atomic.Int32
+	mixedPort atomic.Int32
+	// autoProxy serves the auto route while Mihomo is stopped; nil connects
+	// directly. Terminal commands set it so they honor http_proxy.
+	autoProxy                func(*http.Request) (*url.URL, error)
 	cap                      mihomo.Capability
 	exited                   <-chan struct{}
 	running                  atomic.Bool
@@ -198,6 +201,15 @@ func (s *runtimeService) transport(route download.Route, allowInvalidTLS bool) (
 	tr.MaxIdleConnsPerHost = 2
 	tr.MaxIdleConns = 8
 	tr.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: allowInvalidTLS}
+	if route == download.Auto {
+		route = download.Direct
+		if s.running.Load() {
+			route = download.MihomoProxy
+		} else if s.autoProxy != nil {
+			tr.Proxy = s.autoProxy
+			return tr, nil
+		}
+	}
 	switch route {
 	case download.Direct:
 		tr.Proxy = nil

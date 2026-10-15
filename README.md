@@ -45,7 +45,7 @@ The command reads the file once, validates it with the selected Mihomo, and prin
 
 The GUI and TUI Overview show **Generated config changes** for the active profile. Each entry names an app-managed field, whether it was added, replaced, or removed, and a fixed reason. The report is not a full YAML diff: it carries no source or generated values, credentials, network endpoints, or URLs. Unchanged fields are omitted; a stopped service shows no active override report.
 
-Close the desktop before direct commands; they take the same private-state lock and refuse concurrent service access.
+With the desktop running, these commands hand the work to its service and print each failure; the service validates what it downloads and never activates it. With no service running they take the private-state lock and work directly.
 
 ```sh
 ./clashpulse download subscription [id]
@@ -55,7 +55,9 @@ Close the desktop before direct commands; they take the same private-state lock 
 
 `download subscription` fetches and parses a profile (`proxies` or `proxy-providers` required), then stores it as an inactive private snapshot. It does not inspect or run Mihomo. Activation renders the profile, validates the complete generated config with the selected Mihomo, and applies it transactionally. `refresh resource [id]` also works without an active profile: it caches enabled resources under stable filenames in the private state directory's `resources/` root, without starting Mihomo. When a profile is active, Mihomo stops before those files change and restarts only after validation; a failed update restores the prior files and runtime. Remote sources with ETag or Last-Modified use conditional requests, so an unchanged `304` does not download a body or replace a file. Without server validators, the body must be fetched to detect changes. A later profile refresh or activation still validates the generated config before applying it. Without an ID, each command handles all enabled sources in its scope.
 
-Add `--show-response` to print up to 4 KiB of printable HTTP response text to local stderr on failure. URLs and response bodies remain hidden by default.
+Add `--show-response` to print up to 4 KiB of printable HTTP response text to local stderr on failure. It needs the desktop closed, because response bodies never leave the service. URLs and response bodies remain hidden by default.
+
+A download must contain at least one proxy or proxy provider; an empty profile (how providers often answer an expired account) is a failure, and the last good snapshot stays. Downloads use the subscription's `route`: the default `auto` goes through the running Mihomo. While Mihomo is stopped, terminal `download` and `refresh` honor `http_proxy`, `https_proxy`, and `no_proxy`, and the desktop service connects directly. Data resources always use `auto`.
 
 Press `?` in TUI views for keyboard help (`F1` inside editors), or `~` to view and scroll current-session activity; `q` closes either overlay without quitting. In the GUI, use Overview > View activity. Both activity views show only sanitized IPC diagnostics, not subscription URLs or credentials.
 

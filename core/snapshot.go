@@ -10,6 +10,10 @@ import (
 
 const MaxDiagnostics = 200
 
+// MaxFinishedJobs bounds the recent job outcomes a snapshot retains, so a
+// client that missed a coalesced event can still read its result.
+const MaxFinishedJobs = 32
+
 type GroupSnapshot struct {
 	ID                string
 	Label             string
@@ -268,12 +272,15 @@ type Snapshot struct {
 	// MixedPort is the configured loopback port for HTTP, HTTPS, and SOCKS.
 	MixedPort int
 	// ProxyMode is the configured Mihomo routing mode.
-	ProxyMode   string
-	Tun         TunSnapshot
-	Jobs        []JobSnapshot
-	Switches    []SwitchSnapshot
-	Errors      []ErrorSnapshot
-	Diagnostics []DiagnosticSnapshot
+	ProxyMode string
+	Tun       TunSnapshot
+	Jobs      []JobSnapshot
+	// FinishedJobs holds recent outcomes, oldest first: succeeded, failed, or
+	// cancelled.
+	FinishedJobs []JobSnapshot
+	Switches     []SwitchSnapshot
+	Errors       []ErrorSnapshot
+	Diagnostics  []DiagnosticSnapshot
 }
 
 func NewSnapshot(groups []GroupSnapshot) Snapshot {
@@ -304,6 +311,7 @@ func CloneSnapshot(snapshot Snapshot) Snapshot {
 	out.DNS.Routes = append([]DNSRouteSnapshot(nil), snapshot.DNS.Routes...)
 	out.Binary.Capabilities = append([]string(nil), snapshot.Binary.Capabilities...)
 	out.Jobs = append([]JobSnapshot(nil), snapshot.Jobs...)
+	out.FinishedJobs = append([]JobSnapshot(nil), snapshot.FinishedJobs...)
 	out.Errors = append([]ErrorSnapshot(nil), snapshot.Errors...)
 	out.Diagnostics = append([]DiagnosticSnapshot(nil), snapshot.Diagnostics...)
 	out.Switches = append([]SwitchSnapshot(nil), snapshot.Switches...)

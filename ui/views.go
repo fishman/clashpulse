@@ -16,6 +16,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/download"
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/localize"
 )
@@ -329,7 +330,10 @@ func (p *subscriptionPage) openSubscriptionEditor(existing *core.SubscriptionSna
 	e.refresh = widget.NewEntry()
 	e.timeout = widget.NewEntry()
 	e.enabled = widget.NewCheck(localize.T("control.enable"), nil)
-	routes := []string{localize.T("Direct"), localize.T("System proxy"), localize.T("Mihomo proxy")}
+	var routes []string
+	for _, route := range download.Routes {
+		routes = append(routes, routeLabel(route))
+	}
 	policies := []string{localize.T("HTTPS only"), localize.T("Allow HTTP (insecure)")}
 	tlsPolicies := []string{localize.T("Verify certificates"), localize.T("Allow invalid TLS certificates (insecure)")}
 	if existing != nil {
@@ -349,7 +353,7 @@ func (p *subscriptionPage) openSubscriptionEditor(existing *core.SubscriptionSna
 		e.refresh.SetText("43200")
 		e.timeout.SetText("30")
 		e.enabled.SetChecked(true)
-		e.route.SetSelected(localize.T("Direct"))
+		e.route.SetSelected(routeLabel(download.Auto))
 		e.http.SetSelected(localize.T("HTTPS only"))
 		e.tls.SetSelected(localize.T("Verify certificates"))
 		items = append(items, widget.NewFormItem(localize.T("Stable ID"), e.id))
@@ -364,14 +368,7 @@ func (p *subscriptionPage) openSubscriptionEditor(existing *core.SubscriptionSna
 			e.timeout.SetText(strconv.FormatUint(uint64(existing.TimeoutSeconds), 10))
 		}
 		e.enabled.SetChecked(existing.Enabled)
-		switch existing.Route {
-		case "mihomo_proxy":
-			e.route.SetSelected(localize.T("Mihomo proxy"))
-		case "system_proxy":
-			e.route.SetSelected(localize.T("System proxy"))
-		default:
-			e.route.SetSelected(localize.T("Direct"))
-		}
+		e.route.SetSelected(routeLabel(download.Route(existing.Route)))
 		if existing.AllowHTTP {
 			e.http.SetSelected(localize.T("Allow HTTP (insecure)"))
 		} else {
@@ -498,18 +495,16 @@ func (e *subscriptionEditor) command() (ipc.Command, bool, error) {
 		patch.TimeoutSeconds = nil
 	}
 	if e.route.Selected != localize.T("Keep current") {
-		var route string
-		switch e.route.Selected {
-		case localize.T("Direct"):
-			route = "direct"
-		case localize.T("System proxy"):
-			route = "system_proxy"
-		case localize.T("Mihomo proxy"):
-			route = "mihomo_proxy"
-		default:
+		route := ""
+		for _, candidate := range download.Routes {
+			if routeLabel(candidate) == e.route.Selected {
+				route = string(candidate)
+			}
+		}
+		if route == "" {
 			return ipc.Command{}, false, errors.New(localize.T("select a connection route"))
 		}
-		if creating || route != e.existing.Route && !(route == "direct" && e.existing.Route == "") {
+		if creating || route != e.existing.Route && !(route == string(download.Auto) && e.existing.Route == "") {
 			patch.Route = &route
 		}
 	}
@@ -1530,4 +1525,18 @@ func (p *settingsPage) addInterval(seconds uint32) {
 	}
 	p.intervals[label] = seconds
 	p.interval.Options = append(p.interval.Options, label)
+}
+
+// routeLabel names a download route in the GUI; an unset route is automatic.
+func routeLabel(route download.Route) string {
+	switch route {
+	case download.Direct:
+		return localize.T("Direct")
+	case download.SystemProxy:
+		return localize.T("System proxy")
+	case download.MihomoProxy:
+		return localize.T("Mihomo proxy")
+	default:
+		return localize.T("Automatic")
+	}
 }

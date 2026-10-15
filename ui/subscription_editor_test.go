@@ -37,7 +37,7 @@ func TestSubscriptionAddSendsTypedIntentAndClearsSourceAfterSubmit(t *testing.T)
 		t.Fatal("add did not send a typed subscription intent")
 	}
 	edit := command.Subscription
-	if edit.Name == nil || *edit.Name != "Nightly" || edit.URL == nil || *edit.URL != sourceURL || edit.Enabled == nil || !*edit.Enabled || edit.RefreshIntervalSeconds == nil || *edit.RefreshIntervalSeconds != 43200 || edit.TimeoutSeconds == nil || *edit.TimeoutSeconds != 30 || edit.Route == nil || *edit.Route != "direct" || edit.AllowHTTP == nil || *edit.AllowHTTP || edit.AllowInvalidTLS == nil || *edit.AllowInvalidTLS {
+	if edit.Name == nil || *edit.Name != "Nightly" || edit.URL == nil || *edit.URL != sourceURL || edit.Enabled == nil || !*edit.Enabled || edit.RefreshIntervalSeconds == nil || *edit.RefreshIntervalSeconds != 43200 || edit.TimeoutSeconds == nil || *edit.TimeoutSeconds != 30 || edit.Route == nil || *edit.Route != "auto" || edit.AllowHTTP == nil || *edit.AllowHTTP || edit.AllowInvalidTLS == nil || *edit.AllowInvalidTLS {
 		t.Fatal("add intent did not preserve the configured subscription fields")
 	}
 	if editor.source.Text != "" {

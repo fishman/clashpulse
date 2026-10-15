@@ -32,7 +32,7 @@ func TestActiveProfileSwitchPersistsAcrossRestart(t *testing.T) {
 	applyCalls := 0
 	service, err := NewService(store, Options{
 		Transport: func(route download.Route, allowInvalidTLS bool) (http.RoundTripper, error) {
-			if route != download.Direct || allowInvalidTLS {
+			if route != download.Auto || allowInvalidTLS {
 				return nil, ErrInvalid
 			}
 			return server.Client().Transport, nil

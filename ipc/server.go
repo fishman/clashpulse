@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fishman/clashpulse/core"
@@ -50,6 +51,7 @@ type Server struct {
 	served   bool
 	closed   bool
 	closeOne sync.Once
+	jobs     atomic.Uint64
 }
 
 func NewServer(options ServerOptions) (*Server, error) {
@@ -284,7 +286,9 @@ func (s *Server) serveConnection(ctx context.Context, conn net.Conn) {
 				continue
 			}
 			handlerCtx, cancel := context.WithTimeout(ctx, handlerTimeout)
-			err := s.handler(handlerCtx, *request.Command)
+			command := *request.Command
+			command.JobID = fmt.Sprintf("ipc-%d", s.jobs.Add(1))
+			err := s.handler(handlerCtx, command)
 			cancel()
 			if err != nil {
 				if client.write(serverFrame{Type: "response", RequestID: request.RequestID, Error: &protocolError{Code: "command_rejected", Message: "command was not queued"}}) != nil {
@@ -292,7 +296,7 @@ func (s *Server) serveConnection(ctx context.Context, conn net.Conn) {
 				}
 				continue
 			}
-			ack := Acknowledgement{Queued: true}
+			ack := Acknowledgement{Queued: true, JobID: command.JobID}
 			if client.write(serverFrame{Type: "response", RequestID: request.RequestID, Acknowledgement: &ack}) != nil {
 				return
 			}

@@ -28,7 +28,7 @@ func TestSchedulerStopCancelsInFlightRefresh(t *testing.T) {
 	}
 	service, err := NewService(store, Options{
 		Transport: func(route download.Route, allowInvalidTLS bool) (http.RoundTripper, error) {
-			if route != download.Direct || allowInvalidTLS {
+			if route != download.Auto || allowInvalidTLS {
 				return nil, ErrInvalid
 			}
 			return transport, nil

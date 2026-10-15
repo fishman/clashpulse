@@ -9,12 +9,13 @@ import (
 	"strings"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/download"
 	"github.com/fishman/clashpulse/monitor"
 )
 
 const (
 	// ProtocolVersion is negotiated in the first frame on every connection.
-	ProtocolVersion uint16 = 9
+	ProtocolVersion uint16 = 10
 	// MaxFrameSize bounds both incoming and outgoing JSON frames.
 	MaxFrameSize = 1 << 20
 )
@@ -69,6 +70,9 @@ type Command struct {
 	Resource       *ResourceEdit      `json:"resource,omitempty"`
 	Filter         *FilterEdit        `json:"filter,omitempty"`
 	DNSRouting     *DNSRoutingEdit    `json:"dns_routing,omitempty"`
+	// JobID is assigned by the server when it accepts the command; a client
+	// cannot set it.
+	JobID string `json:"-"`
 }
 
 // ConfigPatch contains only non-sensitive, typed settings that clients may
@@ -162,6 +166,8 @@ type AutomationSetting struct {
 // it does not mean that the requested work has completed.
 type Acknowledgement struct {
 	Queued bool `json:"queued"`
+	// JobID names the queued work in Snapshot.Jobs and Snapshot.FinishedJobs.
+	JobID string `json:"job_id,omitempty"`
 }
 
 // Event carries the sanitized core snapshot only. core.Snapshot intentionally
@@ -290,7 +296,7 @@ func (c Command) validate() error {
 		if p.RefreshIntervalSeconds != nil && (*p.RefreshIntervalSeconds < 60 || *p.RefreshIntervalSeconds > 86400*30) || p.TimeoutSeconds != nil && (*p.TimeoutSeconds < 1 || *p.TimeoutSeconds > 300) {
 			return errors.New("subscription schedule out of range")
 		}
-		if p.Route != nil && *p.Route != "direct" && *p.Route != "system_proxy" && *p.Route != "mihomo_proxy" {
+		if p.Route != nil && !download.ValidRoute(*p.Route) {
 			return errors.New("invalid subscription route")
 		}
 	case CommandRefreshSubscription, CommandActivateSubscription, CommandDeleteSubscription:
@@ -380,6 +386,7 @@ func validateSnapshot(snapshot core.Snapshot) error {
 		!addItems(len(snapshot.Subscriptions)) || !addItems(len(snapshot.Resources)) ||
 		!addItems(len(snapshot.Filters)) || !addItems(len(snapshot.DNS.ResolverSets)) || !addItems(len(snapshot.DNS.Routes)) ||
 		!addItems(len(snapshot.Binary.Capabilities)) || !addItems(len(snapshot.Jobs)) || !addItems(len(snapshot.Errors)) ||
+		len(snapshot.FinishedJobs) > core.MaxFinishedJobs || !addItems(len(snapshot.FinishedJobs)) ||
 		len(snapshot.Diagnostics) > core.MaxDiagnostics || !addItems(len(snapshot.Diagnostics)) {
 		return ErrSnapshotTooLarge
 	}
@@ -415,7 +422,7 @@ func validateSnapshot(snapshot core.Snapshot) error {
 		if !addText(subscription.ID, subscription.Name, subscription.SourceHost, subscription.HashPrefix, subscription.LastFailure, subscription.Route) {
 			return ErrSnapshotTooLarge
 		}
-		if subscription.Route != "" && subscription.Route != "direct" && subscription.Route != "system_proxy" && subscription.Route != "mihomo_proxy" {
+		if subscription.Route != "" && !download.ValidRoute(subscription.Route) {
 			return errors.New("ipc: invalid subscription policy")
 		}
 	}
@@ -452,9 +459,11 @@ func validateSnapshot(snapshot core.Snapshot) error {
 			return ErrSnapshotTooLarge
 		}
 	}
-	for _, job := range snapshot.Jobs {
-		if !addText(job.ID, job.Kind, job.State) {
-			return ErrSnapshotTooLarge
+	for _, jobs := range [][]core.JobSnapshot{snapshot.Jobs, snapshot.FinishedJobs} {
+		for _, job := range jobs {
+			if !addText(job.ID, job.Kind, job.State) {
+				return ErrSnapshotTooLarge
+			}
 		}
 	}
 	for _, item := range snapshot.Errors {

@@ -906,11 +906,9 @@ func normalizeSubscription(subscription config.Subscription, generateID bool) (c
 		return config.Subscription{}, ErrInvalid
 	}
 	if subscription.Route == "" {
-		subscription.Route = string(download.Direct)
+		subscription.Route = string(download.Auto)
 	}
-	switch download.Route(subscription.Route) {
-	case download.Direct, download.SystemProxy, download.MihomoProxy:
-	default:
+	if !download.ValidRoute(subscription.Route) {
 		return config.Subscription{}, ErrInvalid
 	}
 	subscription.URL = strings.TrimSpace(subscription.URL)

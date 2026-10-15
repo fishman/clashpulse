@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -359,7 +360,7 @@ func TestLatestURLPromotesValidatedSnapshotAndRetainsItOnInvalidUpdate(t *testin
 }
 
 func TestRefreshUsesLatestConfigSnapshotWithoutRefreshWith(t *testing.T) {
-	profile := []byte("proxies: []\n")
+	profile := []byte("proxies:\n  - name: node-a\n    type: direct\n")
 	paths := make(chan string, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths <- r.URL.Path
@@ -454,7 +455,7 @@ func makeServiceWithCurrent(t *testing.T, server *httptest.Server, current Curre
 	}
 	service, err := NewService(store, Options{
 		Transport: func(route download.Route, allowInvalidTLS bool) (http.RoundTripper, error) {
-			if route != download.Direct || allowInvalidTLS {
+			if route != download.Auto || allowInvalidTLS {
 				return nil, fmt.Errorf("unexpected transport intent")
 			}
 			return server.Client().Transport, nil
@@ -473,7 +474,7 @@ func makeServiceWithCurrent(t *testing.T, server *httptest.Server, current Curre
 
 func TestRefreshPassesRouteAndTLSIntent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("proxies: []\n"))
+		_, _ = w.Write([]byte("proxies:\n  - name: node-a\n    type: direct\n"))
 	}))
 	defer server.Close()
 	store, err := NewStore(filepath.Join(t.TempDir(), "subscriptions"))
@@ -786,5 +787,35 @@ func TestDownloadedProfilePendingStateSurvivesRestart(t *testing.T) {
 	got, profileErr := reopened.Profile("download")
 	if !ok || !record.DownloadedOnly || profileErr != nil || !bytes.Equal(got, profile) {
 		t.Fatalf("pending source lost after reopen: record=%+v profile=%q error=%v", record, got, profileErr)
+	}
+}
+
+// Providers answer an expired or over-quota account with an empty profile; it
+// must never replace the last good snapshot.
+func TestDownloadKeepsGoodSnapshotWhenProviderReturnsEmptyProfile(t *testing.T) {
+	var body atomic.Pointer[string]
+	good := "proxies:\n  - name: node-a\n    type: direct\n"
+	body.Store(&good)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(*body.Load())) }))
+	defer server.Close()
+	_, service := makeService(t, server,
+		func(context.Context, []byte) ([]byte, error) { return []byte("generated"), nil },
+		func(context.Context, []byte) error { return nil })
+	if _, err := service.Add(config.Subscription{ID: "daily", URL: server.URL, AllowHTTP: true}); err != nil {
+		t.Fatal(err)
+	}
+	first, err := service.Download(context.Background(), "daily")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, empty := range []string{"proxies: []\n", "proxies: []\nproxy-providers: {}\n", "proxy-providers: {}\n"} {
+		body.Store(&empty)
+		if _, err := service.Download(context.Background(), "daily"); err != ErrInvalidProfile {
+			t.Fatalf("empty profile %q: download error = %v, want ErrInvalidProfile", empty, err)
+		}
+		entries := service.List()
+		if len(entries) != 1 || !entries[0].HasSnapshot || entries[0].Hash != first.Hash {
+			t.Fatalf("empty profile %q replaced the good snapshot: %+v", empty, entries)
+		}
 	}
 }

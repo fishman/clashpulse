@@ -140,8 +140,8 @@ elif args[0] in ('set', 'reset'):
 	profile.Store(new(twoNodeProfile))
 	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(*profile.Load())) }))
 	t.Cleanup(source.Close)
-	subscription := config.Subscription{ID: "daily", URL: source.URL, Enabled: true, AllowHTTP: true, Timeout: 2 * time.Second}
-	if err := config.Write(filepath.Join(configDir, "subscriptions.toml"), []byte(fmt.Sprintf("[[subscription]]\nid = \"daily\"\nurl = %q\nenabled = true\nallow_http = true\ntimeout = \"2s\"\n", source.URL))); err != nil {
+	subscription := config.Subscription{ID: "daily", URL: source.URL, Enabled: true, AllowHTTP: true, Timeout: 2 * time.Second, Route: string(download.Direct)}
+	if err := config.Write(filepath.Join(configDir, "subscriptions.toml"), []byte(fmt.Sprintf("[[subscription]]\nid = \"daily\"\nurl = %q\nenabled = true\nallow_http = true\ntimeout = \"2s\"\nroute = \"direct\"\n", source.URL))); err != nil {
 		t.Fatal(err)
 	}
 	initial, err := config.Load(configDir)
@@ -918,7 +918,7 @@ func TestStaticActivationJournalRestoresPriorSelection(t *testing.T) {
 	}
 	next := h.subscription
 	next.ID = "next"
-	if err := config.Write(filepath.Join(h.configDir, "subscriptions.toml"), []byte(fmt.Sprintf("[[subscription]]\nid = \"daily\"\nurl = %q\nenabled = true\nallow_http = true\ntimeout = \"2s\"\n\n[[subscription]]\nid = \"next\"\nurl = %q\nenabled = true\nallow_http = true\ntimeout = \"2s\"\n", h.source.URL, h.source.URL))); err != nil {
+	if err := config.Write(filepath.Join(h.configDir, "subscriptions.toml"), []byte(fmt.Sprintf("[[subscription]]\nid = \"daily\"\nurl = %q\nenabled = true\nallow_http = true\ntimeout = \"2s\"\nroute = \"direct\"\n\n[[subscription]]\nid = \"next\"\nurl = %q\nenabled = true\nallow_http = true\ntimeout = \"2s\"\nroute = \"direct\"\n", h.source.URL, h.source.URL))); err != nil {
 		t.Fatal(err)
 	}
 	intent, err := config.Load(h.configDir)
@@ -1081,7 +1081,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.headers.get('Authorization') != 'Bearer ' + secret:
             self.send_error(401); return
         if self.path == '/configs':
-            self.rfile.read(int(self.headers.get('Content-Length','0')))
+            body = json.loads(self.rfile.read(int(self.headers.get('Content-Length','0'))))
+            modes = os.environ.get('CLASHPULSE_FAKE_MODES', '')
+            if modes:
+                with open(modes, 'a', encoding='utf-8') as out: out.write(body.get('mode', '') + '\n')
+            fail = os.environ.get('CLASHPULSE_FAKE_PATCH_FAIL', '')
+            if fail and os.path.exists(fail):
+                self.send_error(500); return
             self.send_response(204); self.end_headers(); return
         self.send_error(404)
     def log_message(self, *args): pass
@@ -1192,5 +1198,59 @@ func TestProxyModeSwitchesLiveWithoutRestart(t *testing.T) {
 	}
 	if got := h.service.stateSnapshot().ProxyMode; got != core.ProxyModeGlobal {
 		t.Fatalf("snapshot proxy mode = %q", got)
+	}
+}
+
+func TestProxyModeFallbacksKeepRunningModeConsistent(t *testing.T) {
+	root := shortTempDir(t)
+	modes, patchFail := filepath.Join(root, "modes"), filepath.Join(root, "patch-fail")
+	t.Setenv("CLASHPULSE_FAKE_MODES", modes)
+	t.Setenv("CLASHPULSE_FAKE_PATCH_FAIL", patchFail)
+	h := newStaticRuntime(t)
+	h.activate(t)
+
+	// A rejected live switch still lands the mode, through a restart.
+	if err := os.WriteFile(patchFail, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	starts := len(readStartRecords(t, h.startLog))
+	global := core.ProxyModeGlobal
+	if err := h.service.patchSettings(h.ctx, &ipc.ConfigPatch{ProxyMode: &global}); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(readStartRecords(t, h.startLog)); got != starts+1 || !bytes.Contains(h.service.generated, []byte("mode: global")) {
+		t.Fatalf("failed live switch: %d starts (want %d), running config has global = %t", got, starts+1, bytes.Contains(h.service.generated, []byte("mode: global")))
+	}
+	if err := os.Remove(patchFail); err != nil {
+		t.Fatal(err)
+	}
+
+	// A live switch whose config write fails is switched back, so the running
+	// mode never disagrees with the generated file.
+	// Renaming a file onto a non-empty directory fails, so the write does too.
+	generated := h.service.configPath()
+	before := bytes.Clone(h.service.generated)
+	if err := os.Remove(generated); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(generated, "blocker"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	direct := core.ProxyModeDirect
+	if err := h.service.patchSettings(h.ctx, &ipc.ConfigPatch{ProxyMode: &direct}); err == nil {
+		t.Fatal("mode change succeeded although the generated config could not be written")
+	}
+	if err := os.RemoveAll(generated); err != nil {
+		t.Fatal(err)
+	}
+	sent, err := os.ReadFile(modes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lines := strings.Fields(string(sent)); len(lines) < 2 || lines[len(lines)-2] != core.ProxyModeDirect || lines[len(lines)-1] != core.ProxyModeGlobal {
+		t.Fatalf("live modes sent = %q, want direct then the revert to global", lines)
+	}
+	if !bytes.Equal(h.service.generated, before) {
+		t.Fatal("running config changed although the write failed")
 	}
 }

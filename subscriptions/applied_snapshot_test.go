@@ -271,7 +271,7 @@ func appliedTestOptions(t *testing.T, server *httptest.Server, apply ApplyFunc, 
 	}
 	return Options{
 		Transport: func(route download.Route, allowInvalidTLS bool) (http.RoundTripper, error) {
-			if route != download.Direct || allowInvalidTLS {
+			if route != download.Auto || allowInvalidTLS {
 				return nil, ErrInvalid
 			}
 			return server.Client().Transport, nil

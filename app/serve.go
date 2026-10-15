@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -58,27 +59,37 @@ type preparedResourceRefresh struct {
 }
 
 func (s *runtimeService) beginServiceIntent(cmd ipc.Command) string {
-	s.jobID++
-	jobID := fmt.Sprintf("job-%d", s.jobID)
+	jobID := cmd.JobID
+	if jobID == "" {
+		s.jobID++
+		jobID = fmt.Sprintf("job-%d", s.jobID)
+	}
 	s.snapshot.Jobs = append(s.snapshot.Jobs, core.JobSnapshot{ID: jobID, Kind: string(cmd.Kind), State: "running"})
 	s.publish()
 	return jobID
 }
 
-func (s *runtimeService) removeServiceIntent(jobID string) {
+// endServiceIntent moves the job to the bounded recent outcomes.
+func (s *runtimeService) endServiceIntent(jobID, state string) {
 	for index, job := range s.snapshot.Jobs {
 		if job.ID == jobID {
 			s.snapshot.Jobs = append(s.snapshot.Jobs[:index], s.snapshot.Jobs[index+1:]...)
+			job.State = state
+			if len(s.snapshot.FinishedJobs) == core.MaxFinishedJobs {
+				s.snapshot.FinishedJobs = slices.Delete(s.snapshot.FinishedJobs, 0, 1)
+			}
+			s.snapshot.FinishedJobs = append(s.snapshot.FinishedJobs, job)
 			return
 		}
 	}
 }
 
 func (s *runtimeService) finishServiceIntent(jobID string, cmd ipc.Command, err error) {
-	s.removeServiceIntent(jobID)
 	if err != nil {
+		s.endServiceIntent(jobID, "failed")
 		s.reportErrorScoped(string(cmd.Kind), serviceCommandSource(cmd), err)
 	} else {
+		s.endServiceIntent(jobID, "succeeded")
 		s.resolveIssue(string(cmd.Kind), serviceCommandSource(cmd))
 	}
 	s.publish()
@@ -96,7 +107,7 @@ func serviceCommandSource(cmd ipc.Command) string {
 }
 
 func (s *runtimeService) discardServiceIntent(jobID string) {
-	s.removeServiceIntent(jobID)
+	s.endServiceIntent(jobID, "cancelled")
 	s.publish()
 }
 
@@ -111,7 +122,7 @@ func (s *runtimeService) prepareResourceRefresh(ctx context.Context, ids []strin
 	if err != nil {
 		return nil, err
 	}
-	plan, err := s.registry.StageDue(ctx, intent, download.Direct, ids)
+	plan, err := s.registry.StageDue(ctx, intent, download.Auto, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +149,7 @@ func (s *runtimeService) prepareResourceCache(ctx context.Context, intent config
 	}
 	var plan *resources.Plan
 	if home == "" || len(ids) == 0 {
-		plan, err = s.registry.Stage(ctx, intent, download.Direct)
+		plan, err = s.registry.Stage(ctx, intent, download.Auto)
 	} else {
 		statuses, statusErr := s.registry.Status(intent)
 		if statusErr != nil {
@@ -150,7 +161,7 @@ func (s *runtimeService) prepareResourceCache(ctx context.Context, intent config
 				due = append(due, status.ID)
 			}
 		}
-		plan, err = s.registry.StageDue(ctx, intent, download.Direct, due)
+		plan, err = s.registry.StageDue(ctx, intent, download.Auto, due)
 	}
 	if err != nil {
 		return nil, err

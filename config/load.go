@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/download"
 	"github.com/fishman/clashpulse/monitor"
 )
 
@@ -33,13 +34,6 @@ var ruleFormats = map[ResourceFormat]struct{}{
 	FormatYAML: {},
 	FormatText: {},
 	FormatMRS:  {},
-}
-
-var subscriptionRoutes = map[string]struct{}{
-	"":             {},
-	"direct":       {},
-	"system_proxy": {},
-	"mihomo_proxy": {},
 }
 
 func Load(dir string) (Snapshot, error) {
@@ -130,7 +124,7 @@ func applyDefaults(s *Snapshot) {
 			s.Subscriptions[i].Timeout = 30 * time.Second
 		}
 		if s.Subscriptions[i].Route == "" {
-			s.Subscriptions[i].Route = "direct"
+			s.Subscriptions[i].Route = string(download.Auto)
 		}
 	}
 	for i := range s.Resources {
@@ -181,7 +175,7 @@ func validateSnapshot(s Snapshot) error {
 		if !ValidSubscriptionUserAgent(item.UserAgent) {
 			return fmt.Errorf("subscriptions.toml: subscription.user_agent: must be printable ASCII at most 256 bytes")
 		}
-		if _, ok := subscriptionRoutes[item.Route]; !ok {
+		if item.Route != "" && !download.ValidRoute(item.Route) {
 			return fmt.Errorf("subscriptions.toml: subscription.route: unknown route %q", item.Route)
 		}
 	}

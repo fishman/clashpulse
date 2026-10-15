@@ -326,7 +326,7 @@ func TestDownloadedProfileActivatesAfterDesktopStarts(t *testing.T) {
 const (
 	twoNodeProfile        = "proxies:\n  - name: node-a\n    type: direct\n  - name: node-b\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a, node-b]\n"
 	oneNodeProfile        = "proxies:\n  - name: node-a\n    type: direct\nproxy-groups:\n  - name: select-main\n    type: select\n    proxies: [node-a]\n"
-	dailySubscriptionTOML = "[[subscription]]\nid = \"daily\"\nurl = %q\nenabled = true\nallow_http = true\n"
+	dailySubscriptionTOML = "[[subscription]]\nid = \"daily\"\nurl = %q\nenabled = true\nallow_http = true\nroute = \"direct\"\n"
 )
 
 func requireFakeMihomo(t *testing.T) string {

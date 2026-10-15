@@ -145,6 +145,9 @@ other = "当前没有可用订阅"
 ["Direct"]
 other = "直连"
 
+["Automatic"]
+other = "自动"
+
 ["Mihomo proxy"]
 other = "Mihomo 代理"
 

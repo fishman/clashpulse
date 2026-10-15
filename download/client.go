@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -27,7 +28,18 @@ const (
 	Direct      Route = "direct"
 	SystemProxy Route = "system_proxy"
 	MihomoProxy Route = "mihomo_proxy"
+	// Auto is resolved by the transport factory when a request starts, from
+	// what is running then; it is a choice, not a retry after a failure.
+	Auto Route = "auto"
 )
+
+// Routes lists every route in display order; it is the one route registry.
+var Routes = []Route{Auto, Direct, SystemProxy, MihomoProxy}
+
+// ValidRoute reports whether name is a known route.
+func ValidRoute(name string) bool {
+	return slices.Contains(Routes, Route(name))
+}
 
 type Request struct {
 	URL              string
@@ -205,19 +217,17 @@ func (c *Client) transport(route Route) (http.RoundTripper, error) {
 	if c == nil || c.factory == nil {
 		return nil, fmt.Errorf("download: missing transport factory")
 	}
-	switch route {
-	case Direct, SystemProxy, MihomoProxy:
-		transport, err := c.factory(route)
-		if err != nil {
-			return nil, err
-		}
-		if transport == nil {
-			return nil, fmt.Errorf("download: missing transport for %s", route)
-		}
-		return transport, nil
-	default:
+	if !ValidRoute(string(route)) {
 		return nil, fmt.Errorf("download: invalid route %q", route)
 	}
+	transport, err := c.factory(route)
+	if err != nil {
+		return nil, err
+	}
+	if transport == nil {
+		return nil, fmt.Errorf("download: missing transport for %s", route)
+	}
+	return transport, nil
 }
 
 func (c *Client) do(ctx context.Context, client *http.Client, target *url.URL, req Request, origin originKey) (*http.Response, error) {

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -69,7 +70,7 @@ func TestRunSubscriptionRefreshDoesNotBlockStop(t *testing.T) {
 		t.Fatalf("service did not start: %v", <-done)
 	}
 	defer client.Close()
-	send := func(kind ipc.CommandKind, resourceID string) {
+	send := func(kind ipc.CommandKind, resourceID string) ipc.Acknowledgement {
 		t.Helper()
 		request, stop := context.WithTimeout(ctx, time.Second)
 		defer stop()
@@ -80,9 +81,11 @@ func TestRunSubscriptionRefreshDoesNotBlockStop(t *testing.T) {
 		if kind == ipc.CommandRefreshResource {
 			command.ResourceID = resourceID
 		}
-		if _, err := client.Send(request, command); err != nil {
+		ack, err := client.Send(request, command)
+		if err != nil {
 			t.Fatal(err)
 		}
+		return ack
 	}
 	waitStarted := func(ch <-chan struct{}) {
 		t.Helper()
@@ -93,9 +96,10 @@ func TestRunSubscriptionRefreshDoesNotBlockStop(t *testing.T) {
 		}
 	}
 
-	send(ipc.CommandRefreshSubscription, "")
+	refresh := send(ipc.CommandRefreshSubscription, "")
 	waitAppSnapshot(t, ctx, client, func(state core.Snapshot) bool {
-		return len(state.Subscriptions) == 1 && state.Subscriptions[0].HashPrefix != "" && len(state.Jobs) == 0
+		return len(state.Subscriptions) == 1 && state.Subscriptions[0].HashPrefix != "" && len(state.Jobs) == 0 &&
+			slices.Contains(state.FinishedJobs, core.JobSnapshot{ID: refresh.JobID, Kind: string(ipc.CommandRefreshSubscription), State: "succeeded"})
 	})
 	send(ipc.CommandActivateSubscription, "")
 	waitAppSnapshot(t, ctx, client, func(state core.Snapshot) bool {

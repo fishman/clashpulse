@@ -50,7 +50,7 @@ func (s *runtimeService) renderProfile(ctx context.Context, profile []byte) ([]b
 	if s.controller != nil {
 		return nil, fmt.Errorf("clashpulse: managed resources are unavailable while Mihomo is running")
 	}
-	plan, err := s.registry.Stage(ctx, intent, download.Direct)
+	plan, err := s.registry.Stage(ctx, intent, download.Auto)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +222,7 @@ func (s *runtimeService) applyGenerated(ctx context.Context, profile []byte) err
 		}
 		return s.applyActivationCandidate(ctx, profile, candidate, capability, home)
 	}
-	plan, err := s.registry.Stage(ctx, intent, download.Direct)
+	plan, err := s.registry.Stage(ctx, intent, download.Auto)
 	if err != nil {
 		return activationResourceError(err)
 	}
@@ -909,7 +909,7 @@ func (s *runtimeService) startWith(ctx context.Context, profile []byte, capabili
 		s.commitOverrideReport(report)
 		return nil
 	}
-	plan, err := s.registry.Stage(ctx, intent, download.Direct)
+	plan, err := s.registry.Stage(ctx, intent, download.Auto)
 	if err != nil {
 		return activationResourceError(err)
 	}

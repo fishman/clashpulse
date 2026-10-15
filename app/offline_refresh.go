@@ -152,6 +152,7 @@ func openOfflineRuntime(ctx context.Context, configDir, stateDir string, options
 	if err != nil {
 		return fail(fmt.Errorf("clashpulse: refresh state unavailable"))
 	}
+	s.autoProxy = http.ProxyFromEnvironment
 	return s, initial, release, nil
 }
 

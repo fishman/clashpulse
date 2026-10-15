@@ -67,8 +67,8 @@ other = "刷新订阅与资源并验证生成配置"
 ["print bounded HTTP error response text"]
 other = "打印有大小限制的 HTTP 错误响应"
 
-["download and parse subscription profiles without running Mihomo"]
-other = "仅下载并解析订阅配置，不启动 Mihomo"
+["download subscription profiles without activating them; uses the running service when there is one"]
+other = "下载订阅配置但不激活；如有运行中的服务则通过该服务"
 
 ["unexpected refresh arguments"]
 other = "刷新命令参数无效"
@@ -177,3 +177,15 @@ other = "显示命令列表或指定命令的帮助"
 
 ["[options]"]
 other = "[选项]"
+
+["clashpulse: --show-response needs the service stopped; HTTP response bodies never leave it"]
+other = "ClashPulse：--show-response 需要先停止服务；HTTP 响应内容不会离开服务"
+
+["clashpulse: %s %q is not configured"]
+other = "ClashPulse：%s %q 未配置"
+
+["clashpulse: the service closed the connection"]
+other = "ClashPulse：服务已关闭连接"
+
+["kept last good version %s"]
+other = "已保留上一个可用版本 %s"

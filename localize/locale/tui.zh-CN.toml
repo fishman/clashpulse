@@ -418,8 +418,8 @@ other = "请选择受支持的资源格式。"
 ["Choose a supported resource kind."]
 other = "请选择受支持的资源类型。"
 
-["Choose direct, system_proxy, or mihomo_proxy."]
-other = "请选择 direct、system_proxy 或 mihomo_proxy。"
+["Choose one of: %s."]
+other = "请选择其中之一：%s。"
 
 ["Choose domain, ipcidr, or classical."]
 other = "请选择 domain、ipcidr 或 classical。"

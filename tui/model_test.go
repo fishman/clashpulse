@@ -193,6 +193,7 @@ func TestSubscriptionCreateEmitsTypedIntent(t *testing.T) {
 	model, _, _ = model.HandleKey("down")
 	model, _, _ = model.HandleKey("enter")
 	model, _, _ = model.HandleKey("enter")
+	model, _, _ = model.HandleKey("enter")
 	for range 2 {
 		model, _, _ = model.HandleKey("down")
 	}

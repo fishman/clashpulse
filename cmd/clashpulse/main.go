@@ -23,9 +23,17 @@ func main() {
 		run: app.Run, desktop: runDesktop, tui: func(ctx context.Context) error { return tui.Run(ctx, "") },
 		activateFile: app.RunFile,
 		refresh: func(ctx context.Context, kind, id string, show bool) error {
+			if handled, err := serviceRefresh(ctx, ipc.DefaultEndpoint(), kind, id, show); handled {
+				return err
+			}
 			return app.RefreshWithOptions(ctx, kind, id, app.RefreshOptions{ShowResponse: show})
 		},
+		// A running service validates what it downloads, so download through it
+		// is a full refresh; it still never activates.
 		download: func(ctx context.Context, id string, show bool) error {
+			if handled, err := serviceRefresh(ctx, ipc.DefaultEndpoint(), "subscription", id, show); handled {
+				return err
+			}
 			return app.DownloadWithOptions(ctx, id, app.RefreshOptions{ShowResponse: show})
 		},
 	}

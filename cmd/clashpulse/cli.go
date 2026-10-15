@@ -78,7 +78,7 @@ func newCLICommand(stdout, stderr io.Writer, actions cliActions) *cli.Command {
 		},
 	}
 	download := &cli.Command{
-		Name: "download", Usage: localize.T("download and parse subscription profiles without running Mihomo"),
+		Name: "download", Usage: localize.T("download subscription profiles without activating them; uses the running service when there is one"),
 		Flags: []cli.Flag{&cli.BoolFlag{Name: "show-response", Usage: localize.T("print bounded HTTP error response text")}},
 		Action: func(ctx context.Context, command *cli.Command) error {
 			if command.Args().Len() != 0 {

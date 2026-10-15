@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/download"
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/localize"
 	"github.com/fishman/notmutt/lib/tui/form"
@@ -1239,6 +1240,14 @@ func (m Model) removeDNSIntent(targetID string) (Model, *ipc.Command, bool) {
 	return m, dnsRoutingCommand(sets, routes), false
 }
 
+func routeNames() []string {
+	names := make([]string, len(download.Routes))
+	for i, route := range download.Routes {
+		names[i] = string(route)
+	}
+	return names
+}
+
 func yesNo(value bool) string {
 	if value {
 		return localize.T("yes")
@@ -1246,14 +1255,14 @@ func yesNo(value bool) string {
 	return localize.T("no")
 }
 func (m Model) openSubscriptionModal(edit bool, targetID string) Model {
-	name, route, enabled, refresh, timeout := "", "direct", true, uint32(43200), uint32(30)
+	name, route, enabled, refresh, timeout := "", string(download.Auto), true, uint32(43200), uint32(30)
 	var allowHTTP, allowInvalidTLS bool
 	if edit {
 		found := false
 		for _, item := range m.snapshot.Snapshot.Subscriptions {
 			if item.ID == targetID {
 				name = item.Name
-				route = fallback(item.Route, "direct")
+				route = fallback(item.Route, string(download.Auto))
 				enabled, allowHTTP, allowInvalidTLS = item.Enabled, item.AllowHTTP, item.AllowInvalidTLS
 				if item.RefreshIntervalSeconds > 0 {
 					refresh = item.RefreshIntervalSeconds
@@ -1278,7 +1287,7 @@ func (m Model) openSubscriptionModal(edit bool, targetID string) Model {
 		{ID: "enabled", Label: localize.T("control.enable"), Kind: form.Toggle, Value: strconv.FormatBool(enabled)},
 		{ID: "refresh_interval", Label: localize.T("Refresh seconds"), Kind: form.Text, Value: strconv.FormatUint(uint64(refresh), 10)},
 		{ID: "timeout", Label: localize.T("Timeout seconds"), Kind: form.Text, Value: strconv.FormatUint(uint64(timeout), 10)},
-		{ID: "route", Label: localize.T("Connection route"), Kind: form.Choice, Value: route, Choices: []string{"direct", "system_proxy", "mihomo_proxy"}},
+		{ID: "route", Label: localize.T("Connection route"), Kind: form.Choice, Value: route, Choices: routeNames()},
 		{ID: "allow_http", Label: localize.T("Allow HTTP"), Kind: form.Toggle, Value: strconv.FormatBool(allowHTTP)},
 		{ID: "allow_invalid_tls", Label: localize.T("Allow invalid TLS"), Kind: form.Toggle, Value: strconv.FormatBool(allowInvalidTLS)},
 	})
@@ -1420,8 +1429,8 @@ func subscriptionFormIntent(modal *Modal) (*ipc.Command, string) {
 			n := uint32(v)
 			patch.TimeoutSeconds = &n
 		case "route":
-			if value != "direct" && value != "system_proxy" && value != "mihomo_proxy" {
-				return nil, localize.T("Choose direct, system_proxy, or mihomo_proxy.")
+			if !download.ValidRoute(value) {
+				return nil, fmt.Sprintf(localize.T("Choose one of: %s."), strings.Join(routeNames(), ", "))
 			}
 			patch.Route = &value
 		case "allow_http":

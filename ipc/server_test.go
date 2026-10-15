@@ -78,6 +78,7 @@ func TestCommandAcknowledgesQueuedIntent(t *testing.T) {
 	}
 	select {
 	case got := <-queued:
+		command.JobID = ack.JobID
 		if got != command {
 			t.Fatalf("queued command = %#v, want %#v", got, command)
 		}
@@ -425,3 +426,27 @@ type testAddr string
 
 func (a testAddr) Network() string { return "test" }
 func (a testAddr) String() string  { return string(a) }
+
+// A client correlates a queued command with its finished job through the
+// acknowledged job ID, which the server assigns and the handler receives.
+func TestAcknowledgementCarriesServerAssignedJobID(t *testing.T) {
+	handled := make(chan string, 2)
+	_, client, ctx := startTestServer(t, func(_ context.Context, command Command) error {
+		handled <- command.JobID
+		return nil
+	}, core.Snapshot{})
+	first, err := client.Send(ctx, Command{Kind: CommandRefreshSubscription, SubscriptionID: "daily"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := client.Send(ctx, Command{Kind: CommandRefreshSubscription, SubscriptionID: "daily"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.JobID == "" || first.JobID == second.JobID {
+		t.Fatalf("job IDs = %q, %q, want distinct non-empty", first.JobID, second.JobID)
+	}
+	if got := <-handled; got != first.JobID {
+		t.Fatalf("handler job ID = %q, want %q", got, first.JobID)
+	}
+}

@@ -393,10 +393,13 @@ func validProfileYAML(profile []byte) bool {
 	if !hasProxies && !hasProviders {
 		return false
 	}
+	count := 0
 	if hasProxies {
-		if _, ok := proxies.([]any); !ok {
+		list, ok := proxies.([]any)
+		if !ok {
 			return false
 		}
+		count += len(list)
 	}
 	if hasProviders {
 		entries, ok := providers.(map[string]any)
@@ -408,6 +411,9 @@ func validProfileYAML(profile []byte) bool {
 				return false
 			}
 		}
+		count += len(entries)
 	}
-	return true
+	// An empty profile is how providers answer an expired account; promoting it
+	// would replace the last good snapshot with nothing to connect through.
+	return count > 0
 }

@@ -10,6 +10,6 @@
 # enabled = true
 # refresh_interval = "12h"         # Single shared timer schedules refreshes.
 # timeout = "30s"                  # Context bound includes download and validation.
-# route = "direct"                 # direct | system_proxy | mihomo_proxy
+# route = "auto"                   # auto (Mihomo when running; else http_proxy for terminal commands, or direct) | direct | system_proxy | mihomo_proxy
 # allow_http = false               # Explicit per-subscription exception only.
 # allow_invalid_tls = false        # Explicit per-subscription exception only.
