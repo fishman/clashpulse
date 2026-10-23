@@ -176,6 +176,20 @@ func TestDecideSteadyHonorsCommonGuards(t *testing.T) {
 	}
 }
 
+// The failover rule is the floor under steady_stream: a dead selected node
+// must not wait for stream rounds.
+func TestDecideUnderSteadyStreamLeavesDeadNodeOnLatency(t *testing.T) {
+	policy := steadyPolicy()
+	var samples []Sample
+	for at := int64(1); at <= 3; at++ {
+		samples = append(samples, failedSample(policy, "auto", "alpha", at), testSample(policy, "auto", "beta", 100*time.Millisecond, at))
+	}
+	decision := Decide(policy, testGroup(), samples, time.Unix(10, 0))
+	if !decision.Switch || decision.New != "beta" {
+		t.Fatalf("decision = %+v, want failover to beta", decision)
+	}
+}
+
 func TestSteadyPolicyValidation(t *testing.T) {
 	policy := steadyPolicy()
 	if err := policy.Validate(); err != nil {
@@ -1067,8 +1081,8 @@ git commit -m "feat(config): add steady_stream, stream_url, and stream_interval 
   - `type StreamProber interface { StreamPull(ctx context.Context, proxy, url string) StreamSample }`
   - `func NewScheduler(policy Policy, prober DelayProber, streamer StreamProber, onBatch func(Batch)) (*Scheduler, error)`; `streamer` may be nil unless `policy.SwitchPolicy == SwitchSteadyStream` (then error)
   - `func (s *Scheduler) SetStreamMembers(names []string)` (probe-group members; only these are pulled)
-  - `func streamTargets(groups []GroupState, history map[string]map[string][]Sample, members map[string]bool, windowSize int) []string`
-  - Stream batches: `Batch{FinishedAt, Streams, StreamStability, Decisions}` where Decisions come from `DecideSteady` per automated group. Under `steady_stream`, latency batches carry no Decisions.
+  - `func streamTargets(groups []GroupState, history map[string]map[string][]Sample, members map[string]bool, windowSize, round int) []string` (`round` rotates which group's candidates come first)
+  - Stream batches: `Batch{FinishedAt, Streams, StreamStability, Decisions}` where Decisions come from `DecideSteady` per automated group. Latency batches keep their `Decide` decisions; `Decide` already applies failover semantics to any policy other than `lowest_latency`, which is the floor under `steady_stream`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1123,7 +1137,7 @@ func TestStreamTargetsSelectedThenThreeFastest(t *testing.T) {
 	groups := []GroupState{{Group: "auto", Selected: "e", Proxies: []string{"a", "b", "c", "d", "e"}, ProbeEnabled: true, AutomationEnabled: true}}
 	history := latencyHistory("auto", map[string]time.Duration{"a": 300, "b": 100, "c": 200, "d": 50, "e": 400})
 	members := map[string]bool{"a": true, "b": true, "c": true, "d": true, "e": true}
-	got := streamTargets(groups, history, members, 5)
+	got := streamTargets(groups, history, members, 5, 0)
 	if !slices.Equal(got, []string{"e", "d", "b", "c"}) {
 		t.Fatalf("targets = %v", got)
 	}
@@ -1132,7 +1146,7 @@ func TestStreamTargetsSelectedThenThreeFastest(t *testing.T) {
 func TestStreamTargetsSkipNonMembers(t *testing.T) {
 	groups := []GroupState{{Group: "auto", Selected: "a", Proxies: []string{"a", "DIRECT", "nested"}, ProbeEnabled: true, AutomationEnabled: true}}
 	history := latencyHistory("auto", map[string]time.Duration{"a": 100, "DIRECT": 1, "nested": 2})
-	got := streamTargets(groups, history, map[string]bool{"a": true}, 5)
+	got := streamTargets(groups, history, map[string]bool{"a": true}, 5, 0)
 	if !slices.Equal(got, []string{"a"}) {
 		t.Fatalf("targets = %v, want only probe-group members", got)
 	}
@@ -1149,7 +1163,7 @@ func TestStreamRoundDeduplicatesSharedNodes(t *testing.T) {
 			history[group] = h
 		}
 	}
-	got := streamTargets(groups, history, map[string]bool{"shared": true, "x": true, "y": true}, 5)
+	got := streamTargets(groups, history, map[string]bool{"shared": true, "x": true, "y": true}, 5, 0)
 	if !slices.Equal(got, []string{"shared", "x", "y"}) {
 		t.Fatalf("targets = %v", got)
 	}
@@ -1171,9 +1185,15 @@ func TestStreamTargetsCapAtEight(t *testing.T) {
 			history[group] = h
 		}
 	}
-	got := streamTargets(groups, history, members, 5)
-	if len(got) != StreamPullCap || !slices.Equal(got[:3], []string{"g1-sel", "g2-sel", "g3-sel"}) {
-		t.Fatalf("targets = %v, want 8 with selected nodes first", got)
+	got := streamTargets(groups, history, members, 5, 0)
+	want := []string{"g1-sel", "g2-sel", "g3-sel", "g1-a", "g2-a", "g3-a", "g1-b", "g2-b"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("round 0 targets = %v, want %v", got, want)
+	}
+	got = streamTargets(groups, history, members, 5, 1)
+	want = []string{"g1-sel", "g2-sel", "g3-sel", "g2-a", "g3-a", "g1-a", "g2-b", "g3-b"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("round 1 targets = %v, want rotation starting at g2: %v", got, want)
 	}
 }
 
@@ -1273,9 +1293,11 @@ Expected: FAIL to compile (`NewScheduler` arity, `streamTargets`, `SetStreamMemb
 
 ```go
 // streamTargets lists the nodes one stream round pulls: every automated
-// group's selected node first, then each group's three fastest healthy
-// members, deduplicated and capped so one serialized round fits its interval.
-func streamTargets(groups []GroupState, history map[string]map[string][]Sample, members map[string]bool, windowSize int) []string {
+// group's selected node first, then candidates one per group in turn
+// (fastest first), starting at a group that rotates with round, so the cap
+// never starves a later group. Deduplicated and capped so one serialized
+// round fits its interval.
+func streamTargets(groups []GroupState, history map[string]map[string][]Sample, members map[string]bool, windowSize, round int) []string {
 	var out []string
 	seen := map[string]bool{}
 	add := func(proxy string) {
@@ -1289,13 +1311,14 @@ func streamTargets(groups []GroupState, history map[string]map[string][]Sample, 
 			add(group.Selected)
 		}
 	}
+	type ranked struct {
+		proxy  string
+		median time.Duration
+	}
+	var candidates [][]ranked
 	for _, group := range groups {
 		if !group.AutomationEnabled {
 			continue
-		}
-		type ranked struct {
-			proxy  string
-			median time.Duration
 		}
 		var fastest []ranked
 		for _, proxy := range group.Proxies {
@@ -1306,8 +1329,14 @@ func streamTargets(groups []GroupState, history map[string]map[string][]Sample, 
 			fastest = append(fastest, ranked{proxy, MeasureStability(samples, 0).Median})
 		}
 		sort.SliceStable(fastest, func(i, j int) bool { return fastest[i].median < fastest[j].median })
-		for i := 0; i < len(fastest) && i < StreamCandidates; i++ {
-			add(fastest[i].proxy)
+		candidates = append(candidates, fastest)
+	}
+	for rank := 0; rank < StreamCandidates; rank++ {
+		for i := range candidates {
+			group := candidates[(round+i)%len(candidates)]
+			if rank < len(group) {
+				add(group[rank].proxy)
+			}
 		}
 	}
 	return out
@@ -1316,10 +1345,10 @@ func streamTargets(groups []GroupState, history map[string]map[string][]Sample, 
 
 - In `Run`, only when `s.policy.SwitchPolicy == SwitchSteadyStream`:
   - State: `streamNext time.Time` (initially `time.Now()` once any automated group exists), `streamHistory map[string][]StreamSample`, `streamPending []string`, `streamActive bool`, `streamSamples []StreamSample`, `streamGeneration uint64`, and one channel pair `streamJobs chan string` (cap 0) / `streamResults chan StreamSample` (cap 1) served by exactly one worker goroutine started with the delay workers and waited in the same deferred `Wait`. The worker calls `s.streamer.StreamPull(runCtx, proxy, s.policy.StreamURL)` and sends the sample unless `runCtx` is done.
-  - Round start (in the `!active` block, after latency due-check): if `!streamActive && !streamNext.IsZero() && !time.Now().Before(streamNext)`, compute `streamPending = streamTargets(groups, histories, members, WindowSize)` where `histories[group] = runtime.history`; set `streamNext = time.Now().Add(s.policy.StreamInterval + s.jitter())`; `streamActive = len(streamPending) > 0`; record `streamGeneration = s.generation`.
+  - Round start (in the `!active` block, after latency due-check): if `!streamActive && !streamNext.IsZero() && !time.Now().Before(streamNext)`, compute `streamPending = streamTargets(groups, histories, members, WindowSize, streamRound)` where `histories[group] = runtime.history`, then `streamRound++` (a counter kept with the other stream state); set `streamNext = time.Now().Add(s.policy.StreamInterval + s.jitter())`; `streamActive = len(streamPending) > 0`; record `streamGeneration = s.generation`.
   - Timer: `nextDeadline` also considers `streamNext` when steady and not active.
   - Select: add a `streamSend` case (nil channel when no pending pull) sending `streamPending[0]`; on `sample := <-streamResults`, append to `streamSamples` and to `streamHistory[sample.Proxy]`, trimming to `WindowSize` and dropping samples older than `6 * StreamInterval`. When `streamPending` is empty and the last result arrived: if `streamGeneration == s.generation`, emit `Batch{FinishedAt: now, Streams: streamSamples, StreamStability: MeasureStreams per pulled proxy (WindowSize), Decisions: DecideSteady(s.policy, runtime.state, historySamples(runtime), streamHistory, now) for each runtime whose state is AutomationEnabled}`; reset round state.
-  - Latency batches: when steady, set `batch.Decisions = nil` (latency still feeds stability, alerts, and the candidate ranking).
+  - Latency batches are unchanged: they keep calling `Decide`, which treats `steady_stream` like `failover`, so a dead selected node still leaves on latency evidence.
   - On `ctx.Done()`: return without emitting a stream batch.
 - Update every `NewScheduler` call site to pass `nil` as `streamer` (tests) or the app adapter (Task 6).
 

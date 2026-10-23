@@ -103,8 +103,10 @@ One global stream deadline in the existing timer loop, because the single
 probe listener serializes every pull; no extra goroutine per node or group.
 A round's pull set is the union over automated groups of the selected node
 plus the 3 healthy nodes with the lowest median latency, deduplicated by node
-name and capped at 8 pulls (selected nodes first, then candidates in group
-order). Worst case 8 x 30 s = 4 min, so `stream_interval` must be at least
+name and capped at 8 pulls: selected nodes first, then candidates taken one
+per group in turn (each group's fastest, then each group's second, ...),
+starting from a different group every round so no group's candidates are
+starved by the cap. Worst case 8 x 30 s = 4 min, so `stream_interval` must be at least
 `4m`. Cancellable; stopped when no group is automated under `steady_stream`.
 Data: about 12 MB/hour for one group, at most 24 MB/hour at the cap.
 
@@ -116,7 +118,10 @@ than 6 stream intervals are dropped.
 
 ### Decision (`monitor.Decide`, policy `steady_stream`)
 
-Latency samples keep running as today. A switch happens only when:
+Latency rounds keep the `failover` rule as a floor: a selected node that is
+offline or over `threshold` for `consecutive_bad_samples` rounds leaves on
+latency evidence alone, without waiting for stream rounds. On top of that, a
+stream round switches when:
 
 1. the selected node interrupted at least `max_failures` (2) of its last
    `window_size` (5) pulls, and
