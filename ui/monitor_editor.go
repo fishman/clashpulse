@@ -211,7 +211,7 @@ func (p *settingsPage) editMonitorPolicy() {
 	items = append(items, widget.NewFormItem(localize.T("Warning"), widget.NewLabel(localize.T("Plain HTTP probes can be intercepted; use HTTPS for probe integrity."))))
 	policy := switchPolicySelect(state.SwitchPolicy)
 	items = append(items, widget.NewFormItem(localize.T("Switch policy"), policy))
-	items = append(items, widget.NewFormItem(localize.T("Note"), widget.NewLabel(localize.T("A switch needs the required candidate successes in each candidate's probe window and the switch cooldown after one. The selected node counts as unstable once its window holds the maximum failures. Lowest latency compares median latencies and requires the required improvement; the unhealthy threshold then no longer gates switching."))))
+	items = append(items, widget.NewFormItem(localize.T("Note"), widget.NewLabel(monitorPolicyNote())))
 	interval := add(localize.T("Interval (seconds)"), strconv.FormatInt(state.IntervalSeconds, 10))
 	timeout := add(localize.T("Timeout (ms)"), strconv.FormatInt(state.TimeoutMillis, 10))
 	concurrency := add(localize.T("Concurrent probes"), strconv.Itoa(state.Concurrency))
@@ -245,4 +245,8 @@ func (p *settingsPage) editMonitorPolicy() {
 		}
 		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: patch})
 	}, p.window).Show()
+}
+
+func monitorPolicyNote() string {
+	return localize.T("A switch needs the required candidate successes in each candidate's probe window and the switch cooldown after one. The selected node counts as unstable once its window holds the maximum failures. Lowest latency compares median latencies and requires the required improvement; the unhealthy threshold then no longer gates switching. Steady stream: every stream interval, a 256 KiB HTTPS download runs through the current node and the 3 fastest others; it leaves a node after 2 of its last 5 downloads broke, for a node with fewer broken downloads and at least 3 completed, and a node that stops answering still leaves under the Failover rule.")
 }

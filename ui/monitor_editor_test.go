@@ -1,11 +1,24 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/localize"
 	"github.com/fishman/clashpulse/monitor"
 )
+
+func TestMonitorPolicyNoteExplainsSteadyStreamInBothLocales(t *testing.T) {
+	if got := monitorPolicyNote(); !strings.Contains(got, "Steady stream: every stream interval, a 256 KiB HTTPS download") {
+		t.Fatalf("policy note omits steady stream: %q", got)
+	}
+	localize.SetLanguage("zh-CN")
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	if got := monitorPolicyNote(); !strings.Contains(got, "\u7a33\u5b9a\u6d41\uff1a") || strings.Contains(got, "Steady stream") {
+		t.Fatalf("Chinese policy note lacks the steady stream sentence: %q", got)
+	}
+}
 
 func TestMonitorPolicyFormKeepsSubsecondTimeoutAndZeroCooldown(t *testing.T) {
 	input := stabilityPolicyInput("5", "3", "2", "3")
