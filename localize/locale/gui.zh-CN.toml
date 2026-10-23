@@ -17,7 +17,7 @@ other = "DNS"
 other = "所选节点失效后切换一次"
 
 ["gui.monitor.switch-policy.lowest_latency"]
-other = "始终使用延迟最低的节点"
+other = "最快（始终使用延迟最低的节点）"
 
 ["Connecting to local service..."]
 other = "正在连接本地服务…"
@@ -916,3 +916,15 @@ other = "自动切换"
 
 ["Automatic switching (monitor off)"]
 other = "自动切换（监测已关闭）"
+
+["gui.monitor.switch-policy.steady_stream"]
+other = "稳定流（离开下载会中断的节点）"
+
+["Stream interval (seconds)"]
+other = "流探测间隔（秒）"
+
+["Leave blank to keep the current stream URL"]
+other = "留空则保留当前流测试 URL"
+
+["stream URL must use HTTPS without credentials or fragment"]
+other = "流测试 URL 必须使用 HTTPS，且不含凭据或片段"

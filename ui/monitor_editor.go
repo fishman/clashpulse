@@ -21,10 +21,11 @@ type monitorPolicyInput struct {
 	ThresholdMillis, AlertThresholdMillis, ConsecutiveBadSamples       string
 	WindowSize, MinCandidateSamples, MaxFailures                       string
 	MinImprovementMillis, CooldownSeconds, JitterMillis                string
+	StreamURL, StreamIntervalSeconds                                   string
 }
 
 // IDs remain opaque; descriptions live in the locale catalogs.
-var switchPolicyIDs = []string{monitor.SwitchFailover, monitor.SwitchLowestLatency}
+var switchPolicyIDs = monitor.SwitchPolicies
 
 func switchPolicyLabel(value string) string {
 	for _, id := range switchPolicyIDs {
@@ -110,6 +111,16 @@ func monitorPolicyPatch(input monitorPolicyInput) (*ipc.ConfigPatch, error) {
 	}
 	if patch.MonitorJitterMillis, err = parse("jitter milliseconds", input.JitterMillis, 0, uint64(*patch.MonitorIntervalSeconds)*1000-1); err != nil {
 		return nil, err
+	}
+	if patch.MonitorStreamIntervalSeconds, err = parse("Stream interval (seconds)", input.StreamIntervalSeconds, uint64(monitor.MinStreamInterval/time.Second), 86400); err != nil {
+		return nil, err
+	}
+	// The stream URL is not in snapshots, so blank keeps the current one.
+	if streamURL := strings.TrimSpace(input.StreamURL); streamURL != "" {
+		if monitor.ValidStreamURL(streamURL) != nil {
+			return nil, errors.New(localize.T("stream URL must use HTTPS without credentials or fragment"))
+		}
+		patch.MonitorStreamURL = &streamURL
 	}
 	return patch, nil
 }
@@ -213,6 +224,9 @@ func (p *settingsPage) editMonitorPolicy() {
 	improvement := add(localize.T("Required improvement (ms)"), strconv.FormatInt(state.MinImprovementMillis, 10))
 	cooldown := add(localize.T("Switch cooldown (seconds)"), strconv.FormatInt(state.CooldownSeconds, 10))
 	jitter := add(localize.T("Probe jitter (ms)"), strconv.FormatInt(state.JitterMillis, 10))
+	streamURL := add(localize.T("Stream URL"), "")
+	streamURL.SetPlaceHolder(localize.T("Leave blank to keep the current stream URL"))
+	streamInterval := add(localize.T("Stream interval (seconds)"), strconv.FormatInt(state.StreamIntervalSeconds, 10))
 	dialog.NewForm(localize.T("Monitor probe policy"), localize.T("Apply"), localize.T("Cancel"), items, func(confirmed bool) {
 		if !confirmed {
 			return
@@ -223,6 +237,7 @@ func (p *settingsPage) editMonitorPolicy() {
 			ConsecutiveBadSamples: consecutive.Text, WindowSize: window.Text, MinCandidateSamples: candidates.Text,
 			MaxFailures: maxFailures.Text, MinImprovementMillis: improvement.Text,
 			CooldownSeconds: cooldown.Text, JitterMillis: jitter.Text,
+			StreamURL: streamURL.Text, StreamIntervalSeconds: streamInterval.Text,
 		})
 		if err != nil {
 			dialog.ShowError(err, p.window)

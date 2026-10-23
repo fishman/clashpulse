@@ -108,3 +108,12 @@ other = "Global"
 
 ["proxy.mode.direct"]
 other = "Direct"
+
+["monitor.policy.lowest_latency"]
+other = "Fastest"
+
+["monitor.policy.failover"]
+other = "Failover"
+
+["monitor.policy.steady_stream"]
+other = "Steady stream"

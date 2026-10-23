@@ -60,6 +60,18 @@ func (p ProxySnapshot) StabilityLabel() string {
 	return fmt.Sprintf(localize.T("median %d ms \u00b1%d ms"), p.MedianMillis, p.JitterMillis) + " \u00b7 " + failed
 }
 
+// StreamLabel summarizes the stream pull window, or "" before any pull.
+func (p ProxySnapshot) StreamLabel() string {
+	if p.StreamSamples <= 0 {
+		return ""
+	}
+	label := fmt.Sprintf(localize.T("%d/%d downloads"), p.StreamCompleted, p.StreamSamples)
+	if p.StreamKBps > 0 {
+		label += " \u00b7 " + fmt.Sprintf(localize.T("%d KB/s"), p.StreamKBps)
+	}
+	return label
+}
+
 type UsageSnapshot struct {
 	UploadedBytes   uint64
 	DownloadedBytes uint64

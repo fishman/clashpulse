@@ -114,3 +114,6 @@ other = "Minimum candidate samples must be between %d and %d."
 
 ["tui.monitor.range.max_failures"]
 other = "Maximum failures must be between %d and %d."
+
+["tui.monitor.range.stream_interval"]
+other = "Stream interval must be between %d and %d seconds."

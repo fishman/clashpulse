@@ -16,6 +16,7 @@ import (
 	"github.com/fishman/clashpulse/download"
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/localize"
+	"github.com/fishman/clashpulse/monitor"
 	"github.com/fishman/notmutt/lib/tui/form"
 )
 
@@ -73,6 +74,8 @@ const (
 	monitorWindowSize     monitorField = "window_size"
 	monitorCandidates     monitorField = "min_candidate_samples"
 	monitorMaxFailures    monitorField = "max_failures"
+	monitorStreamURL      monitorField = "stream_url"
+	monitorStreamInterval monitorField = "stream_interval"
 )
 
 type dnsForm struct{ values [3]string }
@@ -475,6 +478,13 @@ func (m Model) HandleKey(key string) (Model, *ipc.Command, bool) {
 		return m.openMonitorModal(monitorCandidates), nil, false
 	case "edit_monitor_max_failures":
 		return m.openMonitorModal(monitorMaxFailures), nil, false
+	case "edit_stream_url":
+		return m.openMonitorModal(monitorStreamURL), nil, false
+	case "edit_stream_interval":
+		return m.openMonitorModal(monitorStreamInterval), nil, false
+	case "cycle_switch_policy":
+		next := monitor.SwitchPolicies[(slices.Index(monitor.SwitchPolicies, m.snapshot.Snapshot.Monitor.SwitchPolicy)+1)%len(monitor.SwitchPolicies)]
+		return m, configCommand(&ipc.ConfigPatch{MonitorSwitchPolicy: &next}), false
 	case "edit_dns_listen":
 		return m.openDNSListenModal(), nil, false
 	case "edit_mixed_port":
@@ -640,6 +650,8 @@ func (m Model) openMonitorModal(_ monitorField) Model {
 		{ID: "window_size", Label: localize.T("Window size"), Kind: form.Text, Value: strconv.Itoa(monitor.WindowSize)},
 		{ID: "min_candidate_samples", Label: localize.T("Minimum candidate samples"), Kind: form.Text, Value: strconv.Itoa(monitor.MinCandidateSamples)},
 		{ID: "max_failures", Label: localize.T("Maximum failures"), Kind: form.Text, Value: strconv.Itoa(monitor.MaxFailures)},
+		{ID: "stream_url", Label: localize.T("Stream URL"), Kind: form.Text, Sensitive: true},
+		{ID: "stream_interval", Label: localize.T("Stream interval"), Kind: form.Text, Value: strconv.FormatInt(monitor.StreamIntervalSeconds, 10)},
 	})
 	if err != nil {
 		m.Notice = localize.T("Monitor settings form unavailable.")
@@ -657,6 +669,12 @@ func monitorSettingPatch(field monitorField, input string) (*ipc.ConfigPatch, st
 			return nil, localize.T("Monitor test URL must be 1-2048 bytes without line breaks.")
 		}
 		return &ipc.ConfigPatch{MonitorTestURL: &input}, ""
+	}
+	if field == monitorStreamURL {
+		if monitor.ValidStreamURL(input) != nil {
+			return nil, localize.T("Stream URL must use HTTPS without credentials or fragment.")
+		}
+		return &ipc.ConfigPatch{MonitorStreamURL: &input}, ""
 	}
 	value, err := strconv.ParseUint(input, 10, 32)
 	if err != nil {
@@ -696,6 +714,8 @@ func monitorSettingPatch(field monitorField, input string) (*ipc.ConfigPatch, st
 		patch.MonitorMinCandidateSamples = &parsed
 	case monitorMaxFailures:
 		patch.MonitorMaxFailures = &parsed
+	case monitorStreamInterval:
+		patch.MonitorStreamIntervalSeconds = &parsed
 	}
 	return patch, ""
 }
@@ -718,6 +738,8 @@ func monitorRange(field monitorField) (min, max uint64, ok bool) {
 		min, max = core.MonitorWindowMin, core.MonitorWindowMax
 	case monitorCooldown, monitorJitter:
 		min = 0
+	case monitorStreamInterval:
+		min, max = uint64(monitor.MinStreamInterval/time.Second), 86400
 	case monitorThreshold, monitorImprovement:
 	default:
 		return 0, 0, false
@@ -785,6 +807,10 @@ func monitorFormIntent(modal *Modal) (*ipc.Command, string) {
 				patch.MonitorMinCandidateSamples = setting.MonitorMinCandidateSamples
 			case monitorMaxFailures:
 				patch.MonitorMaxFailures = setting.MonitorMaxFailures
+			case monitorStreamURL:
+				patch.MonitorStreamURL = setting.MonitorStreamURL
+			case monitorStreamInterval:
+				patch.MonitorStreamIntervalSeconds = setting.MonitorStreamIntervalSeconds
 			}
 		}
 	}
@@ -1690,6 +1716,9 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 			if stability := proxy.StabilityLabel(); stability != "" {
 				info.latency = appendStability(info.latency, stability)
 			}
+			if stream := proxy.StreamLabel(); stream != "" {
+				info.latency = appendStability(info.latency, stream)
+			}
 			proxyInfo[key] = info
 		}
 		for _, group := range snapshot.Groups {
@@ -1830,6 +1859,10 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 		if strings.HasPrefix(strings.ToLower(monitor.TestURL), "http://") {
 			testURLDetail += localize.T(" Plain HTTP can be intercepted.")
 		}
+		streamURLValue := localize.T("not configured")
+		if monitor.StreamURLConfigured {
+			streamURLValue = localize.T("configured")
+		}
 		proxyAction := "system_proxy_enable"
 		if snapshot.SystemProxy.Enabled {
 			proxyAction = "system_proxy_disable"
@@ -1852,6 +1885,9 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 			field                    monitorField
 		}{
 			{"setting:monitor:test-url", localize.T("Monitor test URL"), testURLValue, "edit_monitor_url", monitorTestURL},
+			{"setting:monitor:switch-policy", localize.T("Switch policy"), localize.Code("monitor.policy", monitor.SwitchPolicy), "cycle_switch_policy", ""},
+			{"setting:monitor:stream-url", localize.T("Stream URL"), streamURLValue, "edit_stream_url", monitorStreamURL},
+			{"setting:monitor:stream-interval", localize.T("Stream interval"), strconv.FormatInt(monitor.StreamIntervalSeconds, 10) + " " + localize.T("seconds"), "edit_stream_interval", monitorStreamInterval},
 			{"setting:interval", localize.T("Monitor interval"), strconv.FormatInt(monitor.IntervalSeconds, 10) + " " + localize.T("seconds"), "edit_monitor_interval", monitorInterval},
 			{"setting:monitor:timeout", localize.T("Monitor timeout"), strconv.FormatInt(monitor.TimeoutMillis, 10) + " " + localize.T("ms"), "edit_monitor_timeout", monitorTimeout},
 			{"setting:monitor:concurrency", localize.T("Monitor concurrency"), strconv.Itoa(monitor.Concurrency), "edit_monitor_concurrency", monitorConcurrency},
@@ -1871,8 +1907,12 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 			} else if setting.field == monitorAlertThreshold {
 				detail += localize.T("; high alert above threshold")
 			}
+			kind := rowSettingMonitor
+			if setting.field == "" {
+				kind = rowNone
+			}
 			rows = append(rows, Row{ID: setting.id, Title: setting.title, Detail: detail,
-				Cells: []string{setting.title, setting.value, ""}, kind: rowSettingMonitor, monitor: setting.field, action: setting.action})
+				Cells: []string{setting.title, setting.value, ""}, kind: kind, monitor: setting.field, action: setting.action})
 		}
 		rows = append(rows, Row{ID: "setting:dns-listen", Title: localize.T("DNS listener"), Detail: snapshot.DNS.Listen,
 			Cells: []string{localize.T("DNS listener"), snapshot.DNS.Listen, ""}, kind: rowSettingDNSListen, action: "edit_dns_listen"})

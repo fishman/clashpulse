@@ -372,3 +372,21 @@ other = "全局"
 
 ["proxy.mode.direct"]
 other = "直连"
+
+["monitor.policy.lowest_latency"]
+other = "最快"
+
+["monitor.policy.failover"]
+other = "故障切换"
+
+["monitor.policy.steady_stream"]
+other = "稳定流"
+
+["Stream URL"]
+other = "流测试 URL"
+
+["%d/%d downloads"]
+other = "%d/%d 次下载完成"
+
+["%d KB/s"]
+other = "%d KB/s"

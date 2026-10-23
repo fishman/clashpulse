@@ -76,6 +76,9 @@ func proxyLatency(snapshot core.Snapshot, groupID, proxyID string) string {
 		if stability := proxy.StabilityLabel(); stability != "" {
 			parts = append(parts, stability)
 		}
+		if stream := proxy.StreamLabel(); stream != "" {
+			parts = append(parts, stream)
+		}
 		return strings.Join(parts, " \u00b7 ")
 	}
 	return ""
@@ -102,7 +105,7 @@ func compatibilityLabel(failure string) string {
 	if strings.HasPrefix(failure, "resource ") {
 		id, capability, ok := strings.Cut(strings.TrimPrefix(failure, "resource "), " requires ")
 		if ok && len(id) > 0 && len(id) <= 64 && strings.Trim(id, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-") == "" {
-			for _, known := range []string{"geoip.dat", "geosite.dat", "Country.mmdb"} {
+			for _, known := range []string{"geoip.dat", "geosite.dat", "Country.mmdb", "pinned-listener"} {
 				if capability == known {
 					return fmt.Sprintf(localize.T("resource %s requires %s"), id, capability)
 				}

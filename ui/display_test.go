@@ -93,6 +93,8 @@ func TestProxyRowShowsStabilityOnlyAfterSamples(t *testing.T) {
 		{core.ProxySnapshot{LatencyMillis: 120, MedianMillis: 130, JitterMillis: 20, Samples: 5, Failures: 1}, "120 ms \u00b7 median 130 ms \u00b120 ms \u00b7 1/5 failed"},
 		{core.ProxySnapshot{Samples: 3, Failures: 3}, "3/3 failed"},
 		{core.ProxySnapshot{LatencyMillis: 120, MedianMillis: 130, JitterMillis: 20}, "120 ms"},
+		{core.ProxySnapshot{LatencyMillis: 120, MedianMillis: 130, JitterMillis: 20, Samples: 5, Failures: 1, StreamSamples: 5, StreamCompleted: 4, StreamKBps: 1800}, "120 ms \u00b7 median 130 ms \u00b120 ms \u00b7 1/5 failed \u00b7 4/5 downloads \u00b7 1800 KB/s"},
+		{core.ProxySnapshot{LatencyMillis: 120, StreamSamples: 2}, "120 ms \u00b7 0/2 downloads"},
 	} {
 		tc.proxy.GroupID, tc.proxy.ID, tc.proxy.Label = "g1", "p1", "node-a"
 		page := newProxyPage(nil)
@@ -121,6 +123,9 @@ func TestMonitorThresholdAndCompatibilityLabelsAreSafe(t *testing.T) {
 	}
 	if got := compatibilityLabel("resource geo requires geoip.dat"); got != "resource geo requires geoip.dat" {
 		t.Fatalf("safe named capability was hidden: %q", got)
+	}
+	if got := compatibilityLabel("resource monitor.switch_policy requires pinned-listener"); got != "resource monitor.switch_policy requires pinned-listener" {
+		t.Fatalf("pinned listener capability was hidden: %q", got)
 	}
 }
 
