@@ -3,6 +3,7 @@ package monitor
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -16,6 +17,16 @@ import (
 const (
 	SwitchFailover      = "failover"
 	SwitchLowestLatency = "lowest_latency"
+	SwitchSteadyStream  = "steady_stream"
+)
+
+var SwitchPolicies = []string{SwitchLowestLatency, SwitchFailover, SwitchSteadyStream}
+
+const (
+	MinStreamInterval = 4 * time.Minute
+	StreamCandidates  = 3
+	StreamPullCap     = 8
+	DefaultStreamURL  = "https://speed.cloudflare.com/__down?bytes=262144"
 )
 
 type Policy struct {
@@ -33,6 +44,8 @@ type Policy struct {
 	MinImprovement        time.Duration
 	Cooldown              time.Duration
 	Jitter                time.Duration
+	StreamURL             string
+	StreamInterval        time.Duration
 }
 
 func DefaultPolicy() Policy {
@@ -51,6 +64,8 @@ func DefaultPolicy() Policy {
 		MinImprovement:        100 * time.Millisecond,
 		Cooldown:              5 * time.Minute,
 		Jitter:                10 * time.Second,
+		StreamURL:             DefaultStreamURL,
+		StreamInterval:        5 * time.Minute,
 	}
 }
 
@@ -59,8 +74,16 @@ func (p Policy) Validate() error {
 	if err != nil || strings.ContainsAny(p.TestURL, "\x00\r\n#") || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" || parsed.Opaque != "" {
 		return fmt.Errorf("monitor policy: test URL must use HTTP or HTTPS without credentials or fragment")
 	}
-	if p.SwitchPolicy != SwitchFailover && p.SwitchPolicy != SwitchLowestLatency {
-		return fmt.Errorf("monitor policy: switch policy must be %q or %q", SwitchFailover, SwitchLowestLatency)
+	if !ValidPolicyName(p.SwitchPolicy) {
+		return fmt.Errorf("monitor policy: switch policy must be one of %s", strings.Join(SwitchPolicies, ", "))
+	}
+	if p.SwitchPolicy == SwitchSteadyStream {
+		if err := ValidStreamURL(p.StreamURL); err != nil {
+			return fmt.Errorf("monitor policy: %w", err)
+		}
+		if p.StreamInterval < MinStreamInterval || p.StreamInterval > 24*time.Hour {
+			return fmt.Errorf("monitor policy: stream interval must be between 4m and 24h")
+		}
 	}
 	if p.Interval <= 0 {
 		return fmt.Errorf("monitor policy: interval must be positive")
@@ -92,6 +115,18 @@ func (p Policy) Validate() error {
 	return nil
 }
 
+func ValidPolicyName(name string) bool { return slices.Contains(SwitchPolicies, name) }
+
+// ValidStreamURL accepts an HTTPS URL without credentials or fragment; a
+// stream probe through plain HTTP could be rewritten mid-body.
+func ValidStreamURL(raw string) error {
+	parsed, err := url.Parse(raw)
+	if err != nil || len(raw) > 2048 || strings.ContainsAny(raw, "\x00\r\n#") || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.Opaque != "" {
+		return fmt.Errorf("stream URL must use HTTPS without credentials or fragment")
+	}
+	return nil
+}
+
 const (
 	ReasonManualOverride      = "manual override active"
 	ReasonAutomationDisabled  = "automation disabled"
@@ -102,10 +137,28 @@ const (
 	ReasonSelectedHealthy     = "selected proxy is healthy"
 	ReasonNoBetterCandidate   = "no materially better candidate"
 	ReasonSwitchCandidate     = "materially better candidate"
+
+	ReasonSteadierStream         = "steadier HTTPS downloads"
+	ReasonSelectedStreamsHealthy = "selected node completes its downloads"
 )
 
+// guard reports why no switch may happen now, or "" when policy may decide.
+func guard(policy Policy, state GroupState, now time.Time) string {
+	switch {
+	case state.ManualOverride:
+		return ReasonManualOverride
+	case !state.AutomationEnabled:
+		return ReasonAutomationDisabled
+	case state.SwitchInFlight:
+		return ReasonSwitchInFlight
+	case state.LastSwitchAt.After(now) || !state.LastSwitchAt.IsZero() && now.Sub(state.LastSwitchAt) < policy.Cooldown:
+		return ReasonCooldown
+	}
+	return ""
+}
+
 func Decide(policy Policy, state GroupState, samples []Sample, now time.Time) Decision {
-	decision := Decision{Old: state.Selected, Reason: ReasonInsufficientSamples}
+	decision := Decision{Group: state.Group, Old: state.Selected, Reason: ReasonInsufficientSamples}
 	groupSamples := make([]Sample, 0, len(samples))
 	byProxy := make(map[string][]Sample)
 	for _, sample := range samples {
@@ -117,20 +170,8 @@ func Decide(policy Policy, state GroupState, samples []Sample, now time.Time) De
 	}
 	decision.Evidence = groupSamples
 
-	if state.ManualOverride {
-		decision.Reason = ReasonManualOverride
-		return decision
-	}
-	if !state.AutomationEnabled {
-		decision.Reason = ReasonAutomationDisabled
-		return decision
-	}
-	if state.SwitchInFlight {
-		decision.Reason = ReasonSwitchInFlight
-		return decision
-	}
-	if state.LastSwitchAt.After(now) || (!state.LastSwitchAt.IsZero() && now.Sub(state.LastSwitchAt) < policy.Cooldown) {
-		decision.Reason = ReasonCooldown
+	if reason := guard(policy, state, now); reason != "" {
+		decision.Reason = reason
 		return decision
 	}
 	if state.Selected == "" || len(state.Proxies) == 0 {

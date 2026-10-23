@@ -330,6 +330,11 @@ func TestDefaultPolicyUsesApprovedHTTPProbeURL(t *testing.T) {
 	if err := policy.Validate(); err == nil {
 		t.Fatal("unknown switch policy accepted")
 	}
+	steady := DefaultPolicy()
+	steady.SwitchPolicy = SwitchSteadyStream
+	if err := steady.Validate(); err != nil {
+		t.Fatalf("steady_stream with defaults rejected: %v", err)
+	}
 	policy.SwitchPolicy = SwitchFailover
 	if policy.TestURL != "http://cp.cloudflare.com/generate_204" {
 		t.Fatalf("default probe URL = %q", policy.TestURL)
