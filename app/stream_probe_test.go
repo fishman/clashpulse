@@ -62,6 +62,29 @@ func TestAcceptStreamBatchFillsProxiesAndLogsInterruptions(t *testing.T) {
 	}
 }
 
+// A latency batch offered while a stream batch is pending must not replace it,
+// or the stream round's switch decision is lost until the next interval.
+func TestLatencyBatchDoesNotDropPendingStreamBatch(t *testing.T) {
+	service := newBareRuntimeForTest(t)
+	stream := monitor.Batch{Streams: []monitor.StreamSample{{Proxy: "node-a", Outcome: monitor.StreamSuccess}}, Decisions: []monitor.Decision{{Group: "auto", Switch: true}}}
+	latency := monitor.Batch{Samples: []monitor.Sample{{Group: "auto", Proxy: "node-a", Outcome: monitor.OutcomeSuccess}}}
+	service.offerBatch(stream)
+	service.offerBatch(latency)
+	var got []monitor.Batch
+	for range 2 {
+		select {
+		case batch := <-service.batches:
+			got = append(got, batch)
+		case batch := <-service.streamBatches:
+			got = append(got, batch)
+		default:
+		}
+	}
+	if len(got) != 2 || len(got[0].Streams)+len(got[1].Streams) != 1 || len(got[0].Samples)+len(got[1].Samples) != 1 {
+		t.Fatalf("pending batches = %+v, want the stream and the latency batch", got)
+	}
+}
+
 func TestSteadyStreamSnapshotHasNoProbeCredentials(t *testing.T) {
 	service := newBareRuntimeForTest(t)
 	service.streamProbe = mihomo.StreamListener{Port: 1, Username: "probe-user-secret", Password: "probe-password-secret"}

@@ -50,6 +50,7 @@ type runtimeService struct {
 	stopRequested       bool
 	changes             chan config.Change
 	batches             chan monitor.Batch
+	streamBatches       chan monitor.Batch // apart from batches: a latency batch never replaces a stream decision
 	resourceRefresh     chan []string
 	stateChanged        chan struct{}
 	resourceDirty       atomic.Bool

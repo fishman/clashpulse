@@ -1063,9 +1063,7 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 		if policy.SwitchPolicy == monitor.SwitchSteadyStream {
 			streamer = streamProber{controller: s.controller, listener: s.streamProbe}
 		}
-		s.monitor, err = monitor.NewScheduler(policy, s.controller, streamer, func(batch monitor.Batch) {
-			offerLatest(s.batches, batch)
-		})
+		s.monitor, err = monitor.NewScheduler(policy, s.controller, streamer, s.offerBatch)
 		if err != nil {
 			return err
 		}
@@ -1088,6 +1086,15 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 	}
 	s.publish()
 	return nil
+}
+
+// offerBatch keeps the latest pending batch of each kind for the service loop.
+func (s *runtimeService) offerBatch(batch monitor.Batch) {
+	if len(batch.Streams) > 0 {
+		offerLatest(s.streamBatches, batch)
+		return
+	}
+	offerLatest(s.batches, batch)
 }
 
 // watchDialFailures follows Mihomo's log for the monitor's lifetime. A dropped
