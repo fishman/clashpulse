@@ -179,13 +179,14 @@ Settings):
   at least 3 completed ones; ties go to the faster download. Good for
   streams, calls, and large transfers. Costs about 12 MB per hour for one
   automated group, at most 24 MB per hour; a node shared by groups is
-  downloaded once.
+  downloaded once. A node that stops answering latency probes still leaves
+  under the Failover rule, without waiting for a download round.
 
 Steady stream pulls through a private loopback listener that only
 ClashPulse can use; your selected node and rules are untouched. It requires
 a Mihomo whose capability check confirms pinned listeners (v1.19.31
-verified). Every policy honors cooldown, manual selection, and the all-nodes-
-failed stop.
+verified). Every policy honors cooldown, manual selection, and the
+all-nodes-failed stop.
 
 ## Testing
 

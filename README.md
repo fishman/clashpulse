@@ -65,31 +65,13 @@ Settings has Mihomo binary, System Proxy, Monitor, and DNS sections. Its sidebar
 
 ### Choosing a node automatically
 
-ClashPulse measures every node in an automated group and switches by
-`switch_policy` in `config.toml [monitor]` (GUI Settings > Monitor, TUI
-Settings):
+ClashPulse measures every node in an automated group and switches by `switch_policy` in `config.toml [monitor]` (GUI Settings > Monitor, TUI Settings):
 
-- **Fastest** (`lowest_latency`, default): every round, each node answers a
-  tiny HTTP request through Mihomo. The group moves to a node whose median
-  latency is lower by at least `min_improvement`. Good for browsing; a node
-  can be fast to answer yet drop long downloads.
-- **Failover** (`failover`): stays on the current node until it fails or
-  exceeds `threshold` for `consecutive_bad_samples` rounds.
-- **Steady stream** (`steady_stream`): every `stream_interval`, ClashPulse
-  downloads a 256 KiB HTTPS file (`stream_url`) through the current node and
-  the 3 fastest others, one at a time, and records whether each download
-  finished, reset, stalled, or was cut short. It leaves a node only after 2
-  of its last 5 downloads broke, for a node with fewer broken downloads and
-  at least 3 completed ones; ties go to the faster download. Good for
-  streams, calls, and large transfers. Costs about 12 MB per hour for one
-  automated group, at most 24 MB per hour; a node shared by groups is
-  downloaded once.
+- **Fastest** (`lowest_latency`, default): every round, each node answers a tiny HTTP request through Mihomo. The group moves to a node whose median latency is lower by at least `min_improvement`. Good for browsing; a node can be fast to answer yet drop long downloads.
+- **Failover** (`failover`): stays on the current node until it fails or exceeds `threshold` for `consecutive_bad_samples` rounds.
+- **Steady stream** (`steady_stream`): every `stream_interval`, ClashPulse downloads a 256 KiB HTTPS file (`stream_url`) through the current node and the 3 fastest others, one at a time, and records whether each download finished, reset, stalled, or was cut short. It leaves a node only after 2 of its last 5 downloads broke, for a node with fewer broken downloads and at least 3 completed ones; ties go to the faster download. Good for streams, calls, and large transfers. Costs about 12 MB per hour for one automated group, at most 24 MB per hour; a node shared by groups is downloaded once. A node that stops answering latency probes still leaves under the Failover rule, without waiting for a download round.
 
-Steady stream pulls through a private loopback listener that only
-ClashPulse can use; your selected node and rules are untouched. It requires
-a Mihomo whose capability check confirms pinned listeners (v1.19.31
-verified). Every policy honors cooldown, manual selection, and the all-nodes-
-failed stop.
+Steady stream pulls through a private loopback listener that only ClashPulse can use; your selected node and rules are untouched. It requires a Mihomo whose capability check confirms pinned listeners (v1.19.31 verified). Every policy honors cooldown, manual selection, and the all-nodes-failed stop.
 
 The tray's Proxies menu selects a member of an active managed `select` group; its System Proxy item changes the requested OS setting. Controls return when the local IPC service reconnects.
 
