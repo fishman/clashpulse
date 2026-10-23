@@ -165,3 +165,35 @@ func TestInspectGatesCapabilitiesByKnownVersion(t *testing.T) {
 		}
 	}
 }
+
+// fakeInspectBinary returns a fake that accepts every -t check, or, when
+// rejectListeners is set, fails any check whose file declares listeners.
+func fakeInspectBinary(t *testing.T, version string, rejectListeners bool) string {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skip("fake executable requires POSIX shell")
+	}
+	check := "\texit 0\n"
+	if rejectListeners {
+		check = "\tif grep -q 'listeners:' \"$3\"; then\n\t\texit 1\n\tfi\n\texit 0\n"
+	}
+	path := filepath.Join(t.TempDir(), "mihomo")
+	script := fmt.Sprintf("#!/bin/sh\nif [ \"$#\" -eq 1 ] && [ \"$1\" = \"-v\" ]; then\n\tprintf '%%s\\n' %q\n\texit 0\nfi\nif [ \"$#\" -eq 3 ] && [ \"$1\" = \"-t\" ] && [ \"$2\" = \"-f\" ]; then\n%sfi\nexit 1\n", "Mihomo Meta "+version+" linux amd64", check)
+	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestInspectRecordsPinnedListenerFromValidation(t *testing.T) {
+	supported := fakeInspectBinary(t, "v1.19.31", false)
+	capability, err := Inspect(context.Background(), Selection{Kind: "path", Path: supported})
+	if err != nil || !capability.SupportsPinnedListener {
+		t.Fatalf("supported binary: %+v %v", capability, err)
+	}
+	rejecting := fakeInspectBinary(t, "v1.19.31", true)
+	capability, err = Inspect(context.Background(), Selection{Kind: "path", Path: rejecting})
+	if err != nil || capability.SupportsPinnedListener {
+		t.Fatalf("rejecting binary: %+v %v", capability, err)
+	}
+}

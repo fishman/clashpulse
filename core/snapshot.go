@@ -102,7 +102,7 @@ var ConfigOverrideKeys = []string{
 	"dns.listen", "external-controller-unix", "external-controller-tls", "external-controller-cors", "external-ui", "dns.nameserver-policy",
 	"rule-providers", "proxy-groups", "rules",
 	"tun", "dns.enable", "dns.enhanced-mode", "dns.fake-ip-range", "dns.fake-ip-range6", "dns.fake-ip-filter",
-	"mode",
+	"mode", "listeners",
 }
 
 func (o ConfigOverrideSnapshot) Valid() bool {

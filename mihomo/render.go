@@ -19,6 +19,7 @@ import (
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/dns"
 	"github.com/fishman/clashpulse/filters"
+	"github.com/fishman/clashpulse/monitor"
 	"gopkg.in/yaml.v3"
 )
 
@@ -37,11 +38,12 @@ func (e *CapabilityError) Error() string {
 // ControllerSettings places the controller on Socket (a Unix socket) when set,
 // otherwise on the loopback TCP Address.
 type ControllerSettings struct {
-	Address   string
-	Socket    string
-	Secret    string
-	HomeDir   string
-	ProxyPort int
+	Address     string
+	Socket      string
+	Secret      string
+	HomeDir     string
+	ProxyPort   int
+	StreamProbe StreamListener
 }
 
 // TunDevice is fixed so a user can match it in a NetworkManager
@@ -95,6 +97,14 @@ func Render(profile []byte, intent config.Snapshot, paths ManagedPaths, controll
 			if !ok || len(items) > 0 {
 				return nil, fmt.Errorf("mihomo: source profile requests unsupported %s", field)
 			}
+		}
+	}
+	if intent.Monitor.SwitchPolicy == monitor.SwitchSteadyStream {
+		if !capability.SupportsPinnedListener {
+			return nil, &CapabilityError{ResourceID: "monitor.switch_policy", Kind: "pinned-listener"}
+		}
+		if err := renderStreamProbe(document, controller.StreamProbe); err != nil {
+			return nil, err
 		}
 	}
 	if controller.ProxyPort < 0 || controller.ProxyPort > 65535 {
@@ -194,6 +204,29 @@ func Render(profile []byte, intent config.Snapshot, paths ManagedPaths, controll
 		return nil, fmt.Errorf("mihomo: encode generated configuration: %w", err)
 	}
 	return encoded, nil
+}
+
+// renderStreamProbe adds the hidden probe group and its authenticated
+// listener. include-all lets Mihomo resolve provider nodes the render cannot see.
+func renderStreamProbe(document map[string]any, listener StreamListener) error {
+	if listener.Port <= 0 || listener.Username == "" || listener.Password == "" {
+		return errors.New("mihomo: stream probe listener is not configured")
+	}
+	for _, section := range []string{"proxies", "proxy-groups"} {
+		items, _ := document[section].([]any)
+		for _, item := range items {
+			if entry, ok := item.(map[string]any); ok && entry["name"] == StreamProbeName {
+				return fmt.Errorf("mihomo: source profile already defines %q", StreamProbeName)
+			}
+		}
+	}
+	groups, _ := document["proxy-groups"].([]any)
+	document["proxy-groups"] = append(groups, map[string]any{"name": StreamProbeName, "type": "select", "include-all": true})
+	document["listeners"] = []any{map[string]any{
+		"name": StreamProbeName, "type": "mixed", "listen": "127.0.0.1", "port": listener.Port, "proxy": StreamProbeName,
+		"users": []any{map[string]any{"username": listener.Username, "password": listener.Password}},
+	}}
+	return nil
 }
 
 // renderURLTestDelays rewrites the health-check pacing of the groups Mihomo

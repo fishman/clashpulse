@@ -67,6 +67,9 @@ other = "TUN fake-IP range"
 ["override.dns.fake-ip-filter"]
 other = "TUN fake-IP exclusions for local and time-server names"
 
+["override.listeners"]
+other = "ClashPulse adds a private loopback listener for steady-stream download probes."
+
 ["control.enable"]
 other = "Enabled"
 

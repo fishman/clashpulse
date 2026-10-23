@@ -103,6 +103,9 @@ other = "TUN 虚拟 IP 地址段"
 ["override.dns.fake-ip-filter"]
 other = "TUN 虚拟 IP 排除本地和时间服务器域名"
 
+["override.listeners"]
+other = "ClashPulse 为稳定流下载探测添加了私有回环监听器。"
+
 ["Alert threshold"]
 other = "告警阈值"
 
