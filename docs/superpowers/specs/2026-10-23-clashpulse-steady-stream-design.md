@@ -68,8 +68,10 @@ Rendered only when `switch_policy = "steady_stream"`:
   defines a proxy, group, or listener named `clashpulse-stream-probe` is
   rejected with a named error rather than overwritten. The override report
   names the added group and listener.
-- Port conflict: a start that fails because the port is taken retries once
-  with a new port, then fails transactionally like `mixed_port`.
+- Port conflict: the port is chosen fresh at every render and checked before
+  Mihomo starts, like `mixed_port`. A taken port fails the start
+  transactionally with stage `stream_probe_port`; the next start picks a new
+  port.
 
 The probe group is filtered out of Groups/Proxies snapshots, tray, GUI, TUI,
 monitor rosters, and the dial-failure log watch.
