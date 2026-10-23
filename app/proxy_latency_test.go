@@ -22,6 +22,7 @@ func TestRefreshGroupsKeepsMeasuredLatency(t *testing.T) {
 	controllerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"proxies":{` +
 			`"select-main":{"name":"select-main","type":"Selector","all":["node-a","node-b"],"now":"node-a"},` +
+			`"clashpulse-stream-probe":{"name":"clashpulse-stream-probe","type":"Selector","all":["node-a"],"now":"node-a"},` +
 			`"node-a":{"name":"node-a","type":"Direct","history":[{"delay":77}]},` +
 			`"node-b":{"name":"node-b","type":"Direct"}}}`))
 	}))
@@ -51,10 +52,29 @@ func TestRefreshGroupsKeepsMeasuredLatency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service.snapshot.Proxies = []core.ProxySnapshot{{ID: opaqueID("node-a"), GroupID: opaqueID("select-main"), Label: "node-a", LatencyMillis: 180, FinishedAt: 7, Outcome: "success", MedianMillis: 130, JitterMillis: 20, Samples: 5, Failures: 1}}
+	service.snapshot.Proxies = []core.ProxySnapshot{{ID: opaqueID("node-a"), GroupID: opaqueID("select-main"), Label: "node-a", LatencyMillis: 180, FinishedAt: 7, Outcome: "success", MedianMillis: 130, JitterMillis: 20, Samples: 5, Failures: 1, StreamSamples: 4, StreamCompleted: 3, StreamKBps: 900}}
 
 	if err := service.refreshGroups(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+	hidden := opaqueID(mihomo.StreamProbeName)
+	for _, group := range service.snapshot.Groups {
+		if group.ID == hidden {
+			t.Fatalf("stream probe group is visible: %+v", service.snapshot.Groups)
+		}
+	}
+	for _, proxy := range service.snapshot.Proxies {
+		if proxy.GroupID == hidden {
+			t.Fatalf("stream probe group has proxy rows: %+v", service.snapshot.Proxies)
+		}
+	}
+	for _, name := range service.monitor.ProbedGroups() {
+		if name == mihomo.StreamProbeName {
+			t.Fatal("stream probe group is in the monitor roster")
+		}
+	}
+	if len(service.lastStreamMembers) != 1 || service.lastStreamMembers[0] != "node-a" {
+		t.Fatalf("stream members = %v", service.lastStreamMembers)
 	}
 	for _, proxy := range service.snapshot.Proxies {
 		if proxy.ID != opaqueID("node-a") {
@@ -66,6 +86,9 @@ func TestRefreshGroupsKeepsMeasuredLatency(t *testing.T) {
 		if proxy.MedianMillis != 130 || proxy.JitterMillis != 20 || proxy.Samples != 5 || proxy.Failures != 1 {
 			t.Fatalf("refresh discarded the probe window: %+v", proxy)
 		}
+		if proxy.StreamSamples != 4 || proxy.StreamCompleted != 3 || proxy.StreamKBps != 900 {
+			t.Fatalf("refresh discarded the stream window: %+v", proxy)
+		}
 		if proxy.MihomoMillis != 77 {
 			t.Fatalf("mihomo url-test delay missing from the row: %+v", proxy)
 		}
@@ -74,7 +97,9 @@ func TestRefreshGroupsKeepsMeasuredLatency(t *testing.T) {
 	t.Fatalf("node-a missing from the refreshed snapshot: %+v", service.snapshot.Proxies)
 }
 
-func TestAcceptBatchReportsWindowStabilityForMatchingProxy(t *testing.T) {
+// newBareRuntimeForTest is a runtime with a publishing server and no Mihomo.
+func newBareRuntimeForTest(t *testing.T) *runtimeService {
+	t.Helper()
 	configDir := t.TempDir()
 	initial, err := config.Load(configDir)
 	if err != nil {
@@ -88,6 +113,11 @@ func TestAcceptBatchReportsWindowStabilityForMatchingProxy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return service
+}
+
+func TestAcceptBatchReportsWindowStabilityForMatchingProxy(t *testing.T) {
+	service := newBareRuntimeForTest(t)
 	service.snapshot.Proxies = []core.ProxySnapshot{
 		{ID: opaqueID("node-a"), GroupID: opaqueID("select-main")},
 		{ID: opaqueID("node-a"), GroupID: opaqueID("select-backup")},

@@ -449,7 +449,7 @@ func TestAutomaticLowerLatencySwitchQueuesNotificationAfterSelection(t *testing.
 	groupID := opaqueID("select-main")
 	h.service.automation[groupID] = true
 	decision := monitor.Decision{
-		Switch: true, LowerLatency: true, Old: "node-a", New: "node-b", Reason: monitor.ReasonSwitchCandidate,
+		Switch: true, LowerLatency: true, Group: "select-main", Old: "node-a", New: "node-b", Reason: monitor.ReasonSwitchCandidate,
 		Evidence: []monitor.Sample{
 			{Group: "select-main", Proxy: "node-a", Latency: 900 * time.Millisecond, Outcome: monitor.OutcomeSuccess},
 			{Group: "select-main", Proxy: "node-b", Latency: 500 * time.Millisecond, Outcome: monitor.OutcomeSuccess},

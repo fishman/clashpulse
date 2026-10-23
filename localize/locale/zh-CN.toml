@@ -286,6 +286,27 @@ other = "超时"
 ["probe.outcome.error"]
 other = "错误"
 
+["stream.outcome.success"]
+other = "下载完成"
+
+["stream.outcome.reset"]
+other = "下载被重置"
+
+["stream.outcome.stall"]
+other = "下载停滞"
+
+["stream.outcome.truncated"]
+other = "下载被截断"
+
+["stream.outcome.tls"]
+other = "TLS 失败"
+
+["stream.outcome.timeout"]
+other = "下载超时"
+
+["stream.outcome.error"]
+other = "下载失败"
+
 ["diagnostic.severity.error"]
 other = "错误"
 

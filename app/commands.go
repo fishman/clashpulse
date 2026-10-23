@@ -562,6 +562,19 @@ func (s *runtimeService) acceptBatch(ctx context.Context, batch monitor.Batch) {
 			break
 		}
 	}
+	for _, item := range batch.StreamStability {
+		id := opaqueID(item.Proxy)
+		for index := range s.snapshot.Proxies {
+			if snapshot := &s.snapshot.Proxies[index]; snapshot.ID == id {
+				snapshot.StreamSamples, snapshot.StreamCompleted, snapshot.StreamKBps = item.Samples, item.Completed, item.MedianThroughput/1024
+			}
+		}
+	}
+	for _, sample := range batch.Streams {
+		if !sample.Completed() {
+			s.appendDiagnostic(diagnosticEvent{Severity: "error", Kind: "stream_probe", SourceID: opaqueID(sample.Proxy), Message: "stream.outcome." + string(sample.Outcome), At: sample.FinishedAt})
+		}
+	}
 	settings := s.store.Snapshot().Monitor
 	threshold := settings.AlertThreshold
 	high, fast := allMeasuredSlow(s.snapshot.Groups, s.snapshot.Proxies, threshold, time.Now(), settings.Interval)
@@ -579,12 +592,12 @@ func (s *runtimeService) acceptBatch(ctx context.Context, batch monitor.Batch) {
 		}
 	}
 	for _, decision := range batch.Decisions {
-		if !decision.Switch || s.controller == nil || len(decision.Evidence) == 0 {
+		if !decision.Switch || s.controller == nil {
 			continue
 		}
 		groupID := ""
 		for key, group := range s.groups {
-			if group.Name == decision.Evidence[0].Group {
+			if group.Name == decision.Group {
 				groupID = key
 				break
 			}
@@ -621,6 +634,10 @@ func (s *runtimeService) acceptBatch(ctx context.Context, batch monitor.Batch) {
 			event.Evidence = append(event.Evidence, core.ProbeSnapshot{ProxyID: opaqueID(sample.Proxy), FinishedAt: sample.FinishedAt.Unix(), LatencyMillis: sample.Latency.Milliseconds(), Outcome: outcome})
 		}
 		sort.Slice(event.Evidence, func(i, j int) bool { return event.Evidence[i].FinishedAt < event.Evidence[j].FinishedAt })
+		for _, sample := range decision.Streams {
+			event.StreamEvidence = append(event.StreamEvidence, core.StreamProbeSnapshot{ProxyID: opaqueID(sample.Proxy), FinishedAt: sample.FinishedAt.Unix(), Outcome: string(sample.Outcome), KBps: sample.Throughput() / 1024})
+		}
+		sort.Slice(event.StreamEvidence, func(i, j int) bool { return event.StreamEvidence[i].FinishedAt < event.StreamEvidence[j].FinishedAt })
 		s.snapshot.Switches = append(s.snapshot.Switches, event)
 		if len(s.snapshot.Switches) > 16 {
 			s.snapshot.Switches = append([]core.SwitchSnapshot(nil), s.snapshot.Switches[len(s.snapshot.Switches)-16:]...)

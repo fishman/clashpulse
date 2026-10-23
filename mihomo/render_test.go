@@ -616,6 +616,27 @@ func TestRenderAddsStreamProbeOnlyForSteadyStream(t *testing.T) {
 	}
 }
 
+func TestStreamProbeReadsGeneratedListener(t *testing.T) {
+	profile := []byte("proxies:\n  - {name: node-a, type: direct}\n")
+	out, err := Render(profile, steadyIntent(), nil, probeListener, Capability{SupportsPinnedListener: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if listener, err := StreamProbe(out); err != nil || listener != probeListener.StreamProbe {
+		t.Fatalf("StreamProbe = %+v, %v", listener, err)
+	}
+	for _, generated := range []string{"mixed-port: 7899\n", "listeners:\n  - {name: other, type: mixed, port: 1}\n"} {
+		if listener, err := StreamProbe([]byte(generated)); err != nil || listener != (StreamListener{}) {
+			t.Errorf("StreamProbe(%q) = %+v, %v; want zero", generated, listener, err)
+		}
+	}
+	for _, generated := range []string{": not yaml", "listeners:\n  - {name: clashpulse-stream-probe, port: 0}\n"} {
+		if _, err := StreamProbe([]byte(generated)); err == nil {
+			t.Errorf("StreamProbe(%q) accepted an unusable listener", generated)
+		}
+	}
+}
+
 func TestRenderRejectsReservedStreamProbeName(t *testing.T) {
 	for name, profile := range map[string]string{
 		"proxy": "proxies:\n  - {name: clashpulse-stream-probe, type: direct}\n",

@@ -592,6 +592,34 @@ func MixedPort(generated []byte) (int, error) {
 	return document.MixedPort, nil
 }
 
+// StreamProbe reads the probe listener from a generated configuration; a
+// configuration rendered without steady_stream yields the zero listener.
+func StreamProbe(generated []byte) (StreamListener, error) {
+	var document struct {
+		Listeners []struct {
+			Name  string `yaml:"name"`
+			Port  int    `yaml:"port"`
+			Users []struct {
+				Username string `yaml:"username"`
+				Password string `yaml:"password"`
+			} `yaml:"users"`
+		} `yaml:"listeners"`
+	}
+	if err := yaml.Unmarshal(generated, &document); err != nil {
+		return StreamListener{}, fmt.Errorf("mihomo: invalid generated configuration: %w", err)
+	}
+	for _, listener := range document.Listeners {
+		if listener.Name != StreamProbeName {
+			continue
+		}
+		if listener.Port <= 0 || listener.Port > 65535 || len(listener.Users) != 1 || listener.Users[0].Username == "" || listener.Users[0].Password == "" {
+			return StreamListener{}, errors.New("mihomo: generated stream probe listener is unusable")
+		}
+		return StreamListener{Port: listener.Port, Username: listener.Users[0].Username, Password: listener.Users[0].Password}, nil
+	}
+	return StreamListener{}, nil
+}
+
 // ModeChange reports whether two generated configurations differ only in their
 // routing mode, which Mihomo can switch live without a restart.
 func ModeChange(before, after []byte) (from, to string, ok bool) {
