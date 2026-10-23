@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"math/rand/v2"
 	"reflect"
 	"sort"
@@ -16,15 +17,20 @@ type DelayProber interface {
 	Delay(context.Context, string, string, time.Duration) (time.Duration, error)
 }
 
+type StreamProber interface {
+	StreamPull(ctx context.Context, proxy, url string) StreamSample
+}
+
 // DialFailureProbeSpacing bounds early probes triggered by real-traffic dial
 // failures, so an outage cannot turn into a continuous probe storm.
 const DialFailureProbeSpacing = 15 * time.Second
 
 type Scheduler struct {
-	policy  Policy
-	prober  DelayProber
-	onBatch func(Batch)
-	now     func() time.Time
+	policy   Policy
+	prober   DelayProber
+	streamer StreamProber
+	onBatch  func(Batch)
+	now      func() time.Time
 
 	mu            sync.Mutex
 	groups        []GroupState
@@ -32,16 +38,20 @@ type Scheduler struct {
 	requests      map[string]struct{}
 	dialFailures  map[string]int
 	lastDialProbe map[string]time.Time
+	members       map[string]bool
 	wake          chan struct{}
 	started       bool
 }
 
-func NewScheduler(policy Policy, prober DelayProber, onBatch func(Batch)) (*Scheduler, error) {
+func NewScheduler(policy Policy, prober DelayProber, streamer StreamProber, onBatch func(Batch)) (*Scheduler, error) {
 	if err := policy.Validate(); err != nil {
 		return nil, err
 	}
 	if prober == nil {
 		return nil, fmt.Errorf("monitor scheduler: delay prober is required")
+	}
+	if policy.SwitchPolicy == SwitchSteadyStream && streamer == nil {
+		return nil, fmt.Errorf("monitor scheduler: stream prober is required for %s", SwitchSteadyStream)
 	}
 	if onBatch == nil {
 		return nil, fmt.Errorf("monitor scheduler: batch handler is required")
@@ -49,6 +59,7 @@ func NewScheduler(policy Policy, prober DelayProber, onBatch func(Batch)) (*Sche
 	return &Scheduler{
 		policy:        policy,
 		prober:        prober,
+		streamer:      streamer,
 		onBatch:       onBatch,
 		now:           time.Now,
 		requests:      make(map[string]struct{}),
@@ -141,6 +152,23 @@ func (s *Scheduler) ProbedGroups() []string {
 	return names
 }
 
+// SetStreamMembers replaces the set of nodes stream rounds may pull: the
+// probe group's members, the only nodes reachable through its listener.
+func (s *Scheduler) SetStreamMembers(names []string) {
+	members := make(map[string]bool, len(names))
+	for _, name := range names {
+		members[name] = true
+	}
+	s.mu.Lock()
+	if maps.Equal(s.members, members) {
+		s.mu.Unlock()
+		return
+	}
+	s.members = members
+	s.mu.Unlock()
+	s.signal()
+}
+
 // ReportDialFailure records a failed real-traffic dial through a probed group.
 // MaxFailures failures since the group's last probe force an early probe, at
 // most once per DialFailureProbeSpacing; the probe result is the evidence.
@@ -220,6 +248,30 @@ func (s *Scheduler) Run(ctx context.Context) error {
 			}
 		}()
 	}
+	steady := s.policy.SwitchPolicy == SwitchSteadyStream
+	var streamJobs chan string
+	var streamResults chan StreamSample
+	if steady {
+		streamJobs = make(chan string)
+		streamResults = make(chan StreamSample, 1)
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for {
+				select {
+				case <-runCtx.Done():
+					return
+				case proxy := <-streamJobs:
+					sample := s.streamer.StreamPull(runCtx, proxy, s.policy.StreamURL)
+					select {
+					case streamResults <- sample:
+					case <-runCtx.Done():
+						return
+					}
+				}
+			}
+		}()
+	}
 	defer func() {
 		cancel()
 		workers.Wait()
@@ -239,6 +291,14 @@ func (s *Scheduler) Run(ctx context.Context) error {
 	activeGroups := make([]string, 0)
 	batchSamples := make([]Sample, 0)
 	var batchGeneration uint64
+	var streamNext time.Time
+	streamHistory := make(map[string][]StreamSample)
+	var streamPending []string
+	streamActive := false
+	streamInFlight := 0
+	var streamSamples []StreamSample
+	var streamGeneration uint64
+	streamRound := 0
 
 	refresh := func() {
 		s.mu.Lock()
@@ -276,6 +336,17 @@ func (s *Scheduler) Run(ctx context.Context) error {
 			if _, ok := present[name]; !ok {
 				delete(runtimes, name)
 				delete(forced, name)
+			}
+		}
+		if steady {
+			automated := false
+			for _, runtime := range runtimes {
+				automated = automated || runtime.state.AutomationEnabled
+			}
+			if !automated {
+				streamNext = time.Time{}
+			} else if streamNext.IsZero() {
+				streamNext = time.Now()
 			}
 		}
 		for name := range requests {
@@ -318,12 +389,32 @@ func (s *Scheduler) Run(ctx context.Context) error {
 				}
 			}
 			active = len(activeGroups) > 0
+			if steady && !active && !streamActive && !streamNext.IsZero() && !time.Now().Before(streamNext) {
+				groups := make([]GroupState, 0, len(runtimes))
+				histories := make(map[string]map[string][]Sample, len(runtimes))
+				for _, name := range sortedGroupNames(runtimes) {
+					groups = append(groups, runtimes[name].state)
+					histories[name] = runtimes[name].history
+				}
+				s.mu.Lock()
+				members := s.members
+				streamGeneration = s.generation
+				s.mu.Unlock()
+				streamPending = streamTargets(groups, histories, members, s.policy.WindowSize, streamRound)
+				streamRound++
+				streamNext = time.Now().Add(s.policy.StreamInterval + s.jitter())
+				streamSamples = nil
+				streamActive = len(streamPending) > 0
+			}
 		}
 
 		var timerC <-chan time.Time
 		deadline := time.Time{}
 		if !active {
 			deadline = nextDeadline(runtimes)
+			if steady && !streamActive && !streamNext.IsZero() && (deadline.IsZero() || streamNext.Before(deadline)) {
+				deadline = streamNext
+			}
 		}
 		if deadline.IsZero() {
 			if !timer.Stop() {
@@ -353,6 +444,12 @@ func (s *Scheduler) Run(ctx context.Context) error {
 			send = jobs
 			nextTask = pending[0]
 		}
+		var streamSend chan string
+		var nextStream string
+		if len(streamPending) > 0 {
+			streamSend = streamJobs
+			nextStream = streamPending[0]
+		}
 
 		select {
 		case <-runCtx.Done():
@@ -360,6 +457,42 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		case <-s.wake:
 			refresh()
 		case <-timerC:
+		case streamSend <- nextStream:
+			streamPending = streamPending[1:]
+			streamInFlight++
+		case sample := <-streamResults:
+			streamInFlight--
+			now := time.Now()
+			cutoff := now.Add(-6 * s.policy.StreamInterval)
+			streamSamples = append(streamSamples, sample)
+			streamHistory[sample.Proxy] = pruneStreams(append(streamHistory[sample.Proxy], sample), cutoff, s.policy.WindowSize)
+			if len(streamPending) > 0 || streamInFlight > 0 {
+				break
+			}
+			streamActive = false
+			s.mu.Lock()
+			validBatch := streamGeneration == s.generation
+			s.mu.Unlock()
+			if !validBatch {
+				break
+			}
+			for proxy, samples := range streamHistory {
+				if samples = pruneStreams(samples, cutoff, s.policy.WindowSize); len(samples) == 0 {
+					delete(streamHistory, proxy)
+				} else {
+					streamHistory[proxy] = samples
+				}
+			}
+			batch := Batch{FinishedAt: now, Streams: streamSamples}
+			for _, pulled := range streamSamples {
+				batch.StreamStability = append(batch.StreamStability, MeasureStreams(pulled.Proxy, streamHistory[pulled.Proxy], s.policy.WindowSize))
+			}
+			for _, name := range sortedGroupNames(runtimes) {
+				if runtime := runtimes[name]; runtime.state.AutomationEnabled {
+					batch.Decisions = append(batch.Decisions, DecideSteady(s.policy, runtime.state, historySamples(runtime), streamHistory, now))
+				}
+			}
+			s.onBatch(batch)
 		case send <- nextTask:
 			pending = pending[1:]
 		case result := <-results:
@@ -494,4 +627,68 @@ func historySamples(runtime *groupRuntime) []Sample {
 		samples = append(samples, proxySamples...)
 	}
 	return samples
+}
+
+// pruneStreams keeps the last windowSize pulls finished at or after cutoff;
+// samples arrive in completion order, so expired ones form a prefix.
+func pruneStreams(samples []StreamSample, cutoff time.Time, windowSize int) []StreamSample {
+	start := 0
+	for start < len(samples) && samples[start].FinishedAt.Before(cutoff) {
+		start++
+	}
+	start = max(start, len(samples)-windowSize)
+	if start == 0 {
+		return samples
+	}
+	return append([]StreamSample(nil), samples[start:]...)
+}
+
+// streamTargets lists the nodes one stream round pulls: every automated
+// group's selected node first, then candidates one per group in turn
+// (fastest first), starting at a group that rotates with round, so the cap
+// never starves a later group. Deduplicated and capped so one serialized
+// round fits its interval.
+func streamTargets(groups []GroupState, history map[string]map[string][]Sample, members map[string]bool, windowSize, round int) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(proxy string) {
+		if members[proxy] && !seen[proxy] && len(out) < StreamPullCap {
+			seen[proxy] = true
+			out = append(out, proxy)
+		}
+	}
+	for _, group := range groups {
+		if group.AutomationEnabled {
+			add(group.Selected)
+		}
+	}
+	type ranked struct {
+		proxy  string
+		median time.Duration
+	}
+	var candidates [][]ranked
+	for _, group := range groups {
+		if !group.AutomationEnabled {
+			continue
+		}
+		var fastest []ranked
+		for _, proxy := range group.Proxies {
+			samples := recent(history[group.Group][proxy], windowSize)
+			if proxy == group.Selected || !members[proxy] || len(samples) == 0 || sampleFailed(samples[len(samples)-1]) {
+				continue
+			}
+			fastest = append(fastest, ranked{proxy, MeasureStability(samples, 0).Median})
+		}
+		sort.SliceStable(fastest, func(i, j int) bool { return fastest[i].median < fastest[j].median })
+		candidates = append(candidates, fastest)
+	}
+	for rank := range StreamCandidates {
+		for i := range candidates {
+			group := candidates[(round+i)%len(candidates)]
+			if rank < len(group) {
+				add(group[rank].proxy)
+			}
+		}
+	}
+	return out
 }

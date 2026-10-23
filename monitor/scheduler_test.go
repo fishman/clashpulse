@@ -25,7 +25,7 @@ func TestSchedulerCancellationJoinsActiveProbe(t *testing.T) {
 	policy.Interval = time.Hour
 	policy.Jitter = 0
 	prober := waitingProber{started: make(chan struct{}, 1)}
-	scheduler, err := NewScheduler(policy, prober, func(Batch) {})
+	scheduler, err := NewScheduler(policy, prober, nil, func(Batch) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestSchedulerDialFailuresForceEarlyProbeWithSpacing(t *testing.T) {
 	policy := testPolicy()
 	policy.Interval = time.Hour
 	batches := make(chan Batch, 8)
-	scheduler, err := NewScheduler(policy, instantProber{}, func(b Batch) { batches <- b })
+	scheduler, err := NewScheduler(policy, instantProber{}, nil, func(b Batch) { batches <- b })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestSchedulerDialFailuresForceEarlyProbeWithSpacing(t *testing.T) {
 }
 
 func TestSchedulerProbedGroupsFollowSetGroups(t *testing.T) {
-	scheduler, err := NewScheduler(testPolicy(), instantProber{}, func(Batch) {})
+	scheduler, err := NewScheduler(testPolicy(), instantProber{}, nil, func(Batch) {})
 	if err != nil {
 		t.Fatal(err)
 	}

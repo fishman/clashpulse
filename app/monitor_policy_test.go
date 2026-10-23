@@ -78,7 +78,7 @@ func TestLoadedMonitorPolicyControlsDecisionAndConcurrency(t *testing.T) {
 	}()
 	prober := gatedMonitorProber{started: make(chan string, 16), timeouts: make(chan time.Duration, 16), release: release}
 	batches := make(chan monitor.Batch, 1)
-	scheduler, err := monitor.NewScheduler(policy, prober, func(batch monitor.Batch) { batches <- batch })
+	scheduler, err := monitor.NewScheduler(policy, prober, nil, func(batch monitor.Batch) { batches <- batch })
 	if err != nil {
 		t.Fatal(err)
 	}

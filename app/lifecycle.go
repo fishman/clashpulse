@@ -1018,7 +1018,7 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 	})
 	if s.monitor == nil {
 		policy := monitorPolicy(settings)
-		s.monitor, err = monitor.NewScheduler(policy, s.controller, func(batch monitor.Batch) {
+		s.monitor, err = monitor.NewScheduler(policy, s.controller, nil, func(batch monitor.Batch) {
 			offerLatest(s.batches, batch)
 		})
 		if err != nil {

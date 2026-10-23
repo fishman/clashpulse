@@ -42,7 +42,7 @@ func TestRefreshGroupsKeepsMeasuredLatency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scheduler, err := monitor.NewScheduler(monitor.DefaultPolicy(), controller, func(monitor.Batch) {})
+	scheduler, err := monitor.NewScheduler(monitor.DefaultPolicy(), controller, nil, func(monitor.Batch) {})
 	if err != nil {
 		t.Fatal(err)
 	}
