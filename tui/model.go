@@ -1682,7 +1682,15 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 			for _, sample := range switchEvent.Evidence {
 				measurements = append(measurements, fmt.Sprintf("%s %s %dms", shortProxyID(sample.ProxyID), localize.Code("probe.outcome", sample.Outcome), sample.LatencyMillis))
 			}
-			rows = append(rows, Row{ID: "switch:last", Title: localize.T("Last automatic switch"), Detail: fmt.Sprintf("%s -> %s: %s [%s]", shortProxyID(switchEvent.OldID), shortProxyID(switchEvent.NewID), localize.T(switchEvent.Reason), strings.Join(measurements, "; "))})
+			detail := fmt.Sprintf("%s -> %s: %s [%s]", shortProxyID(switchEvent.OldID), shortProxyID(switchEvent.NewID), localize.T(switchEvent.Reason), strings.Join(measurements, "; "))
+			if len(switchEvent.StreamEvidence) > 0 {
+				downloads := make([]string, 0, len(switchEvent.StreamEvidence))
+				for _, sample := range switchEvent.StreamEvidence {
+					downloads = append(downloads, shortProxyID(sample.ProxyID)+" "+sample.Label())
+				}
+				detail += " [" + strings.Join(downloads, "; ") + "]"
+			}
+			rows = append(rows, Row{ID: "switch:last", Title: localize.T("Last automatic switch"), Detail: detail})
 		}
 		for _, job := range snapshot.Jobs {
 			id := job.ID

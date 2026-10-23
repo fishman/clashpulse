@@ -135,7 +135,14 @@ func lastSwitchSummary(snapshot core.Snapshot) string {
 	for _, sample := range event.Evidence {
 		measurements = append(measurements, fmt.Sprintf(localize.T("%s %s %d ms"), shortID(sample.ProxyID), localize.Code("probe.outcome", sample.Outcome), sample.LatencyMillis))
 	}
-	return fmt.Sprintf(localize.T("Last switch %s -> %s: %s. Measurements: %s"), shortID(event.OldID), shortID(event.NewID), localize.T(event.Reason), strings.Join(measurements, "; "))
+	if len(event.StreamEvidence) == 0 {
+		return fmt.Sprintf(localize.T("Last switch %s -> %s: %s. Measurements: %s"), shortID(event.OldID), shortID(event.NewID), localize.T(event.Reason), strings.Join(measurements, "; "))
+	}
+	downloads := make([]string, 0, len(event.StreamEvidence))
+	for _, sample := range event.StreamEvidence {
+		downloads = append(downloads, shortID(sample.ProxyID)+" "+sample.Label())
+	}
+	return fmt.Sprintf(localize.T("Last switch %s -> %s: %s. Measurements: %s. Downloads: %s"), shortID(event.OldID), shortID(event.NewID), localize.T(event.Reason), strings.Join(measurements, "; "), strings.Join(downloads, "; "))
 }
 
 func shortID(id string) string {

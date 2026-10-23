@@ -448,6 +448,9 @@ other = "%s %s %d 毫秒"
 ["Last switch %s -> %s: %s. Measurements: %s"]
 other = "上次切换：%s -> %s；%s。测量结果：%s"
 
+["Last switch %s -> %s: %s. Measurements: %s. Downloads: %s"]
+other = "上次切换：%s -> %s；%s。测量结果：%s。下载结果：%s"
+
 ["not yet"]
 other = "尚无"
 

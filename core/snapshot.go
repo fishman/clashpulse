@@ -264,6 +264,16 @@ type StreamProbeSnapshot struct {
 	KBps       int64
 }
 
+// Label is the localized outcome of one stream pull, with the throughput of
+// a completed pull.
+func (s StreamProbeSnapshot) Label() string {
+	label := localize.Code("stream.outcome", s.Outcome)
+	if s.Outcome == "success" {
+		label += " \u00b7 " + fmt.Sprintf(localize.T("%d KB/s"), s.KBps)
+	}
+	return label
+}
+
 type SwitchSnapshot struct {
 	GroupID, OldID, NewID, Reason string
 	At                            int64

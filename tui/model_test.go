@@ -1209,6 +1209,28 @@ func TestMainlandSwitchAndProxyOutcomeDisplayOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestLastSwitchRowShowsStreamEvidence(t *testing.T) {
+	state := core.Snapshot{Switches: []core.SwitchSnapshot{{OldID: "aaaaaaaa1111", NewID: "bbbbbbbb2222", Reason: "steadier HTTPS downloads",
+		Evidence:       []core.ProbeSnapshot{{ProxyID: "aaaaaaaa1111", Outcome: "success", LatencyMillis: 90}},
+		StreamEvidence: []core.StreamProbeSnapshot{{ProxyID: "aaaaaaaa1111", Outcome: "reset"}, {ProxyID: "bbbbbbbb2222", Outcome: "success", KBps: 1800}},
+	}}}
+	for _, row := range NewModel().Apply(ipc.Event{Snapshot: state}).Rows() {
+		if row.ID != "switch:last" {
+			continue
+		}
+		for _, piece := range []string{"aaaaaaaa success 90ms", "aaaaaaaa download reset", "bbbbbbbb download completed \u00b7 1800 KB/s"} {
+			if !strings.Contains(row.Detail, piece) {
+				t.Fatalf("switch row missing %q: %q", piece, row.Detail)
+			}
+		}
+		if strings.Contains(row.Detail, "download reset \u00b7") {
+			t.Fatalf("interrupted pull shows a throughput: %q", row.Detail)
+		}
+		return
+	}
+	t.Fatal("switch row missing")
+}
 func dnsPolicyModel(t *testing.T) Model {
 	t.Helper()
 	model := NewModel().Apply(eventFromJSON(t, `{"Snapshot":{"DNS":{"Listen":"127.0.0.1:1053","ResolverSets":[{"ID":"one","Endpoints":["udp://1.1.1.1:53"],"DNSCrypt":false},{"ID":"two","Endpoints":["udp://9.9.9.9:53"],"DNSCrypt":true}],"Routes":[{"Suffix":"example.com","ResolverSet":"one"},{"GeoSite":"geolocation-cn","ResolverSet":"two"}]}}}`))
