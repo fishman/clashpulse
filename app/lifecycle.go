@@ -1080,7 +1080,6 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 	}
 	// Members first: a roster change starts a stream round that needs them.
 	s.monitor.SetStreamMembers(streamMembers)
-	s.lastStreamMembers = streamMembers
 	if err := s.monitor.SetGroups(monitorGroups); err != nil {
 		return err
 	}

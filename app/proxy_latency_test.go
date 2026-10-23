@@ -44,11 +44,17 @@ func TestRefreshGroupsKeepsMeasuredLatency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scheduler, err := monitor.NewScheduler(monitor.DefaultPolicy(), controller, nil, func(monitor.Batch) {})
+	// The stream roster is observed through what a steady-stream round pulls:
+	// only probe-group members (node-a), never node-b.
+	policy := monitor.DefaultPolicy()
+	policy.SwitchPolicy = monitor.SwitchSteadyStream
+	pulls := &memberStreamer{pulled: make(chan string, 8)}
+	scheduler, err := monitor.NewScheduler(policy, controller, pulls, func(monitor.Batch) {})
 	if err != nil {
 		t.Fatal(err)
 	}
 	service.controller, service.monitor = controller, scheduler
+	service.automation[opaqueID("select-main")] = true
 	service.server, err = ipc.NewServer(ipc.ServerOptions{Endpoint: filepath.Join(configDir, "ipc.sock"), Handler: func(context.Context, ipc.Command) error { return nil }, InitialSnapshot: service.snapshot})
 	if err != nil {
 		t.Fatal(err)
@@ -87,8 +93,28 @@ func TestRefreshGroupsKeepsMeasuredLatency(t *testing.T) {
 			t.Fatal("stream probe group is in the monitor roster")
 		}
 	}
-	if len(service.lastStreamMembers) != 1 || service.lastStreamMembers[0] != "node-a" {
-		t.Fatalf("stream members = %v", service.lastStreamMembers)
+	runCtx, stop := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- scheduler.Run(runCtx) }()
+	select {
+	case proxy := <-pulls.pulled:
+		if proxy != "node-a" {
+			t.Fatalf("stream round pulled %q, want only probe-group members", proxy)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("stream round never pulled the probe-group member")
+	}
+	stop()
+	<-done
+	for drained := false; !drained; {
+		select {
+		case proxy := <-pulls.pulled:
+			if proxy != "node-a" {
+				t.Fatalf("stream round pulled %q, want only probe-group members", proxy)
+			}
+		default:
+			drained = true
+		}
 	}
 	for _, proxy := range service.snapshot.Proxies {
 		if proxy.ID != opaqueID("node-a") {
@@ -109,6 +135,16 @@ func TestRefreshGroupsKeepsMeasuredLatency(t *testing.T) {
 		return
 	}
 	t.Fatalf("node-a missing from the refreshed snapshot: %+v", service.snapshot.Proxies)
+}
+
+type memberStreamer struct{ pulled chan string }
+
+func (m *memberStreamer) StreamPull(_ context.Context, proxy, url string) monitor.StreamSample {
+	select {
+	case m.pulled <- proxy:
+	default:
+	}
+	return monitor.StreamSample{Proxy: proxy, URL: url, FinishedAt: time.Now(), Outcome: monitor.StreamSuccess}
 }
 
 // newBareRuntimeForTest is a runtime with a publishing server and no Mihomo.
