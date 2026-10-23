@@ -31,10 +31,13 @@ Checked with `mihomo -t` and a running instance plus curl:
   `Content-Length: 262144`.
 - The probe group appears in `GET /proxies`.
 
-These checks become the capability gate: capability inspection records
-`pinned-listener` for versions where the check passes (v1.19.31 verified).
-Selecting `steady_stream` without it is a named compatibility error naming
-`monitor.switch_policy`; there is no fallback.
+These checks become the capability gate. Capability inspection runs the
+selected binary's own validation (`-t`) on a fixed private fixture: one
+`select` group and one authenticated mixed listener pinned to it. It records
+`pinned-listener` only when that validation succeeds, so the gate follows the
+binary, not its version string (v1.19.31 verified). Selecting `steady_stream`
+without it is a named compatibility error naming `monitor.switch_policy`;
+there is no fallback.
 
 ## Approach
 
@@ -57,7 +60,9 @@ Rendered only when `switch_policy = "steady_stream"`:
   clashpulse-stream-probe`, `users`: one random username and password held
   in memory like the controller secret, never logged or sent over IPC.
 - The render currently rejects `listeners`; it rejects a profile's own
-  `listeners` as before and only emits this managed one. The override report
+  `listeners` as before and only emits this managed one. A profile that
+  defines a proxy, group, or listener named `clashpulse-stream-probe` is
+  rejected with a named error rather than overwritten. The override report
   names the added group and listener.
 - Port conflict: a start that fails because the port is taken retries once
   with a new port, then fails transactionally like `mixed_port`.
@@ -83,20 +88,25 @@ an outcome:
 | `timeout` | 30 s total exceeded |
 | `error` | any other failure, including a missing `Content-Length` |
 
-Pulls are serialized (one probe group). Worst case per round: 4 x 30 s, which
-fits the default 5 min stream interval; validation rejects `stream_interval`
-below 4 x 30 s.
+Pulls are serialized (one probe group); see Scheduling for the round cap and
+interval floor.
 
 ### Scheduling (`monitor.Scheduler`)
 
-A second per-group deadline for stream rounds in the existing timer loop; no
-extra goroutine per node. A round pulls through the selected node, then the 3
-healthy nodes with the lowest median latency. Cancellable; stopped when
-automation is off or the policy changes. About 12 MB/hour at the defaults.
+One global stream deadline in the existing timer loop, because the single
+probe listener serializes every pull; no extra goroutine per node or group.
+A round's pull set is the union over automated groups of the selected node
+plus the 3 healthy nodes with the lowest median latency, deduplicated by node
+name and capped at 8 pulls (selected nodes first, then candidates in group
+order). Worst case 8 x 30 s = 4 min, so `stream_interval` must be at least
+`4m`. Cancellable; stopped when no group is automated under `steady_stream`.
+Data: about 12 MB/hour for one group, at most 24 MB/hour at the cap.
 
-Each node keeps its last `window_size` (5) stream samples regardless of its current rank, so
-a node that moves in and out of the top 3 still accumulates evidence. Samples
-older than 6 stream intervals are dropped.
+Stream samples are keyed by node name, so a node shared by two groups is
+pulled once and its samples serve both. Each node keeps its last
+`window_size` (5) stream samples regardless of its current rank, so a node
+that moves in and out of the top 3 still accumulates evidence. Samples older
+than 6 stream intervals are dropped.
 
 ### Decision (`monitor.Decide`, policy `steady_stream`)
 
@@ -121,7 +131,7 @@ the TUI:
 - `switch_policy`: `lowest_latency` | `failover` | `steady_stream`
 - `stream_url`: HTTPS only, no credentials; default
   `https://speed.cloudflare.com/__down?bytes=262144`
-- `stream_interval`: default `5m`, at least `2m`
+- `stream_interval`: default `5m`, at least `4m`
 
 Snapshots add per node: stream completion (`completed/total`) and median
 throughput. Proxies views in GUI and TUI show them next to latency. Stream
@@ -133,7 +143,7 @@ increments.
 ```toml
 switch_policy = "lowest_latency" # "lowest_latency" (fastest): the lowest median latency wins. "failover": move only when the current node is unhealthy. "steady_stream": move away from a node whose HTTPS downloads break.
 stream_url = "https://speed.cloudflare.com/__down?bytes=262144" # steady_stream only: a 256 KiB HTTPS file pulled through each probed node.
-stream_interval = "5m" # steady_stream only: pulls the selected node and the 3 fastest others, about 12 MB/hour.
+stream_interval = "5m" # steady_stream only: pulls the selected node and the 3 fastest others, about 12 MB/hour per automated group.
 ```
 
 ## README text
@@ -156,7 +166,9 @@ Settings):
   finished, reset, stalled, or was cut short. It leaves a node only after 2
   of its last 5 downloads broke, for a node with fewer broken downloads and
   at least 3 completed ones; ties go to the faster download. Good for
-  streams, calls, and large transfers. Costs about 12 MB per hour.
+  streams, calls, and large transfers. Costs about 12 MB per hour for one
+  automated group, at most 24 MB per hour; a node shared by groups is
+  downloaded once.
 
 Steady stream pulls through a private loopback listener that only
 ClashPulse can use; your selected node and rules are untouched. It requires
