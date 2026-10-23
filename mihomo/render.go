@@ -212,6 +212,10 @@ func renderStreamProbe(document map[string]any, listener StreamListener) error {
 	if listener.Port <= 0 || listener.Username == "" || listener.Password == "" {
 		return errors.New("mihomo: stream probe listener is not configured")
 	}
+	groups, ok := document["proxy-groups"].([]any)
+	if !ok && document["proxy-groups"] != nil {
+		return fmt.Errorf("mihomo: source proxy-groups must be a list")
+	}
 	for _, section := range []string{"proxies", "proxy-groups"} {
 		items, _ := document[section].([]any)
 		for _, item := range items {
@@ -220,7 +224,6 @@ func renderStreamProbe(document map[string]any, listener StreamListener) error {
 			}
 		}
 	}
-	groups, _ := document["proxy-groups"].([]any)
 	document["proxy-groups"] = append(groups, map[string]any{"name": StreamProbeName, "type": "select", "include-all": true})
 	document["listeners"] = []any{map[string]any{
 		"name": StreamProbeName, "type": "mixed", "listen": "127.0.0.1", "port": listener.Port, "proxy": StreamProbeName,

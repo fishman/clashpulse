@@ -79,9 +79,9 @@ func Inspect(ctx context.Context, selection Selection) (Capability, error) {
 	return Capability{Path: path, Version: version, SupportsGeoIPDat: documented, SupportsGeoSiteDat: documented, SupportsMMDB: documented, SupportsTUN: documented, SupportsPinnedListener: supportsPinned}, nil
 }
 
-// pinnedListenerFixture proves the binary accepts a listener pinned to a group
-// with authenticated users, which steady_stream renders.
-const pinnedListenerFixture = "proxies:\n  - name: clashpulse-inspect\n    type: direct\nproxy-groups:\n  - name: clashpulse-inspect-group\n    type: select\n    proxies: [clashpulse-inspect]\nlisteners:\n  - name: clashpulse-inspect-listener\n    type: mixed\n    listen: 127.0.0.1\n    port: 1\n    proxy: clashpulse-inspect-group\n    users:\n      - username: inspect\n        password: inspect\n"
+// pinnedListenerFixture mirrors the steady_stream render: an authenticated
+// loopback listener pinned to an include-all select group.
+const pinnedListenerFixture = "proxies:\n  - name: clashpulse-inspect\n    type: direct\nproxy-groups:\n  - name: clashpulse-inspect-group\n    type: select\n    include-all: true\nlisteners:\n  - name: clashpulse-inspect-listener\n    type: mixed\n    listen: 127.0.0.1\n    port: 1\n    proxy: clashpulse-inspect-group\n    users:\n      - username: inspect\n        password: inspect\n"
 
 // Mihomo prints "Mihomo Meta 1.19.30 ... with go1.26.6"; the leading v is
 // optional and the anchor keeps the Go toolchain version from matching.

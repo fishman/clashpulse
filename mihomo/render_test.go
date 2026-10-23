@@ -639,3 +639,11 @@ func TestRenderSteadyStreamRequiresPinnedListener(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestRenderSteadyStreamRejectsNonListProxyGroups(t *testing.T) {
+	profile := []byte("proxies:\n  - {name: node-a, type: direct}\nproxy-groups: {a: b}\n")
+	out, err := Render(profile, steadyIntent(), nil, probeListener, Capability{SupportsPinnedListener: true})
+	if err == nil || !strings.Contains(err.Error(), "proxy-groups must be a list") || bytes.Contains(out, []byte(StreamProbeName)) {
+		t.Fatalf("non-list proxy-groups: err = %v, out = %s", err, out)
+	}
+}
