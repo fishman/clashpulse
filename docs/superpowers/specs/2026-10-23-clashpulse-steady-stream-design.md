@@ -53,8 +53,12 @@ AGENTS.md requires before switching).
 
 Rendered only when `switch_policy = "steady_stream"`:
 
-- Group `clashpulse-stream-probe`, `type: select`, members: every proxy of
-  every probed managed group, deduplicated, in profile order.
+- Group `clashpulse-stream-probe`, `type: select`, `include-all: true`. The
+  render only sees static `proxies`, so Mihomo resolves the members itself:
+  verified on v1.19.31 that the group holds static and provider nodes and
+  accepts selecting either (`PUT` 204). Built-ins (`DIRECT`, `REJECT`) and
+  nested groups are not members (`PUT DIRECT` returns 400), so they are never
+  stream-probed; a group member that is not in the probe group is skipped.
 - Listener `clashpulse-stream-probe`, `type: mixed`, `listen: 127.0.0.1`,
   `port`: a free loopback port chosen at each start, `proxy:
   clashpulse-stream-probe`, `users`: one random username and password held
@@ -189,6 +193,7 @@ failed stop.
 - Config: strict keys, HTTPS-only `stream_url`, interval floor, capability
   error without `pinned-listener`.
 - End to end with real Mihomo and real HTTPS pulls from Cloudflare: two
-  nodes, `DIRECT` and a local throwaway proxy that cuts each connection after
-  about 64 KiB. Expect recorded interruptions on the flaky node and a switch
-  to `DIRECT` with evidence.
+  nodes, a local throwaway HTTP proxy that forwards cleanly and one that cuts
+  each connection after about 64 KiB (`DIRECT` cannot be a probe-group
+  member). Expect recorded interruptions on the flaky node and a switch to
+  the clean node with evidence.
