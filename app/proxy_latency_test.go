@@ -23,6 +23,7 @@ func TestRefreshGroupsKeepsMeasuredLatency(t *testing.T) {
 		_, _ = w.Write([]byte(`{"proxies":{` +
 			`"select-main":{"name":"select-main","type":"Selector","all":["node-a","node-b"],"now":"node-a"},` +
 			`"clashpulse-stream-probe":{"name":"clashpulse-stream-probe","type":"Selector","all":["node-a"],"now":"node-a"},` +
+			`"GLOBAL":{"name":"GLOBAL","type":"Selector","all":["clashpulse-stream-probe","select-main","user@node"],"now":"select-main"},` +
 			`"node-a":{"name":"node-a","type":"Direct","history":[{"delay":77}]},` +
 			`"node-b":{"name":"node-b","type":"Direct"}}}`))
 	}))
@@ -63,10 +64,23 @@ func TestRefreshGroupsKeepsMeasuredLatency(t *testing.T) {
 			t.Fatalf("stream probe group is visible: %+v", service.snapshot.Groups)
 		}
 	}
+	if _, ok := service.proxies[hidden]; ok {
+		t.Fatal("stream probe group is a selectable proxy")
+	}
+	labeled := ""
 	for _, proxy := range service.snapshot.Proxies {
-		if proxy.GroupID == hidden {
+		if proxy.GroupID == hidden || proxy.ID == hidden {
 			t.Fatalf("stream probe group has proxy rows: %+v", service.snapshot.Proxies)
 		}
+		if proxy.GroupID == opaqueID("GLOBAL") && proxy.ID == opaqueID("user@node") {
+			labeled = proxy.Label
+		}
+	}
+	if labeled != "Proxy 2" {
+		t.Fatalf("hidden member shifted GLOBAL labels: %q", labeled)
+	}
+	if global := service.groups[opaqueID("GLOBAL")]; len(global.Proxies) != 2 || global.Proxies[0] != "select-main" {
+		t.Fatalf("GLOBAL members = %v", global.Proxies)
 	}
 	for _, name := range service.monitor.ProbedGroups() {
 		if name == mihomo.StreamProbeName {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/mihomo"
 	"github.com/fishman/clashpulse/monitor"
 )
@@ -153,5 +154,30 @@ func TestAutomaticSteadySwitchRecordsStreamEvidence(t *testing.T) {
 	if len(evidence) != 2 || evidence[0].ProxyID != opaqueID("node-a") || evidence[0].Outcome != "reset" ||
 		evidence[1].ProxyID != opaqueID("node-b") || evidence[1].Outcome != "success" || evidence[1].KBps != 4 || evidence[1].FinishedAt != 20 {
 		t.Fatalf("stream evidence = %+v", evidence)
+	}
+}
+
+// The listener and group only exist in the generated config, so a runtime
+// policy change into or out of steady_stream must re-render and restart.
+func TestSwitchPolicyChangeRendersStreamProbe(t *testing.T) {
+	h := newStaticRuntime(t)
+	h.activate(t)
+	if strings.Contains(string(h.service.generated), mihomo.StreamProbeName) || h.service.streamProbe.Port != 0 {
+		t.Fatal("lowest_latency runtime has a stream probe")
+	}
+	steady := monitor.SwitchSteadyStream
+	if err := h.service.patchSettings(h.ctx, &ipc.ConfigPatch{MonitorSwitchPolicy: &steady}); err != nil {
+		t.Fatal(err)
+	}
+	listener, err := mihomo.StreamProbe(h.service.generated)
+	if err != nil || listener.Port <= 0 || h.service.streamProbe != listener {
+		t.Fatalf("steady_stream runtime listener = %d, %v; service holds port %d", listener.Port, err, h.service.streamProbe.Port)
+	}
+	lowest := monitor.SwitchLowestLatency
+	if err := h.service.patchSettings(h.ctx, &ipc.ConfigPatch{MonitorSwitchPolicy: &lowest}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(h.service.generated), mihomo.StreamProbeName) || h.service.streamProbe != (mihomo.StreamListener{}) {
+		t.Fatal("leaving steady_stream kept the stream probe")
 	}
 }

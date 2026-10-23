@@ -370,6 +370,10 @@ func (s *runtimeService) applyChange(ctx context.Context, _ config.Change) (resu
 			proxyChanged = true
 		}
 	}
+	// Only steady_stream renders the probe listener and group.
+	if (change.Before.Monitor.SwitchPolicy == monitor.SwitchSteadyStream) != (change.After.Monitor.SwitchPolicy == monitor.SwitchSteadyStream) {
+		needsRender = true
+	}
 	if monitorChanged {
 		if err := monitorPolicy(change.After.Monitor).Validate(); err != nil {
 			return restoreBefore(fmt.Errorf("config.toml: monitor.interval: %w", err))

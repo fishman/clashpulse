@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -1011,6 +1012,8 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 		if group.Type != "Selector" && group.Type != "select" && group.Type != "url-test" && group.Type != "URLTest" {
 			continue
 		}
+		// Mihomo's GLOBAL lists every group, the probe group included.
+		group.Proxies = slices.DeleteFunc(group.Proxies, func(name string) bool { return name == mihomo.StreamProbeName })
 		id := opaqueID(group.Name)
 		managedSelector := selectorType(group.Type)
 		if s.automation[id] && !managedSelector {
@@ -1035,7 +1038,8 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 			s.snapshot.Proxies = append(s.snapshot.Proxies, view)
 		}
 		s.snapshot.Groups = append(s.snapshot.Groups, view)
-		if managedSelector || group.Selected != "" {
+		// A selection of the hidden probe group cannot be monitored.
+		if (managedSelector || group.Selected != "") && group.Selected != mihomo.StreamProbeName {
 			monitorGroups = append(monitorGroups, monitor.GroupState{Group: group.Name, Selected: group.Selected, Proxies: append([]string(nil), group.Proxies...), ProbeEnabled: measured, AutomationEnabled: automatic, ManualOverride: s.manualOverride[id], LastSwitchAt: s.lastSwitch[id]})
 		}
 	}
