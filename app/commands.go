@@ -576,7 +576,7 @@ func (s *runtimeService) acceptBatch(ctx context.Context, batch monitor.Batch) {
 	}
 	for _, sample := range batch.Streams {
 		if !sample.Completed() {
-			s.appendDiagnostic(diagnosticEvent{Severity: "error", Kind: "stream_probe", SourceID: opaqueID(sample.Proxy), Message: "stream.outcome." + string(sample.Outcome), At: sample.FinishedAt})
+			s.appendDiagnostic(diagnosticEvent{Severity: "info", Kind: "stream_probe", SourceID: opaqueID(sample.Proxy), Message: "stream.outcome." + string(sample.Outcome), At: sample.FinishedAt})
 		}
 	}
 	settings := s.store.Snapshot().Monitor

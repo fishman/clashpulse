@@ -229,7 +229,7 @@ func TestActivityListAllocatesHeightForWrappedMessage(t *testing.T) {
 	defer app.Quit()
 	view := newActivityView()
 	message := strings.Repeat("visible diagnostic detail ", 12) + "tail-marker"
-	view.update([]core.DiagnosticSnapshot{{At: 100, Severity: "error", SourceID: "feed", Message: message}})
+	view.update([]core.DiagnosticSnapshot{{At: 100, Severity: "error", SourceID: "feed", Message: message}}, nil)
 	view.content.Resize(fyne.NewSize(260, 200))
 	renderer := view.list.CreateRenderer()
 	renderer.Layout(fyne.NewSize(260, 200))
@@ -248,7 +248,7 @@ func TestActivityListAllocatesHeightForWrappedMessage(t *testing.T) {
 func TestMainlandActivityTranslatesFixedDiagnosticText(t *testing.T) {
 	localize.SetLanguage("zh-CN")
 	t.Cleanup(func() { localize.SetLanguage("en") })
-	text := activityText(core.DiagnosticSnapshot{At: 100, Severity: "error", Kind: "refresh_subscription", SourceID: "feed", Message: "fetch failed"})
+	text := activityText(core.DiagnosticSnapshot{At: 100, Severity: "error", Kind: "refresh_subscription", SourceID: "feed", Message: "fetch failed"}, nil)
 	for _, token := range []string{"\u9519\u8bef", "\u83b7\u53d6\u5931\u8d25", "feed"} {
 		if !strings.Contains(text, token) {
 			t.Fatalf("Activity message missing %q: %q", token, text)
@@ -256,5 +256,18 @@ func TestMainlandActivityTranslatesFixedDiagnosticText(t *testing.T) {
 	}
 	if strings.Contains(text, "fetch failed") || strings.Contains(text, "error") {
 		t.Fatalf("fixed diagnostic text remained English: %q", text)
+	}
+}
+
+func TestActivityNamesStreamProbeNodeByLabel(t *testing.T) {
+	id := strings.Repeat("ab", 32)
+	entry := core.DiagnosticSnapshot{At: 100, Severity: "info", Kind: "stream_probe", SourceID: id, Message: "stream.outcome.reset"}
+	text := activityText(entry, []core.ProxySnapshot{{ID: "other", Label: "Proxy 1"}, {ID: id, GroupID: "g", Label: "Proxy 3"}})
+	if !strings.Contains(text, "Proxy 3") || strings.Contains(text, id) || !strings.Contains(text, "download reset") {
+		t.Fatalf("stream diagnostic = %q, want node label", text)
+	}
+	text = activityText(entry, nil)
+	if !strings.Contains(text, id[:8]) || strings.Contains(text, id) {
+		t.Fatalf("unlabelled stream diagnostic = %q, want short ID", text)
 	}
 }

@@ -283,6 +283,24 @@ type DiagnosticSnapshot struct {
 	Severity, Kind, SourceID, Message string
 }
 
+// DiagnosticSource names a diagnostic's source for display. A stream probe
+// carries an opaque node ID, shown as that node's masked row label, or as its
+// 8-character prefix when no row carries it.
+func DiagnosticSource(proxies []ProxySnapshot, diagnostic DiagnosticSnapshot) string {
+	if diagnostic.Kind != "stream_probe" {
+		return diagnostic.SourceID
+	}
+	for _, proxy := range proxies {
+		if proxy.ID == diagnostic.SourceID && proxy.Label != "" {
+			return proxy.Label
+		}
+	}
+	if len(diagnostic.SourceID) > 8 {
+		return diagnostic.SourceID[:8]
+	}
+	return diagnostic.SourceID
+}
+
 type Snapshot struct {
 	Revision        uint64
 	ActiveSource    string

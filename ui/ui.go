@@ -404,7 +404,7 @@ func (d *desktopUI) postSnapshot(snapshot core.Snapshot) {
 		d.settingsPage.updateMixedPort(immutable.MixedPort)
 		d.settingsPage.updateProxyMode(immutable.ProxyMode)
 		if !reflect.DeepEqual(previous.Diagnostics, immutable.Diagnostics) {
-			d.activity.update(immutable.Diagnostics)
+			d.activity.update(immutable.Diagnostics, immutable.Proxies)
 		}
 		d.current, d.hasSnapshot = immutable, true
 		d.updateTray(immutable)

@@ -50,7 +50,7 @@ func TestAcceptStreamBatchFillsProxiesAndLogsInterruptions(t *testing.T) {
 	}
 	found := false
 	for _, entry := range service.snapshot.Diagnostics {
-		if entry.Kind == "stream_probe" && entry.SourceID == opaqueID("node-a") && entry.Message == "stream.outcome.reset" {
+		if entry.Kind == "stream_probe" && entry.Severity == "info" && entry.SourceID == opaqueID("node-a") && entry.Message == "stream.outcome.reset" {
 			found = true
 		}
 		if strings.Contains(entry.Message, "node-a") {

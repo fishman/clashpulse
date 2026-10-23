@@ -283,6 +283,29 @@ func TestMainlandSessionLogTranslatesFixedDiagnostics(t *testing.T) {
 	}
 }
 
+func TestSessionLogNamesStreamProbeNodeAndKeepsFooterQuiet(t *testing.T) {
+	id := strings.Repeat("ab", 32)
+	other := strings.Repeat("cd", 32)
+	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{
+		Proxies: []core.ProxySnapshot{{ID: id, GroupID: "g", Label: "Proxy 3"}},
+		Diagnostics: []core.DiagnosticSnapshot{
+			{At: 100, Severity: "info", Kind: "stream_probe", SourceID: id, Message: "stream.outcome.reset"},
+			{At: 101, Severity: "info", Kind: "stream_probe", SourceID: other, Message: "stream.outcome.stall"},
+		},
+	}})
+	model, _, _ = model.HandleKey("~")
+	for _, size := range []struct{ width, height int }{{120, 12}, {40, 12}} {
+		rows := mockRender(t, model, size.width, size.height)
+		text := strings.Join(rows[:size.height-1], "\n")
+		if !strings.Contains(text, "Proxy 3") || !strings.Contains(text, other[:8]) || strings.Contains(text, id) || strings.Contains(text, other) {
+			t.Fatalf("%d-column session log = %q, want node label and short ID", size.width, text)
+		}
+		if strings.Contains(rows[size.height-1], "latest error") {
+			t.Fatalf("stream probe info shown as latest error: %q", rows[size.height-1])
+		}
+	}
+}
+
 func TestRenderShortNarrowLogShowsLatestMessage(t *testing.T) {
 	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Diagnostics: []core.DiagnosticSnapshot{{At: 100, Severity: "error", Kind: "subscription", SourceID: "feed", Message: "HTTP 406"}}}})
 	model, _, _ = model.HandleKey("~")

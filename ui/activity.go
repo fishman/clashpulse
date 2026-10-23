@@ -14,6 +14,7 @@ import (
 
 type activityView struct {
 	entries []core.DiagnosticSnapshot
+	proxies []core.ProxySnapshot
 	list    *widget.List
 	content fyne.CanvasObject
 	dialog  *dialog.CustomDialog
@@ -30,7 +31,7 @@ func newActivityView() *activityView {
 			return label
 		},
 		func(id widget.ListItemID, item fyne.CanvasObject) {
-			item.(*widget.Label).SetText(activityText(view.entries[id]))
+			item.(*widget.Label).SetText(activityText(view.entries[id], view.proxies))
 		},
 	)
 	view.content = container.New(activityLayout{view: view}, view.list)
@@ -60,7 +61,7 @@ func (v *activityView) resizeRows(width float32, force bool) {
 	}
 	v.width = width
 	for id, entry := range v.entries {
-		v.list.SetItemHeight(widget.ListItemID(id), activityRowHeight(activityText(entry), width))
+		v.list.SetItemHeight(widget.ListItemID(id), activityRowHeight(activityText(entry, v.proxies), width))
 	}
 }
 
@@ -72,16 +73,17 @@ func activityRowHeight(text string, width float32) float32 {
 	return label.MinSize().Height
 }
 
-func activityText(entry core.DiagnosticSnapshot) string {
+func activityText(entry core.DiagnosticSnapshot, proxies []core.ProxySnapshot) string {
 	text := time.Unix(entry.At, 0).UTC().Format(time.RFC3339) + "  " + localize.Code("diagnostic.severity", entry.Severity)
 	if entry.Kind != "" {
 		text += "  " + localize.Code("operation", entry.Kind)
 	}
-	return text + "  " + entry.SourceID + "  " + localize.T(entry.Message)
+	return text + "  " + core.DiagnosticSource(proxies, entry) + "  " + localize.T(entry.Message)
 }
 
-func (v *activityView) update(entries []core.DiagnosticSnapshot) {
-	v.entries = append(v.entries[:0], entries...)
+// update shows entries; proxies name the nodes stream probe entries refer to.
+func (v *activityView) update(entries []core.DiagnosticSnapshot, proxies []core.ProxySnapshot) {
+	v.entries, v.proxies = append(v.entries[:0], entries...), proxies
 	v.list.Refresh()
 	v.resizeRows(v.list.Size().Width, true)
 }
