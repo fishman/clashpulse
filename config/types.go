@@ -47,6 +47,8 @@ type Monitor struct {
 	Enabled               bool
 	TestURL               string
 	SwitchPolicy          string
+	StreamURL             string
+	StreamInterval        time.Duration
 	Interval              time.Duration
 	Timeout               time.Duration
 	Concurrency           int

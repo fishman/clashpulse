@@ -40,6 +40,11 @@ type ProxySnapshot struct {
 	JitterMillis int64
 	Samples      int
 	Failures     int
+	// Stream pull window under steady_stream; StreamKBps is the median
+	// throughput of completed pulls.
+	StreamSamples   int
+	StreamCompleted int
+	StreamKBps      int64
 }
 
 // StabilityLabel summarizes the probe window, or "" before any window exists.
@@ -120,9 +125,12 @@ func (o ConfigOverrideSnapshot) Description() string {
 }
 
 type MonitorSnapshot struct {
-	Enabled                bool
-	TestURL                string
-	SwitchPolicy           string
+	Enabled      bool
+	TestURL      string
+	SwitchPolicy string
+	// The stream URL itself stays out of snapshots like a private source.
+	StreamURLConfigured    bool
+	StreamIntervalSeconds  int64
 	URLTestIntervalSeconds int64
 	URLTestToleranceMillis int64
 	IntervalSeconds        int64
@@ -237,10 +245,18 @@ type ProbeSnapshot struct {
 	Outcome       string
 }
 
+type StreamProbeSnapshot struct {
+	ProxyID    string
+	FinishedAt int64
+	Outcome    string
+	KBps       int64
+}
+
 type SwitchSnapshot struct {
 	GroupID, OldID, NewID, Reason string
 	At                            int64
 	Evidence                      []ProbeSnapshot
+	StreamEvidence                []StreamProbeSnapshot
 }
 
 type JobSnapshot struct {
@@ -317,6 +333,7 @@ func CloneSnapshot(snapshot Snapshot) Snapshot {
 	out.Switches = append([]SwitchSnapshot(nil), snapshot.Switches...)
 	for i := range out.Switches {
 		out.Switches[i].Evidence = append([]ProbeSnapshot(nil), snapshot.Switches[i].Evidence...)
+		out.Switches[i].StreamEvidence = append([]StreamProbeSnapshot(nil), snapshot.Switches[i].StreamEvidence...)
 	}
 	return out
 }

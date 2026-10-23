@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/download"
@@ -15,7 +16,7 @@ import (
 
 const (
 	// ProtocolVersion is negotiated in the first frame on every connection.
-	ProtocolVersion uint16 = 10
+	ProtocolVersion uint16 = 11
 	// MaxFrameSize bounds both incoming and outgoing JSON frames.
 	MaxFrameSize = 1 << 20
 )
@@ -83,6 +84,8 @@ type ConfigPatch struct {
 	MonitorEnabled               *bool   `json:"monitor_enabled,omitempty"`
 	MonitorTestURL               *string `json:"monitor_test_url,omitempty"`
 	MonitorSwitchPolicy          *string `json:"monitor_switch_policy,omitempty"`
+	MonitorStreamURL             *string `json:"monitor_stream_url,omitempty"`
+	MonitorStreamIntervalSeconds *uint32 `json:"monitor_stream_interval_seconds,omitempty"`
 	MonitorIntervalSeconds       *uint32 `json:"monitor_interval_seconds,omitempty"`
 	MonitorTimeoutMillis         *uint32 `json:"monitor_timeout_millis,omitempty"`
 	MonitorConcurrency           *uint32 `json:"monitor_concurrency,omitempty"`
@@ -223,8 +226,14 @@ func (c Command) validate() error {
 		if p.MonitorTestURL != nil && (len(*p.MonitorTestURL) > 2048 || strings.ContainsAny(*p.MonitorTestURL, "\x00\r\n")) {
 			return errors.New("invalid monitor test URL")
 		}
-		if p.MonitorSwitchPolicy != nil && *p.MonitorSwitchPolicy != monitor.SwitchFailover && *p.MonitorSwitchPolicy != monitor.SwitchLowestLatency {
+		if p.MonitorSwitchPolicy != nil && !monitor.ValidPolicyName(*p.MonitorSwitchPolicy) {
 			return errors.New("invalid monitor switch policy")
+		}
+		if p.MonitorStreamURL != nil && monitor.ValidStreamURL(*p.MonitorStreamURL) != nil {
+			return errors.New("invalid monitor stream URL")
+		}
+		if p.MonitorStreamIntervalSeconds != nil && (time.Duration(*p.MonitorStreamIntervalSeconds)*time.Second < monitor.MinStreamInterval || *p.MonitorStreamIntervalSeconds > 86400) {
+			return errors.New("monitor stream interval out of range")
 		}
 		if p.TunStack != nil && !validTunStack(*p.TunStack) || p.TunDNSMode != nil && !validTunDNSMode(*p.TunDNSMode) {
 			return errors.New("invalid TUN mode setting")
@@ -414,8 +423,19 @@ func validateSnapshot(snapshot core.Snapshot) error {
 		if !addText(proxy.ID, proxy.Label, proxy.GroupID, proxy.Outcome) {
 			return ErrSnapshotTooLarge
 		}
-		if proxy.Failures < 0 || proxy.Failures > proxy.Samples || proxy.Samples > core.MonitorWindowMax || proxy.MedianMillis < 0 || proxy.JitterMillis < 0 {
+		if proxy.Failures < 0 || proxy.Failures > proxy.Samples || proxy.Samples > core.MonitorWindowMax || proxy.MedianMillis < 0 || proxy.JitterMillis < 0 ||
+			proxy.StreamCompleted < 0 || proxy.StreamCompleted > proxy.StreamSamples || proxy.StreamSamples > core.MonitorWindowMax || proxy.StreamKBps < 0 {
 			return errors.New("ipc: invalid proxy stability")
+		}
+	}
+	for _, item := range snapshot.Switches {
+		if !addItems(len(item.StreamEvidence)) {
+			return ErrSnapshotTooLarge
+		}
+		for _, evidence := range item.StreamEvidence {
+			if !addText(evidence.ProxyID, evidence.Outcome) {
+				return ErrSnapshotTooLarge
+			}
 		}
 	}
 	for _, subscription := range snapshot.Subscriptions {

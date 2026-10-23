@@ -326,6 +326,8 @@ func (s *runtimeService) stateSnapshot() core.Snapshot {
 	state.Monitor = core.MonitorSnapshot{
 		Enabled: settings.Monitor.Enabled, TestURL: settings.Monitor.TestURL,
 		SwitchPolicy:           settings.Monitor.SwitchPolicy,
+		StreamURLConfigured:    settings.Monitor.StreamURL != "",
+		StreamIntervalSeconds:  int64(settings.Monitor.StreamInterval.Seconds()),
 		URLTestIntervalSeconds: int64(settings.Mihomo.URLTestInterval.Seconds()),
 		URLTestToleranceMillis: settings.Mihomo.URLTestTolerance.Milliseconds(),
 		IntervalSeconds:        int64(settings.Monitor.Interval.Seconds()), TimeoutMillis: settings.Monitor.Timeout.Milliseconds(),

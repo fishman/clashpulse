@@ -930,6 +930,8 @@ func monitorPolicy(settings config.Monitor) monitor.Policy {
 	policy := monitor.DefaultPolicy()
 	policy.TestURL = settings.TestURL
 	policy.SwitchPolicy = settings.SwitchPolicy
+	policy.StreamURL = settings.StreamURL
+	policy.StreamInterval = settings.StreamInterval
 	policy.Interval = settings.Interval
 	policy.Timeout = settings.Timeout
 	policy.Concurrency = settings.Concurrency

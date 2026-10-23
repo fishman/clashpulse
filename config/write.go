@@ -65,6 +65,8 @@ type SettingsPatch struct {
 	MonitorEnabled               *bool
 	MonitorTestURL               *string
 	MonitorSwitchPolicy          *string
+	MonitorStreamURL             *string
+	MonitorStreamInterval        *time.Duration
 	MonitorInterval              *time.Duration
 	MonitorTimeout               *time.Duration
 	MonitorConcurrency           *int
@@ -136,6 +138,15 @@ func PatchSettings(path string, current Snapshot, patch SettingsPatch) error {
 	if patch.MonitorSwitchPolicy != nil {
 		document.Monitor.SwitchPolicy = patch.MonitorSwitchPolicy
 		next.Monitor.SwitchPolicy = *patch.MonitorSwitchPolicy
+	}
+	if patch.MonitorStreamURL != nil {
+		document.Monitor.StreamURL = patch.MonitorStreamURL
+		next.Monitor.StreamURL = *patch.MonitorStreamURL
+	}
+	if patch.MonitorStreamInterval != nil {
+		value := patch.MonitorStreamInterval.String()
+		document.Monitor.StreamInterval = &value
+		next.Monitor.StreamInterval = *patch.MonitorStreamInterval
 	}
 	if patch.MonitorTimeout != nil {
 		value := patch.MonitorTimeout.String()

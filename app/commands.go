@@ -279,6 +279,8 @@ func (s *runtimeService) patchSettings(ctx context.Context, patch *ipc.ConfigPat
 		MonitorEnabled:               patch.MonitorEnabled,
 		MonitorTestURL:               patch.MonitorTestURL,
 		MonitorSwitchPolicy:          patch.MonitorSwitchPolicy,
+		MonitorStreamURL:             patch.MonitorStreamURL,
+		MonitorStreamInterval:        durationPatch(patch.MonitorStreamIntervalSeconds, time.Second),
 		MonitorInterval:              durationPatch(patch.MonitorIntervalSeconds, time.Second),
 		MonitorTimeout:               durationPatch(patch.MonitorTimeoutMillis, time.Millisecond),
 		MonitorConcurrency:           intPatch(patch.MonitorConcurrency),

@@ -150,7 +150,7 @@ func runCommandWorker(ctx context.Context, client *ipc.Client, work <-chan comma
 }
 
 func commandHasPrivateSource(command ipc.Command) bool {
-	if command.DNSRouting != nil || command.Config != nil && command.Config.MonitorTestURL != nil {
+	if command.DNSRouting != nil || command.Config != nil && (command.Config.MonitorTestURL != nil || command.Config.MonitorStreamURL != nil) {
 		return true
 	}
 	return command.SubscriptionID != "" || command.ResourceID != "" || command.FilterID != "" || command.Subscription != nil || command.Resource != nil || command.Filter != nil
