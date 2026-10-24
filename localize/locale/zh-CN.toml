@@ -184,6 +184,9 @@ other = "未指定"
 ["control.enable"]
 other = "启用"
 
+["operation.stream_probe"]
+other = "流下载探测"
+
 ["operation.start"]
 other = "启动服务"
 

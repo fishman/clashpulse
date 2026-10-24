@@ -570,7 +570,7 @@ func compatibilityFailure(err error) string {
 	if index := strings.Index(message, `resource "`); index >= 0 {
 		resource, rest, ok := strings.Cut(message[index+len(`resource "`):], `" requires `)
 		if ok && len(resource) > 0 && len(resource) <= 64 && strings.Trim(resource, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-") == "" {
-			for _, capability := range []string{"geoip.dat", "geosite.dat", "Country.mmdb", "pinned-listener"} {
+			for _, capability := range core.MihomoCapabilities {
 				if strings.HasPrefix(rest, capability+" capability") {
 					return fmt.Sprintf("resource %s requires %s", resource, capability)
 				}

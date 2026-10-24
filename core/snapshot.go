@@ -10,6 +10,9 @@ import (
 
 const MaxDiagnostics = 200
 
+// MihomoCapabilities names every capability a compatibility failure may cite.
+var MihomoCapabilities = []string{"geoip.dat", "geosite.dat", "Country.mmdb", "pinned-listener"}
+
 // MaxFinishedJobs bounds the recent job outcomes a snapshot retains, so a
 // client that missed a coalesced event can still read its result.
 const MaxFinishedJobs = 32
