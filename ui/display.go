@@ -206,3 +206,30 @@ func filterDetails(item core.FilterSnapshot) string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+// proxyStatus tells whether traffic goes through Mihomo. The IPC link is not
+// shown: in the desktop process the service is local and always reachable.
+func proxyStatus(snapshot core.Snapshot) string {
+	var status string
+	var paths []string
+	if snapshot.SystemProxy.Active {
+		paths = append(paths, localize.T("system proxy"))
+	}
+	if snapshot.Tun.Active {
+		paths = append(paths, localize.T("TUN"))
+	}
+	switch {
+	case !snapshot.ServiceRunning:
+		status = localize.T("Proxy stopped")
+	case len(paths) > 0:
+		status = fmt.Sprintf(localize.T("Proxy on: %s"), strings.Join(paths, " + "))
+	case snapshot.SystemProxy.Enabled:
+		status = localize.T("System proxy requested, not applied")
+	default:
+		status = localize.T("Proxy off")
+	}
+	if snapshot.ActiveSource == "local" {
+		status = fmt.Sprintf(localize.T("%s - local profile"), status)
+	}
+	return status
+}

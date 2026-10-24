@@ -263,3 +263,33 @@ func TestDetailViewsExposeStateWithoutFailureSecrets(t *testing.T) {
 		t.Fatalf("subscription metadata missing: %q", got)
 	}
 }
+
+// The header reports whether traffic goes through the proxy, not whether the
+// in-process IPC link is up.
+func TestProxyStatusReportsWhetherTrafficIsProxied(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		state core.Snapshot
+		want  string
+	}{
+		{"stopped", core.Snapshot{}, "Proxy stopped"},
+		{"port only", core.Snapshot{ServiceRunning: true}, "Proxy off"},
+		{"system proxy", core.Snapshot{ServiceRunning: true, SystemProxy: core.SystemProxySnapshot{Enabled: true, Active: true}}, "Proxy on: system proxy"},
+		{"tun", core.Snapshot{ServiceRunning: true, Tun: core.TunSnapshot{Enabled: true, Active: true}}, "Proxy on: TUN"},
+		{"both", core.Snapshot{ServiceRunning: true, SystemProxy: core.SystemProxySnapshot{Enabled: true, Active: true}, Tun: core.TunSnapshot{Enabled: true, Active: true}}, "Proxy on: system proxy + TUN"},
+		{"requested", core.Snapshot{ServiceRunning: true, SystemProxy: core.SystemProxySnapshot{Enabled: true}}, "System proxy requested, not applied"},
+		{"local", core.Snapshot{ServiceRunning: true, ActiveSource: "local", SystemProxy: core.SystemProxySnapshot{Enabled: true, Active: true}}, "Proxy on: system proxy - local profile"},
+	} {
+		if got := proxyStatus(tc.state); got != tc.want {
+			t.Errorf("%s: status = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+	app := test.NewApp()
+	defer app.Quit()
+	view := newDesktopUI(t.Context(), "", app.NewWindow("ClashPulse"))
+	view.postSnapshot(core.Snapshot{ServiceRunning: true})
+	fyne.DoAndWait(func() {})
+	if view.connection.Text != "Proxy off" {
+		t.Fatalf("header = %q, want the proxy state", view.connection.Text)
+	}
+}

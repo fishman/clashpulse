@@ -76,11 +76,24 @@ other = "无法将操作加入队列"
 ["Action queued"]
 other = "操作已加入队列"
 
-["Connected"]
-other = "已连接"
+["Proxy stopped"]
+other = "代理已停止"
 
-["Connected - local profile"]
-other = "已连接 - 本地配置"
+["Proxy off"]
+other = "代理未启用"
+
+["Proxy on: %s"]
+other = "代理已启用：%s"
+
+["system proxy"]
+other = "系统代理"
+
+["System proxy requested, not applied"]
+other = "已请求系统代理，尚未生效"
+
+["%s - local profile"]
+other = "%s - 本地配置"
+
 
 ["Service"]
 other = "服务"

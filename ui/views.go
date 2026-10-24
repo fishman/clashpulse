@@ -76,7 +76,10 @@ func newProxyPage(send sendIntent) *proxyPage {
 		func() int { return len(p.choices) },
 		func() fyne.CanvasObject {
 			item := &proxyItem{name: widget.NewLabel(""), state: widget.NewLabel(""), latency: widget.NewLabel("")}
-			row := container.NewGridWithColumns(3, item.name, item.state, item.latency)
+			item.latency.Truncation = fyne.TextTruncateEllipsis
+			// Measurements get their own full-width line; a third of a narrow
+			// window clipped them.
+			row := container.NewVBox(container.NewGridWithColumns(2, item.name, item.state), item.latency)
 			p.items[row] = item
 			return row
 		},

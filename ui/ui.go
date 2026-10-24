@@ -47,7 +47,7 @@ func Run(ctx context.Context, endpoint string) error {
 	metadata.Migrations["fyneDo"] = true
 	app.SetMetadata(metadata)
 	w := a.NewWindow("ClashPulse")
-	w.Resize(fyne.NewSize(920, 640))
+	w.Resize(fyne.NewSize(760, 640))
 
 	icon := appIcon()
 	a.SetIcon(icon)
@@ -352,11 +352,7 @@ func (d *desktopUI) postSnapshot(snapshot core.Snapshot) {
 		previous := d.current
 		first := !d.hasSnapshot
 		d.connected = true
-		status := localize.T("Connected")
-		if immutable.ActiveSource == "local" {
-			status = localize.T("Connected - local profile")
-		}
-		if d.connection.Text != status {
+		if status := proxyStatus(immutable); d.connection.Text != status {
 			d.connection.SetText(status)
 		}
 		counts := []string{count(immutable.Groups), count(immutable.Subscriptions), count(immutable.Resources), count(immutable.Filters), count(immutable.Jobs), count(immutable.Errors)}
