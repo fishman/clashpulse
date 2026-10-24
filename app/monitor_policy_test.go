@@ -51,6 +51,22 @@ func TestLoadedMonitorPolicyControlsDecisionAndConcurrency(t *testing.T) {
 	if decision := monitor.Decide(defaultPolicy, group, samples, now); decision.Switch {
 		t.Fatalf("default policy unexpectedly switched: %+v", decision)
 	}
+	steadyDir := t.TempDir()
+	steady := "[monitor]\nswitch_policy = \"steady_stream\"\nstream_url = \"https://speed.example.com/file\"\nstream_interval = \"10m\"\n"
+	if err := os.WriteFile(filepath.Join(steadyDir, "config.toml"), []byte(steady), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	steadySnapshot, err := config.Load(steadyDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	steadyPolicy := monitorPolicy(steadySnapshot.Monitor)
+	if steadyPolicy.SwitchPolicy != monitor.SwitchSteadyStream || steadyPolicy.StreamURL != "https://speed.example.com/file" || steadyPolicy.StreamInterval != 10*time.Minute {
+		t.Fatalf("steady policy = %+v", steadyPolicy)
+	}
+	if err := steadyPolicy.Validate(); err != nil {
+		t.Fatalf("steady policy invalid: %v", err)
+	}
 
 	release := make(chan struct{})
 	defer func() {
@@ -62,7 +78,7 @@ func TestLoadedMonitorPolicyControlsDecisionAndConcurrency(t *testing.T) {
 	}()
 	prober := gatedMonitorProber{started: make(chan string, 16), timeouts: make(chan time.Duration, 16), release: release}
 	batches := make(chan monitor.Batch, 1)
-	scheduler, err := monitor.NewScheduler(policy, prober, func(batch monitor.Batch) { batches <- batch })
+	scheduler, err := monitor.NewScheduler(policy, prober, nil, func(batch monitor.Batch) { batches <- batch })
 	if err != nil {
 		t.Fatal(err)
 	}

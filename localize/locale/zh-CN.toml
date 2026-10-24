@@ -103,6 +103,9 @@ other = "TUN 虚拟 IP 地址段"
 ["override.dns.fake-ip-filter"]
 other = "TUN 虚拟 IP 排除本地和时间服务器域名"
 
+["override.listeners"]
+other = "ClashPulse 为稳定流下载探测添加了私有回环监听器。"
+
 ["Alert threshold"]
 other = "告警阈值"
 
@@ -180,6 +183,9 @@ other = "未指定"
 
 ["control.enable"]
 other = "启用"
+
+["operation.stream_probe"]
+other = "流下载探测"
 
 ["operation.start"]
 other = "启动服务"
@@ -283,6 +289,27 @@ other = "超时"
 ["probe.outcome.error"]
 other = "错误"
 
+["stream.outcome.success"]
+other = "下载完成"
+
+["stream.outcome.reset"]
+other = "下载被重置"
+
+["stream.outcome.stall"]
+other = "下载停滞"
+
+["stream.outcome.truncated"]
+other = "下载被截断"
+
+["stream.outcome.tls"]
+other = "TLS 失败"
+
+["stream.outcome.timeout"]
+other = "下载超时"
+
+["stream.outcome.error"]
+other = "下载失败"
+
 ["diagnostic.severity.error"]
 other = "错误"
 
@@ -348,3 +375,21 @@ other = "全局"
 
 ["proxy.mode.direct"]
 other = "直连"
+
+["monitor.policy.lowest_latency"]
+other = "最快"
+
+["monitor.policy.failover"]
+other = "故障切换"
+
+["monitor.policy.steady_stream"]
+other = "稳定流"
+
+["Stream URL"]
+other = "流测试 URL"
+
+["%d/%d downloads"]
+other = "%d/%d 次下载完成"
+
+["%d KB/s"]
+other = "%d KB/s"

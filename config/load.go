@@ -76,6 +76,12 @@ func applyDefaults(s *Snapshot) {
 	if s.Monitor.SwitchPolicy == "" {
 		s.Monitor.SwitchPolicy = monitor.DefaultPolicy().SwitchPolicy
 	}
+	if s.Monitor.StreamURL == "" {
+		s.Monitor.StreamURL = monitor.DefaultStreamURL
+	}
+	if s.Monitor.StreamInterval == 0 {
+		s.Monitor.StreamInterval = monitor.DefaultPolicy().StreamInterval
+	}
 	if s.Monitor.Interval == 0 {
 		s.Monitor.Interval = time.Minute
 	}
@@ -335,8 +341,14 @@ func validateMonitor(m Monitor) error {
 	if err := validateMonitorTestURL(m.TestURL); err != nil {
 		return fmt.Errorf("config.toml: monitor.test_url: %w", err)
 	}
-	if m.SwitchPolicy != monitor.SwitchFailover && m.SwitchPolicy != monitor.SwitchLowestLatency {
-		return fmt.Errorf("config.toml: monitor.switch_policy: must be %q or %q", monitor.SwitchFailover, monitor.SwitchLowestLatency)
+	if !monitor.ValidPolicyName(m.SwitchPolicy) {
+		return fmt.Errorf("config.toml: monitor.switch_policy: must be one of %s", strings.Join(monitor.SwitchPolicies, ", "))
+	}
+	if err := monitor.ValidStreamURL(m.StreamURL); err != nil {
+		return fmt.Errorf("config.toml: monitor.stream_url: %w", err)
+	}
+	if m.StreamInterval < monitor.MinStreamInterval || m.StreamInterval > maxMonitorInterval {
+		return fmt.Errorf("config.toml: monitor.stream_interval: must be between 4m and 24h")
 	}
 	if m.Interval < time.Second || m.Interval > maxMonitorInterval {
 		return fmt.Errorf("config.toml: monitor.interval: must be between one second and 24 hours")

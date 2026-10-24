@@ -37,7 +37,7 @@ func TestSchedulerSkipsDecisionWhenGroupChangesDuringBatch(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	batches := make(chan Batch, 1)
-	scheduler, err := NewScheduler(policy, prober, func(batch Batch) {
+	scheduler, err := NewScheduler(policy, prober, nil, func(batch Batch) {
 		batches <- batch
 		cancel()
 	})

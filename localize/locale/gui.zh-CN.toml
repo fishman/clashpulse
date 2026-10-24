@@ -17,7 +17,7 @@ other = "DNS"
 other = "所选节点失效后切换一次"
 
 ["gui.monitor.switch-policy.lowest_latency"]
-other = "始终使用延迟最低的节点"
+other = "最快（始终使用延迟最低的节点）"
 
 ["Connecting to local service..."]
 other = "正在连接本地服务…"
@@ -448,6 +448,9 @@ other = "%s %s %d 毫秒"
 ["Last switch %s -> %s: %s. Measurements: %s"]
 other = "上次切换：%s -> %s；%s。测量结果：%s"
 
+["Last switch %s -> %s: %s. Measurements: %s. Downloads: %s"]
+other = "上次切换：%s -> %s；%s。测量结果：%s。下载结果：%s"
+
 ["not yet"]
 other = "尚无"
 
@@ -797,8 +800,8 @@ other = "切换策略"
 ["Note"]
 other = "说明"
 
-["A switch needs the required candidate successes in each candidate's probe window and the switch cooldown after one. The selected node counts as unstable once its window holds the maximum failures. Lowest latency compares median latencies and requires the required improvement; the unhealthy threshold then no longer gates switching."]
-other = "切换前每个候选节点的探测窗口内需达到要求的成功次数；切换后还需等待冷却时间。当前节点的窗口内失败次数达到上限时视为不稳定。最低延迟策略会比较延迟中位数，并要求达到设定的改善幅度；此时不再以不健康阈值作为切换条件。"
+["A switch needs the required candidate successes in each candidate's probe window and the switch cooldown after one. The selected node counts as unstable once its window holds the maximum failures. Lowest latency compares median latencies and requires the required improvement; the unhealthy threshold then no longer gates switching. Steady stream: every stream interval, a 256 KiB HTTPS download runs through the current node and the 3 fastest others; it leaves a node after 2 of its last 5 downloads broke, for a node with fewer broken downloads and at least 3 completed, and a node that stops answering still leaves under the Failover rule."]
+other = "切换前每个候选节点的探测窗口内需达到要求的成功次数；切换后还需等待冷却时间。当前节点的窗口内失败次数达到上限时视为不稳定。最低延迟策略会比较延迟中位数，并要求达到设定的改善幅度；此时不再以不健康阈值作为切换条件。稳定流：每个流探测间隔通过当前节点和最快的 3 个其他节点下载 256 KiB HTTPS 文件；当最近 5 次下载中有 2 次中断时，切换到中断更少且至少完成 3 次的节点；不再响应的节点仍按故障切换规则离开。"
 
 ["Timeout (ms)"]
 other = "超时（毫秒）"
@@ -916,3 +919,15 @@ other = "自动切换"
 
 ["Automatic switching (monitor off)"]
 other = "自动切换（监测已关闭）"
+
+["gui.monitor.switch-policy.steady_stream"]
+other = "稳定流（离开下载会中断的节点）"
+
+["Stream interval (seconds)"]
+other = "流探测间隔（秒）"
+
+["Leave blank to keep the current stream URL"]
+other = "留空则保留当前流测试 URL"
+
+["stream URL must use HTTPS without credentials or fragment"]
+other = "流测试 URL 必须使用 HTTPS，且不含凭据或片段"

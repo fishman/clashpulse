@@ -93,6 +93,8 @@ func TestProxyRowShowsStabilityOnlyAfterSamples(t *testing.T) {
 		{core.ProxySnapshot{LatencyMillis: 120, MedianMillis: 130, JitterMillis: 20, Samples: 5, Failures: 1}, "120 ms \u00b7 median 130 ms \u00b120 ms \u00b7 1/5 failed"},
 		{core.ProxySnapshot{Samples: 3, Failures: 3}, "3/3 failed"},
 		{core.ProxySnapshot{LatencyMillis: 120, MedianMillis: 130, JitterMillis: 20}, "120 ms"},
+		{core.ProxySnapshot{LatencyMillis: 120, MedianMillis: 130, JitterMillis: 20, Samples: 5, Failures: 1, StreamSamples: 5, StreamCompleted: 4, StreamKBps: 1800}, "120 ms \u00b7 median 130 ms \u00b120 ms \u00b7 1/5 failed \u00b7 4/5 downloads \u00b7 1800 KB/s"},
+		{core.ProxySnapshot{LatencyMillis: 120, StreamSamples: 2}, "120 ms \u00b7 0/2 downloads"},
 	} {
 		tc.proxy.GroupID, tc.proxy.ID, tc.proxy.Label = "g1", "p1", "node-a"
 		page := newProxyPage(nil)
@@ -122,18 +124,30 @@ func TestMonitorThresholdAndCompatibilityLabelsAreSafe(t *testing.T) {
 	if got := compatibilityLabel("resource geo requires geoip.dat"); got != "resource geo requires geoip.dat" {
 		t.Fatalf("safe named capability was hidden: %q", got)
 	}
+	if got := compatibilityLabel("resource monitor.switch_policy requires pinned-listener"); got != "resource monitor.switch_policy requires pinned-listener" {
+		t.Fatalf("pinned listener capability was hidden: %q", got)
+	}
 }
 
 func TestLastSwitchSummaryShowsDecisionEvidence(t *testing.T) {
 	view := core.Snapshot{Switches: []core.SwitchSnapshot{{
 		OldID: "aaaaaaaa11111111", NewID: "bbbbbbbb22222222", Reason: "materially better candidate",
-		Evidence: []core.ProbeSnapshot{{ProxyID: "aaaaaaaa11111111", Outcome: "timeout"}, {ProxyID: "bbbbbbbb22222222", Outcome: "success", LatencyMillis: 180}},
+		Evidence:       []core.ProbeSnapshot{{ProxyID: "aaaaaaaa11111111", Outcome: "timeout"}, {ProxyID: "bbbbbbbb22222222", Outcome: "success", LatencyMillis: 180}},
+		StreamEvidence: []core.StreamProbeSnapshot{{ProxyID: "aaaaaaaa11111111", Outcome: "reset"}, {ProxyID: "bbbbbbbb22222222", Outcome: "success", KBps: 1800}},
 	}}}
 	got := lastSwitchSummary(view)
-	for _, piece := range []string{"aaaaaaaa -> bbbbbbbb", "materially better candidate", "timeout 0 ms", "success 180 ms"} {
+	for _, piece := range []string{"aaaaaaaa -> bbbbbbbb", "materially better candidate", "timeout 0 ms", "success 180 ms", "aaaaaaaa download reset", "bbbbbbbb download completed \u00b7 1800 KB/s"} {
 		if !strings.Contains(got, piece) {
 			t.Fatalf("switch evidence missing %q: %q", piece, got)
 		}
+	}
+	if strings.Contains(got, "download reset \u00b7") {
+		t.Fatalf("interrupted pull shows a throughput: %q", got)
+	}
+	localize.SetLanguage("zh-CN")
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	if got := lastSwitchSummary(view); !strings.Contains(got, "\u4e0b\u8f7d\u88ab\u91cd\u7f6e") || strings.Contains(got, "download") {
+		t.Fatalf("Chinese stream evidence = %q", got)
 	}
 }
 

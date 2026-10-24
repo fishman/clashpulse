@@ -22,6 +22,8 @@ type configDoc struct {
 		Enabled               *bool    `toml:"enabled"`
 		TestURL               *string  `toml:"test_url"`
 		SwitchPolicy          *string  `toml:"switch_policy"`
+		StreamURL             *string  `toml:"stream_url"`
+		StreamInterval        *string  `toml:"stream_interval"`
 		Interval              *string  `toml:"interval"`
 		Timeout               *string  `toml:"timeout"`
 		Concurrency           *int     `toml:"concurrency"`
@@ -139,6 +141,10 @@ func loadConfig(path string) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	streamInterval, err := durationValue(path, "monitor.stream_interval", doc.Monitor.StreamInterval)
+	if err != nil {
+		return Snapshot{}, err
+	}
 	urlTestInterval, err := durationValue(path, "mihomo.url_test_interval", doc.Mihomo.URLTestInterval)
 	if err != nil {
 		return Snapshot{}, err
@@ -228,6 +234,13 @@ func loadConfig(path string) (Snapshot, error) {
 			return Snapshot{}, fmt.Errorf("%s: monitor.test_url: required", path)
 		}
 	}
+	streamURL := ""
+	if doc.Monitor.StreamURL != nil {
+		streamURL = *doc.Monitor.StreamURL
+		if streamURL == "" {
+			return Snapshot{}, fmt.Errorf("%s: monitor.stream_url: required", path)
+		}
+	}
 	switchPolicy := ""
 	if doc.Monitor.SwitchPolicy != nil {
 		switchPolicy = *doc.Monitor.SwitchPolicy
@@ -262,6 +275,8 @@ func loadConfig(path string) (Snapshot, error) {
 			Enabled:               enabled,
 			TestURL:               testURL,
 			SwitchPolicy:          switchPolicy,
+			StreamURL:             streamURL,
+			StreamInterval:        streamInterval,
 			Interval:              interval,
 			Timeout:               timeout,
 			Concurrency:           concurrency,

@@ -531,6 +531,8 @@ func (s *runtimeService) run(ctx context.Context, startup func(context.Context) 
 			s.reportError("mihomo", fmt.Errorf("mihomo child exited unexpectedly"))
 		case batch := <-s.batches:
 			s.acceptBatch(serviceCtx, batch)
+		case batch := <-s.streamBatches:
+			s.acceptBatch(serviceCtx, batch)
 		}
 	}
 }

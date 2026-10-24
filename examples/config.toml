@@ -13,7 +13,9 @@ mode = "rule" # "global" sends everything through the GLOBAL group; "direct" byp
 [monitor]
 enabled = true # Every managed select group is measured; manual probes need no opt-in.
 test_url = "http://cp.cloudflare.com/generate_204" # Plain HTTP probes can be intercepted; use HTTPS for probe integrity.
-switch_policy = "lowest_latency" # Moves an automated group to any node faster by min_improvement; "failover" moves only when the current node is unhealthy.
+switch_policy = "lowest_latency" # "lowest_latency" (fastest): the lowest median latency wins. "failover": move only when the current node is unhealthy. "steady_stream": move away from a node whose HTTPS downloads break.
+stream_url = "https://speed.cloudflare.com/__down?bytes=262144" # steady_stream only: a 256 KiB HTTPS file pulled through each probed node.
+stream_interval = "5m" # steady_stream only: pulls the selected node and the 3 fastest others, about 12 MB/hour per automated group.
 interval = "1m" # Three rounds of probes are needed before a switch, so a shorter interval shortens the reaction time.
 timeout = "5s"
 concurrency = 3 # Hard upper bound: 64 concurrent controller probes.

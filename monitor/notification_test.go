@@ -17,7 +17,7 @@ func TestSchedulerAlertsWhenAutomationIsNotOptedIn(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	batches := make(chan Batch, 1)
-	scheduler, err := NewScheduler(policy, slowProber{}, func(batch Batch) { batches <- batch; cancel() })
+	scheduler, err := NewScheduler(policy, slowProber{}, nil, func(batch Batch) { batches <- batch; cancel() })
 	if err != nil {
 		t.Fatal(err)
 	}

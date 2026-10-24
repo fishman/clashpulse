@@ -67,6 +67,30 @@ other = "TUN fake-IP range"
 ["override.dns.fake-ip-filter"]
 other = "TUN fake-IP exclusions for local and time-server names"
 
+["override.listeners"]
+other = "ClashPulse adds a private loopback listener for steady-stream download probes."
+
+["stream.outcome.success"]
+other = "download completed"
+
+["stream.outcome.reset"]
+other = "download reset"
+
+["stream.outcome.stall"]
+other = "download stalled"
+
+["stream.outcome.truncated"]
+other = "download cut short"
+
+["stream.outcome.tls"]
+other = "TLS failed"
+
+["stream.outcome.timeout"]
+other = "download timed out"
+
+["stream.outcome.error"]
+other = "download failed"
+
 ["control.enable"]
 other = "Enabled"
 
@@ -84,3 +108,12 @@ other = "Global"
 
 ["proxy.mode.direct"]
 other = "Direct"
+
+["monitor.policy.lowest_latency"]
+other = "Fastest"
+
+["monitor.policy.failover"]
+other = "Failover"
+
+["monitor.policy.steady_stream"]
+other = "Steady stream"

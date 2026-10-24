@@ -15,6 +15,7 @@ import (
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/filters"
+	"github.com/fishman/clashpulse/monitor"
 	"gopkg.in/yaml.v3"
 )
 
@@ -575,5 +576,95 @@ func TestModeChangeDetectsModeOnlyDifference(t *testing.T) {
 		if _, _, ok := ModeChange(before, []byte(after)); ok {
 			t.Errorf("ModeChange accepted %q", after)
 		}
+	}
+}
+
+func steadyIntent() config.Snapshot {
+	var intent config.Snapshot
+	intent.Monitor.SwitchPolicy = monitor.SwitchSteadyStream
+	return intent
+}
+
+var probeListener = ControllerSettings{Address: "127.0.0.1:9090", Secret: "s", ProxyPort: 7899,
+	StreamProbe: StreamListener{Port: 17922, Username: "u", Password: "p"}}
+
+func TestRenderAddsStreamProbeOnlyForSteadyStream(t *testing.T) {
+	profile := []byte("proxies:\n  - {name: node-a, type: socks5, server: 192.0.2.1, port: 1080}\nproxy-groups:\n  - {name: main, type: select, proxies: [node-a]}\n")
+	capability := Capability{SupportsPinnedListener: true}
+	out, err := Render(profile, steadyIntent(), nil, probeListener, capability)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Groups    []map[string]any `yaml:"proxy-groups"`
+		Listeners []map[string]any `yaml:"listeners"`
+	}
+	if err := yaml.Unmarshal(out, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Groups) != 2 || doc.Groups[1]["name"] != StreamProbeName || doc.Groups[1]["include-all"] != true {
+		t.Fatalf("groups = %v", doc.Groups)
+	}
+	if len(doc.Listeners) != 1 || doc.Listeners[0]["proxy"] != StreamProbeName || doc.Listeners[0]["listen"] != "127.0.0.1" || doc.Listeners[0]["port"] != 17922 {
+		t.Fatalf("listeners = %v", doc.Listeners)
+	}
+	var intent config.Snapshot
+	intent.Monitor.SwitchPolicy = monitor.SwitchLowestLatency
+	out, err = Render(profile, intent, nil, probeListener, capability)
+	if err != nil || bytes.Contains(out, []byte(StreamProbeName)) {
+		t.Fatalf("lowest_latency rendered the probe: %v", err)
+	}
+}
+
+func TestStreamProbeReadsGeneratedListener(t *testing.T) {
+	profile := []byte("proxies:\n  - {name: node-a, type: direct}\n")
+	out, err := Render(profile, steadyIntent(), nil, probeListener, Capability{SupportsPinnedListener: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if listener, err := StreamProbe(out); err != nil || listener != probeListener.StreamProbe {
+		t.Fatalf("StreamProbe = %+v, %v", listener, err)
+	}
+	for _, generated := range []string{"mixed-port: 7899\n", "listeners:\n  - {name: other, type: mixed, port: 1}\n"} {
+		if listener, err := StreamProbe([]byte(generated)); err != nil || listener != (StreamListener{}) {
+			t.Errorf("StreamProbe(%q) = %+v, %v; want zero", generated, listener, err)
+		}
+	}
+	for _, generated := range []string{": not yaml", "listeners:\n  - {name: clashpulse-stream-probe, port: 0}\n"} {
+		if _, err := StreamProbe([]byte(generated)); err == nil {
+			t.Errorf("StreamProbe(%q) accepted an unusable listener", generated)
+		}
+	}
+}
+
+func TestRenderRejectsReservedStreamProbeName(t *testing.T) {
+	for name, profile := range map[string]string{
+		"proxy": "proxies:\n  - {name: clashpulse-stream-probe, type: direct}\n",
+		"group": "proxies:\n  - {name: node-a, type: direct}\nproxy-groups:\n  - {name: clashpulse-stream-probe, type: select, proxies: [node-a]}\n",
+	} {
+		if _, err := Render([]byte(profile), steadyIntent(), nil, probeListener, Capability{SupportsPinnedListener: true}); err == nil || !strings.Contains(err.Error(), StreamProbeName) {
+			t.Fatalf("%s: err = %v", name, err)
+		}
+	}
+	listener := "proxies:\n  - {name: node-a, type: direct}\nlisteners:\n  - {name: x, type: mixed, port: 1}\n"
+	if _, err := Render([]byte(listener), steadyIntent(), nil, probeListener, Capability{SupportsPinnedListener: true}); err == nil {
+		t.Fatal("profile listeners accepted")
+	}
+}
+
+func TestRenderSteadyStreamRequiresPinnedListener(t *testing.T) {
+	profile := []byte("proxies:\n  - {name: node-a, type: direct}\n")
+	_, err := Render(profile, steadyIntent(), nil, probeListener, Capability{})
+	var missing *CapabilityError
+	if !errors.As(err, &missing) || missing.ResourceID != "monitor.switch_policy" || missing.Kind != "pinned-listener" {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRenderSteadyStreamRejectsNonListProxyGroups(t *testing.T) {
+	profile := []byte("proxies:\n  - {name: node-a, type: direct}\nproxy-groups: {a: b}\n")
+	out, err := Render(profile, steadyIntent(), nil, probeListener, Capability{SupportsPinnedListener: true})
+	if err == nil || !strings.Contains(err.Error(), "proxy-groups must be a list") || bytes.Contains(out, []byte(StreamProbeName)) {
+		t.Fatalf("non-list proxy-groups: err = %v, out = %s", err, out)
 	}
 }

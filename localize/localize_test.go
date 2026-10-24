@@ -48,6 +48,7 @@ func TestMainlandFixedDisplayCodesAndUnknownFallback(t *testing.T) {
 		{"operation", "refresh_subscription", "\u5237\u65b0\u8ba2\u9605"},
 		{"job.state", "running", "\u8fdb\u884c\u4e2d"},
 		{"probe.outcome", "timeout", "\u8d85\u65f6"},
+		{"monitor.policy", "steady_stream", "\u7a33\u5b9a\u6d41"},
 		{"diagnostic.severity", "error", "\u9519\u8bef"},
 		{"operation", "user-private", "user-private"},
 	} {

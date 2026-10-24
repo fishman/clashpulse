@@ -205,6 +205,39 @@ func TestLoadSwitchPolicyAndURLTestDelays(t *testing.T) {
 	}
 }
 
+func TestLoadSteadyStreamSettings(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "config.toml", "[monitor]\nswitch_policy = \"steady_stream\"\nstream_url = \"https://speed.example.com/file\"\nstream_interval = \"10m\"\n")
+	snapshot, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Monitor.SwitchPolicy != "steady_stream" || snapshot.Monitor.StreamURL != "https://speed.example.com/file" || snapshot.Monitor.StreamInterval != 10*time.Minute {
+		t.Fatalf("monitor = %+v", snapshot.Monitor)
+	}
+	empty := t.TempDir()
+	defaults, err := Load(empty)
+	if err != nil || defaults.Monitor.StreamURL != monitor.DefaultStreamURL || defaults.Monitor.StreamInterval != 5*time.Minute {
+		t.Fatalf("defaults = %+v, %v", defaults.Monitor, err)
+	}
+	for name, body := range map[string]string{
+		"http stream url": "[monitor]\nstream_url = \"http://speed.example.com/file\"\n",
+		"short interval":  "[monitor]\nstream_interval = \"1m\"\n",
+		"unknown policy":  "[monitor]\nswitch_policy = \"fastest\"\n",
+	} {
+		bad := t.TempDir()
+		writeFile(t, bad, "config.toml", body)
+		if _, err := Load(bad); err == nil {
+			t.Fatalf("%s accepted", name)
+		}
+	}
+	bad := t.TempDir()
+	writeFile(t, bad, "config.toml", "[monitor]\nstream_url = \"\"\n")
+	if _, err := Load(bad); err == nil || !strings.Contains(err.Error(), "monitor.stream_url: required") {
+		t.Fatalf("empty stream_url error = %v", err)
+	}
+}
+
 func TestLoadMixedPortDefaultBoundsAndPatch(t *testing.T) {
 	dir := t.TempDir()
 	defaults, err := Load(dir)
@@ -245,8 +278,10 @@ func TestPatchSettingsPersistsSwitchPolicyAndURLTestDelays(t *testing.T) {
 	}
 	policy := monitor.SwitchLowestLatency
 	interval, tolerance := 10*time.Minute, 75*time.Millisecond
+	streamURL, streamInterval := "https://speed.example.com/file", 15*time.Minute
 	if err := PatchSettings(filepath.Join(dir, "config.toml"), current, SettingsPatch{
 		MonitorSwitchPolicy: &policy, MihomoURLTestInterval: &interval, MihomoURLTestTolerance: &tolerance,
+		MonitorStreamURL: &streamURL, MonitorStreamInterval: &streamInterval,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -256,6 +291,9 @@ func TestPatchSettingsPersistsSwitchPolicyAndURLTestDelays(t *testing.T) {
 	}
 	if updated.Monitor.SwitchPolicy != policy || updated.Mihomo.URLTestInterval != interval || updated.Mihomo.URLTestTolerance != tolerance {
 		t.Fatalf("persisted switch policy %q with url-test delay %v/%v", updated.Monitor.SwitchPolicy, updated.Mihomo.URLTestInterval, updated.Mihomo.URLTestTolerance)
+	}
+	if updated.Monitor.StreamURL != streamURL || updated.Monitor.StreamInterval != streamInterval {
+		t.Fatalf("persisted stream %q every %v", updated.Monitor.StreamURL, updated.Monitor.StreamInterval)
 	}
 }
 

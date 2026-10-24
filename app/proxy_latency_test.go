@@ -22,6 +22,8 @@ func TestRefreshGroupsKeepsMeasuredLatency(t *testing.T) {
 	controllerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"proxies":{` +
 			`"select-main":{"name":"select-main","type":"Selector","all":["node-a","node-b"],"now":"node-a"},` +
+			`"clashpulse-stream-probe":{"name":"clashpulse-stream-probe","type":"Selector","all":["node-a"],"now":"node-a"},` +
+			`"GLOBAL":{"name":"GLOBAL","type":"Selector","all":["clashpulse-stream-probe","select-main","user@node"],"now":"select-main"},` +
 			`"node-a":{"name":"node-a","type":"Direct","history":[{"delay":77}]},` +
 			`"node-b":{"name":"node-b","type":"Direct"}}}`))
 	}))
@@ -42,19 +44,77 @@ func TestRefreshGroupsKeepsMeasuredLatency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scheduler, err := monitor.NewScheduler(monitor.DefaultPolicy(), controller, func(monitor.Batch) {})
+	// The stream roster is observed through what a steady-stream round pulls:
+	// only probe-group members (node-a), never node-b.
+	policy := monitor.DefaultPolicy()
+	policy.SwitchPolicy = monitor.SwitchSteadyStream
+	pulls := &memberStreamer{pulled: make(chan string, 8)}
+	scheduler, err := monitor.NewScheduler(policy, controller, pulls, func(monitor.Batch) {})
 	if err != nil {
 		t.Fatal(err)
 	}
 	service.controller, service.monitor = controller, scheduler
+	service.automation[opaqueID("select-main")] = true
 	service.server, err = ipc.NewServer(ipc.ServerOptions{Endpoint: filepath.Join(configDir, "ipc.sock"), Handler: func(context.Context, ipc.Command) error { return nil }, InitialSnapshot: service.snapshot})
 	if err != nil {
 		t.Fatal(err)
 	}
-	service.snapshot.Proxies = []core.ProxySnapshot{{ID: opaqueID("node-a"), GroupID: opaqueID("select-main"), Label: "node-a", LatencyMillis: 180, FinishedAt: 7, Outcome: "success", MedianMillis: 130, JitterMillis: 20, Samples: 5, Failures: 1}}
+	service.snapshot.Proxies = []core.ProxySnapshot{{ID: opaqueID("node-a"), GroupID: opaqueID("select-main"), Label: "node-a", LatencyMillis: 180, FinishedAt: 7, Outcome: "success", MedianMillis: 130, JitterMillis: 20, Samples: 5, Failures: 1, StreamSamples: 4, StreamCompleted: 3, StreamKBps: 900}}
 
 	if err := service.refreshGroups(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+	hidden := opaqueID(mihomo.StreamProbeName)
+	for _, group := range service.snapshot.Groups {
+		if group.ID == hidden {
+			t.Fatalf("stream probe group is visible: %+v", service.snapshot.Groups)
+		}
+	}
+	if _, ok := service.proxies[hidden]; ok {
+		t.Fatal("stream probe group is a selectable proxy")
+	}
+	labeled := ""
+	for _, proxy := range service.snapshot.Proxies {
+		if proxy.GroupID == hidden || proxy.ID == hidden {
+			t.Fatalf("stream probe group has proxy rows: %+v", service.snapshot.Proxies)
+		}
+		if proxy.GroupID == opaqueID("GLOBAL") && proxy.ID == opaqueID("user@node") {
+			labeled = proxy.Label
+		}
+	}
+	if labeled != "Proxy 2" {
+		t.Fatalf("hidden member shifted GLOBAL labels: %q", labeled)
+	}
+	if global := service.groups[opaqueID("GLOBAL")]; len(global.Proxies) != 2 || global.Proxies[0] != "select-main" {
+		t.Fatalf("GLOBAL members = %v", global.Proxies)
+	}
+	for _, name := range service.monitor.ProbedGroups() {
+		if name == mihomo.StreamProbeName {
+			t.Fatal("stream probe group is in the monitor roster")
+		}
+	}
+	runCtx, stop := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- scheduler.Run(runCtx) }()
+	select {
+	case proxy := <-pulls.pulled:
+		if proxy != "node-a" {
+			t.Fatalf("stream round pulled %q, want only probe-group members", proxy)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("stream round never pulled the probe-group member")
+	}
+	stop()
+	<-done
+	for drained := false; !drained; {
+		select {
+		case proxy := <-pulls.pulled:
+			if proxy != "node-a" {
+				t.Fatalf("stream round pulled %q, want only probe-group members", proxy)
+			}
+		default:
+			drained = true
+		}
 	}
 	for _, proxy := range service.snapshot.Proxies {
 		if proxy.ID != opaqueID("node-a") {
@@ -66,6 +126,9 @@ func TestRefreshGroupsKeepsMeasuredLatency(t *testing.T) {
 		if proxy.MedianMillis != 130 || proxy.JitterMillis != 20 || proxy.Samples != 5 || proxy.Failures != 1 {
 			t.Fatalf("refresh discarded the probe window: %+v", proxy)
 		}
+		if proxy.StreamSamples != 4 || proxy.StreamCompleted != 3 || proxy.StreamKBps != 900 {
+			t.Fatalf("refresh discarded the stream window: %+v", proxy)
+		}
 		if proxy.MihomoMillis != 77 {
 			t.Fatalf("mihomo url-test delay missing from the row: %+v", proxy)
 		}
@@ -74,7 +137,19 @@ func TestRefreshGroupsKeepsMeasuredLatency(t *testing.T) {
 	t.Fatalf("node-a missing from the refreshed snapshot: %+v", service.snapshot.Proxies)
 }
 
-func TestAcceptBatchReportsWindowStabilityForMatchingProxy(t *testing.T) {
+type memberStreamer struct{ pulled chan string }
+
+func (m *memberStreamer) StreamPull(_ context.Context, proxy, url string) monitor.StreamSample {
+	select {
+	case m.pulled <- proxy:
+	default:
+	}
+	return monitor.StreamSample{Proxy: proxy, URL: url, FinishedAt: time.Now(), Outcome: monitor.StreamSuccess}
+}
+
+// newBareRuntimeForTest is a runtime with a publishing server and no Mihomo.
+func newBareRuntimeForTest(t *testing.T) *runtimeService {
+	t.Helper()
 	configDir := t.TempDir()
 	initial, err := config.Load(configDir)
 	if err != nil {
@@ -88,6 +163,11 @@ func TestAcceptBatchReportsWindowStabilityForMatchingProxy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return service
+}
+
+func TestAcceptBatchReportsWindowStabilityForMatchingProxy(t *testing.T) {
+	service := newBareRuntimeForTest(t)
 	service.snapshot.Proxies = []core.ProxySnapshot{
 		{ID: opaqueID("node-a"), GroupID: opaqueID("select-main")},
 		{ID: opaqueID("node-a"), GroupID: opaqueID("select-backup")},

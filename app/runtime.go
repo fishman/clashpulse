@@ -50,6 +50,7 @@ type runtimeService struct {
 	stopRequested       bool
 	changes             chan config.Change
 	batches             chan monitor.Batch
+	streamBatches       chan monitor.Batch // apart from batches: a latency batch never replaces a stream decision
 	resourceRefresh     chan []string
 	stateChanged        chan struct{}
 	resourceDirty       atomic.Bool
@@ -65,6 +66,9 @@ type runtimeService struct {
 	controllerAddress, controllerSocket, secret string
 	// mixedPort is the running Mihomo's mixed listener port.
 	mixedPort atomic.Int32
+	// streamProbe is the steady_stream probe listener of the last render; its
+	// credential stays in memory and never reaches a snapshot or log.
+	streamProbe mihomo.StreamListener
 	// autoProxy serves the auto route while Mihomo is stopped; nil connects
 	// directly. Terminal commands set it so they honor http_proxy.
 	autoProxy                func(*http.Request) (*url.URL, error)
@@ -326,6 +330,8 @@ func (s *runtimeService) stateSnapshot() core.Snapshot {
 	state.Monitor = core.MonitorSnapshot{
 		Enabled: settings.Monitor.Enabled, TestURL: settings.Monitor.TestURL,
 		SwitchPolicy:           settings.Monitor.SwitchPolicy,
+		StreamURLConfigured:    settings.Monitor.StreamURL != "",
+		StreamIntervalSeconds:  int64(settings.Monitor.StreamInterval.Seconds()),
 		URLTestIntervalSeconds: int64(settings.Mihomo.URLTestInterval.Seconds()),
 		URLTestToleranceMillis: settings.Mihomo.URLTestTolerance.Milliseconds(),
 		IntervalSeconds:        int64(settings.Monitor.Interval.Seconds()), TimeoutMillis: settings.Monitor.Timeout.Milliseconds(),
@@ -360,6 +366,9 @@ func (s *runtimeService) stateSnapshot() core.Snapshot {
 	}
 	if s.cap.SupportsMMDB {
 		state.Binary.Capabilities = append(state.Binary.Capabilities, "Country.mmdb")
+	}
+	if s.cap.SupportsPinnedListener {
+		state.Binary.Capabilities = append(state.Binary.Capabilities, "pinned-listener")
 	}
 	state.Subscriptions = state.Subscriptions[:0]
 	for _, entry := range s.subs.List() {
@@ -561,7 +570,7 @@ func compatibilityFailure(err error) string {
 	if index := strings.Index(message, `resource "`); index >= 0 {
 		resource, rest, ok := strings.Cut(message[index+len(`resource "`):], `" requires `)
 		if ok && len(resource) > 0 && len(resource) <= 64 && strings.Trim(resource, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-") == "" {
-			for _, capability := range []string{"geoip.dat", "geosite.dat", "Country.mmdb"} {
+			for _, capability := range core.MihomoCapabilities {
 				if strings.HasPrefix(rest, capability+" capability") {
 					return fmt.Sprintf("resource %s requires %s", resource, capability)
 				}

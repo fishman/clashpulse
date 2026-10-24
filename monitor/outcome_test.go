@@ -20,7 +20,7 @@ func TestSchedulerReportsTimeoutDistinctFromError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	batches := make(chan Batch, 1)
-	scheduler, err := NewScheduler(policy, timeoutProber{}, func(batch Batch) {
+	scheduler, err := NewScheduler(policy, timeoutProber{}, nil, func(batch Batch) {
 		batches <- batch
 		cancel()
 	})

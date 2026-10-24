@@ -21,10 +21,11 @@ type monitorPolicyInput struct {
 	ThresholdMillis, AlertThresholdMillis, ConsecutiveBadSamples       string
 	WindowSize, MinCandidateSamples, MaxFailures                       string
 	MinImprovementMillis, CooldownSeconds, JitterMillis                string
+	StreamURL, StreamIntervalSeconds                                   string
 }
 
 // IDs remain opaque; descriptions live in the locale catalogs.
-var switchPolicyIDs = []string{monitor.SwitchFailover, monitor.SwitchLowestLatency}
+var switchPolicyIDs = monitor.SwitchPolicies
 
 func switchPolicyLabel(value string) string {
 	for _, id := range switchPolicyIDs {
@@ -110,6 +111,16 @@ func monitorPolicyPatch(input monitorPolicyInput) (*ipc.ConfigPatch, error) {
 	}
 	if patch.MonitorJitterMillis, err = parse("jitter milliseconds", input.JitterMillis, 0, uint64(*patch.MonitorIntervalSeconds)*1000-1); err != nil {
 		return nil, err
+	}
+	if patch.MonitorStreamIntervalSeconds, err = parse("Stream interval (seconds)", input.StreamIntervalSeconds, uint64(monitor.MinStreamInterval/time.Second), 86400); err != nil {
+		return nil, err
+	}
+	// The stream URL is not in snapshots, so blank keeps the current one.
+	if streamURL := strings.TrimSpace(input.StreamURL); streamURL != "" {
+		if monitor.ValidStreamURL(streamURL) != nil {
+			return nil, errors.New(localize.T("stream URL must use HTTPS without credentials or fragment"))
+		}
+		patch.MonitorStreamURL = &streamURL
 	}
 	return patch, nil
 }
@@ -200,7 +211,7 @@ func (p *settingsPage) editMonitorPolicy() {
 	items = append(items, widget.NewFormItem(localize.T("Warning"), widget.NewLabel(localize.T("Plain HTTP probes can be intercepted; use HTTPS for probe integrity."))))
 	policy := switchPolicySelect(state.SwitchPolicy)
 	items = append(items, widget.NewFormItem(localize.T("Switch policy"), policy))
-	items = append(items, widget.NewFormItem(localize.T("Note"), widget.NewLabel(localize.T("A switch needs the required candidate successes in each candidate's probe window and the switch cooldown after one. The selected node counts as unstable once its window holds the maximum failures. Lowest latency compares median latencies and requires the required improvement; the unhealthy threshold then no longer gates switching."))))
+	items = append(items, widget.NewFormItem(localize.T("Note"), widget.NewLabel(monitorPolicyNote())))
 	interval := add(localize.T("Interval (seconds)"), strconv.FormatInt(state.IntervalSeconds, 10))
 	timeout := add(localize.T("Timeout (ms)"), strconv.FormatInt(state.TimeoutMillis, 10))
 	concurrency := add(localize.T("Concurrent probes"), strconv.Itoa(state.Concurrency))
@@ -213,6 +224,9 @@ func (p *settingsPage) editMonitorPolicy() {
 	improvement := add(localize.T("Required improvement (ms)"), strconv.FormatInt(state.MinImprovementMillis, 10))
 	cooldown := add(localize.T("Switch cooldown (seconds)"), strconv.FormatInt(state.CooldownSeconds, 10))
 	jitter := add(localize.T("Probe jitter (ms)"), strconv.FormatInt(state.JitterMillis, 10))
+	streamURL := add(localize.T("Stream URL"), "")
+	streamURL.SetPlaceHolder(localize.T("Leave blank to keep the current stream URL"))
+	streamInterval := add(localize.T("Stream interval (seconds)"), strconv.FormatInt(state.StreamIntervalSeconds, 10))
 	dialog.NewForm(localize.T("Monitor probe policy"), localize.T("Apply"), localize.T("Cancel"), items, func(confirmed bool) {
 		if !confirmed {
 			return
@@ -223,6 +237,7 @@ func (p *settingsPage) editMonitorPolicy() {
 			ConsecutiveBadSamples: consecutive.Text, WindowSize: window.Text, MinCandidateSamples: candidates.Text,
 			MaxFailures: maxFailures.Text, MinImprovementMillis: improvement.Text,
 			CooldownSeconds: cooldown.Text, JitterMillis: jitter.Text,
+			StreamURL: streamURL.Text, StreamIntervalSeconds: streamInterval.Text,
 		})
 		if err != nil {
 			dialog.ShowError(err, p.window)
@@ -230,4 +245,8 @@ func (p *settingsPage) editMonitorPolicy() {
 		}
 		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: patch})
 	}, p.window).Show()
+}
+
+func monitorPolicyNote() string {
+	return localize.T("A switch needs the required candidate successes in each candidate's probe window and the switch cooldown after one. The selected node counts as unstable once its window holds the maximum failures. Lowest latency compares median latencies and requires the required improvement; the unhealthy threshold then no longer gates switching. Steady stream: every stream interval, a 256 KiB HTTPS download runs through the current node and the 3 fastest others; it leaves a node after 2 of its last 5 downloads broke, for a node with fewer broken downloads and at least 3 completed, and a node that stops answering still leaves under the Failover rule.")
 }

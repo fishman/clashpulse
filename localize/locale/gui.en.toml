@@ -17,4 +17,7 @@ other = "DNS"
 other = "Failover (switch once the selected node fails)"
 
 ["gui.monitor.switch-policy.lowest_latency"]
-other = "Lowest latency (always keep the fastest node)"
+other = "Fastest (always keep the lowest-latency node)"
+
+["gui.monitor.switch-policy.steady_stream"]
+other = "Steady stream (leave nodes whose downloads break)"

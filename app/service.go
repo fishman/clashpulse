@@ -38,7 +38,7 @@ func newRuntimeServiceWithResponseCapture(configDir, stateDir string, initial co
 	}
 	s := &runtimeService{
 		configDir: configDir, stateDir: stateDir, store: config.NewStore(initial), proxy: sysproxy.NewManager(),
-		intents: make(chan ipc.Command, intentQueueSize), changes: make(chan config.Change, 1), batches: make(chan monitor.Batch, 1),
+		intents: make(chan ipc.Command, intentQueueSize), changes: make(chan config.Change, 1), batches: make(chan monitor.Batch, 1), streamBatches: make(chan monitor.Batch, 1),
 		resourceRefresh: make(chan []string, 1), resourceAttempts: make(map[string]time.Time), stateChanged: make(chan struct{}, 1),
 		backgroundErrors: make(chan error, 2), configErrors: make(chan error, 1), configResults: make(chan error, 1), notificationErrors: make(chan error, 1),
 		secret: hex.EncodeToString(secret), controllerAddress: controllerAddress, controllerSocket: controllerSocket,

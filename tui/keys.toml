@@ -69,6 +69,9 @@
 "W" = { fun = "edit_monitor_window", desc = "set stability window size", show = true }
 "C" = { fun = "edit_monitor_candidates", desc = "set minimum candidate samples", show = true }
 "f" = { fun = "edit_monitor_max_failures", desc = "set maximum failures in window", show = true }
+"y" = { fun = "cycle_switch_policy", desc = "cycle switch policy", show = true }
+"O" = { fun = "edit_stream_url", desc = "set stream test URL", show = true }
+"I" = { fun = "edit_stream_interval", desc = "set stream interval in seconds", show = true }
 "T" = { fun = "test_notification", desc = "send test notification", show = true }
 "l" = { fun = "edit_dns_listen", desc = "set DNS listener", show = true }
 "v" = { fun = "new_dns_resolver", desc = "add DNS resolver set", show = true }

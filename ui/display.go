@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -76,6 +77,9 @@ func proxyLatency(snapshot core.Snapshot, groupID, proxyID string) string {
 		if stability := proxy.StabilityLabel(); stability != "" {
 			parts = append(parts, stability)
 		}
+		if stream := proxy.StreamLabel(); stream != "" {
+			parts = append(parts, stream)
+		}
 		return strings.Join(parts, " \u00b7 ")
 	}
 	return ""
@@ -102,10 +106,8 @@ func compatibilityLabel(failure string) string {
 	if strings.HasPrefix(failure, "resource ") {
 		id, capability, ok := strings.Cut(strings.TrimPrefix(failure, "resource "), " requires ")
 		if ok && len(id) > 0 && len(id) <= 64 && strings.Trim(id, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-") == "" {
-			for _, known := range []string{"geoip.dat", "geosite.dat", "Country.mmdb"} {
-				if capability == known {
-					return fmt.Sprintf(localize.T("resource %s requires %s"), id, capability)
-				}
+			if slices.Contains(core.MihomoCapabilities, capability) {
+				return fmt.Sprintf(localize.T("resource %s requires %s"), id, capability)
 			}
 		}
 	}
@@ -132,7 +134,14 @@ func lastSwitchSummary(snapshot core.Snapshot) string {
 	for _, sample := range event.Evidence {
 		measurements = append(measurements, fmt.Sprintf(localize.T("%s %s %d ms"), shortID(sample.ProxyID), localize.Code("probe.outcome", sample.Outcome), sample.LatencyMillis))
 	}
-	return fmt.Sprintf(localize.T("Last switch %s -> %s: %s. Measurements: %s"), shortID(event.OldID), shortID(event.NewID), localize.T(event.Reason), strings.Join(measurements, "; "))
+	if len(event.StreamEvidence) == 0 {
+		return fmt.Sprintf(localize.T("Last switch %s -> %s: %s. Measurements: %s"), shortID(event.OldID), shortID(event.NewID), localize.T(event.Reason), strings.Join(measurements, "; "))
+	}
+	downloads := make([]string, 0, len(event.StreamEvidence))
+	for _, sample := range event.StreamEvidence {
+		downloads = append(downloads, shortID(sample.ProxyID)+" "+sample.Label())
+	}
+	return fmt.Sprintf(localize.T("Last switch %s -> %s: %s. Measurements: %s. Downloads: %s"), shortID(event.OldID), shortID(event.NewID), localize.T(event.Reason), strings.Join(measurements, "; "), strings.Join(downloads, "; "))
 }
 
 func shortID(id string) string {

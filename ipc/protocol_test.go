@@ -146,6 +146,9 @@ func TestMonitorPolicyPatchBoundsControlInputs(t *testing.T) {
 		"bad samples 20":   {MonitorConsecutiveBadSamples: new(uint32(20))},
 		"failover only":    {MonitorSwitchPolicy: new("failover")},
 		"lowest latency":   {MonitorSwitchPolicy: new("lowest_latency")},
+		"steady stream":    {MonitorSwitchPolicy: new("steady_stream")},
+		"stream url":       {MonitorStreamURL: new("https://speed.example.com/file")},
+		"stream every 5m":  {MonitorStreamIntervalSeconds: new(uint32(300))},
 		"url-test only":    {URLTestIntervalSeconds: new(uint32(60))},
 		"tolerance only":   {URLTestToleranceMillis: new(uint32(50))},
 		"mixed port 1024":  {MixedPort: new(uint32(1024))},
@@ -166,6 +169,9 @@ func TestMonitorPolicyPatchBoundsControlInputs(t *testing.T) {
 		"bad samples 21":   {MonitorConsecutiveBadSamples: new(uint32(21))},
 		"unknown policy":   {MonitorSwitchPolicy: new("fastest")},
 		"empty policy":     {MonitorSwitchPolicy: new("")},
+		"http stream url":  {MonitorStreamURL: new("http://speed.example.com/file")},
+		"stream every 1m":  {MonitorStreamIntervalSeconds: new(uint32(60))},
+		"stream over day":  {MonitorStreamIntervalSeconds: new(uint32(86401))},
 		"mixed port 80":    {MixedPort: new(uint32(80))},
 		"mixed port 65536": {MixedPort: new(uint32(65536))},
 		"empty patch":      {},
@@ -181,6 +187,7 @@ func TestSnapshotBoundsProxyStability(t *testing.T) {
 		{ID: "a"},
 		{ID: "a", Samples: 20, Failures: 20},
 		{ID: "a", Samples: 5, Failures: 1, MedianMillis: 130, JitterMillis: 20},
+		{ID: "a", StreamSamples: 4, StreamCompleted: 3, StreamKBps: 900},
 	}
 	for _, proxy := range valid {
 		if err := validateSnapshot(core.Snapshot{Proxies: []core.ProxySnapshot{proxy}}); err != nil {
@@ -194,6 +201,10 @@ func TestSnapshotBoundsProxyStability(t *testing.T) {
 		{ID: "a", Samples: 2, Failures: -1},
 		{ID: "a", Samples: 2, MedianMillis: -1},
 		{ID: "a", Samples: 2, JitterMillis: -1},
+		{ID: "a", StreamSamples: 2, StreamCompleted: 3},
+		{ID: "a", StreamSamples: 21},
+		{ID: "a", StreamCompleted: -1},
+		{ID: "a", StreamSamples: 2, StreamKBps: -1},
 	}
 	for _, proxy := range invalid {
 		if err := validateSnapshot(core.Snapshot{Proxies: []core.ProxySnapshot{proxy}}); err == nil {

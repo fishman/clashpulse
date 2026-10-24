@@ -1020,3 +1020,21 @@ other = "设置 TUN DNS 模式"
 
 ["cycle proxy mode"]
 other = "切换代理模式"
+
+["tui.monitor.range.stream_interval"]
+other = "流探测间隔必须在 %d 到 %d 秒之间。"
+
+["Stream interval"]
+other = "流探测间隔"
+
+["Stream URL must use HTTPS without credentials or fragment."]
+other = "流测试 URL 必须使用 HTTPS，且不含凭据或片段。"
+
+["cycle switch policy"]
+other = "轮换切换策略"
+
+["set stream test URL"]
+other = "设置流测试 URL"
+
+["set stream interval in seconds"]
+other = "设置流探测间隔（秒）"

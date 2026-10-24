@@ -34,6 +34,9 @@ other = "Mihomo 进程无法启动"
 ["the configured mixed port is already in use"]
 other = "配置的混合端口已被占用"
 
+["the stream probe port is unavailable"]
+other = "稳定流探测端口不可用"
+
 ["Mihomo controller did not become ready"]
 other = "Mihomo 控制接口未就绪"
 

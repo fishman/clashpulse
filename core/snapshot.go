@@ -10,6 +10,9 @@ import (
 
 const MaxDiagnostics = 200
 
+// MihomoCapabilities names every capability a compatibility failure may cite.
+var MihomoCapabilities = []string{"geoip.dat", "geosite.dat", "Country.mmdb", "pinned-listener"}
+
 // MaxFinishedJobs bounds the recent job outcomes a snapshot retains, so a
 // client that missed a coalesced event can still read its result.
 const MaxFinishedJobs = 32
@@ -40,6 +43,11 @@ type ProxySnapshot struct {
 	JitterMillis int64
 	Samples      int
 	Failures     int
+	// Stream pull window under steady_stream; StreamKBps is the median
+	// throughput of completed pulls.
+	StreamSamples   int
+	StreamCompleted int
+	StreamKBps      int64
 }
 
 // StabilityLabel summarizes the probe window, or "" before any window exists.
@@ -53,6 +61,18 @@ func (p ProxySnapshot) StabilityLabel() string {
 		return failed
 	}
 	return fmt.Sprintf(localize.T("median %d ms \u00b1%d ms"), p.MedianMillis, p.JitterMillis) + " \u00b7 " + failed
+}
+
+// StreamLabel summarizes the stream pull window, or "" before any pull.
+func (p ProxySnapshot) StreamLabel() string {
+	if p.StreamSamples <= 0 {
+		return ""
+	}
+	label := fmt.Sprintf(localize.T("%d/%d downloads"), p.StreamCompleted, p.StreamSamples)
+	if p.StreamKBps > 0 {
+		label += " \u00b7 " + fmt.Sprintf(localize.T("%d KB/s"), p.StreamKBps)
+	}
+	return label
 }
 
 type UsageSnapshot struct {
@@ -102,7 +122,7 @@ var ConfigOverrideKeys = []string{
 	"dns.listen", "external-controller-unix", "external-controller-tls", "external-controller-cors", "external-ui", "dns.nameserver-policy",
 	"rule-providers", "proxy-groups", "rules",
 	"tun", "dns.enable", "dns.enhanced-mode", "dns.fake-ip-range", "dns.fake-ip-range6", "dns.fake-ip-filter",
-	"mode",
+	"mode", "listeners",
 }
 
 func (o ConfigOverrideSnapshot) Valid() bool {
@@ -120,9 +140,12 @@ func (o ConfigOverrideSnapshot) Description() string {
 }
 
 type MonitorSnapshot struct {
-	Enabled                bool
-	TestURL                string
-	SwitchPolicy           string
+	Enabled      bool
+	TestURL      string
+	SwitchPolicy string
+	// The stream URL itself stays out of snapshots like a private source.
+	StreamURLConfigured    bool
+	StreamIntervalSeconds  int64
 	URLTestIntervalSeconds int64
 	URLTestToleranceMillis int64
 	IntervalSeconds        int64
@@ -237,10 +260,28 @@ type ProbeSnapshot struct {
 	Outcome       string
 }
 
+type StreamProbeSnapshot struct {
+	ProxyID    string
+	FinishedAt int64
+	Outcome    string
+	KBps       int64
+}
+
+// Label is the localized outcome of one stream pull, with the throughput of
+// a completed pull.
+func (s StreamProbeSnapshot) Label() string {
+	label := localize.Code("stream.outcome", s.Outcome)
+	if s.Outcome == "success" {
+		label += " \u00b7 " + fmt.Sprintf(localize.T("%d KB/s"), s.KBps)
+	}
+	return label
+}
+
 type SwitchSnapshot struct {
 	GroupID, OldID, NewID, Reason string
 	At                            int64
 	Evidence                      []ProbeSnapshot
+	StreamEvidence                []StreamProbeSnapshot
 }
 
 type JobSnapshot struct {
@@ -253,6 +294,24 @@ type ErrorSnapshot struct {
 type DiagnosticSnapshot struct {
 	At                                int64
 	Severity, Kind, SourceID, Message string
+}
+
+// DiagnosticSource names a diagnostic's source for display. A stream probe
+// carries an opaque node ID, shown as that node's masked row label, or as its
+// 8-character prefix when no row carries it.
+func DiagnosticSource(proxies []ProxySnapshot, diagnostic DiagnosticSnapshot) string {
+	if diagnostic.Kind != "stream_probe" {
+		return diagnostic.SourceID
+	}
+	for _, proxy := range proxies {
+		if proxy.ID == diagnostic.SourceID && proxy.Label != "" {
+			return proxy.Label
+		}
+	}
+	if len(diagnostic.SourceID) > 8 {
+		return diagnostic.SourceID[:8]
+	}
+	return diagnostic.SourceID
 }
 
 type Snapshot struct {
@@ -317,6 +376,7 @@ func CloneSnapshot(snapshot Snapshot) Snapshot {
 	out.Switches = append([]SwitchSnapshot(nil), snapshot.Switches...)
 	for i := range out.Switches {
 		out.Switches[i].Evidence = append([]ProbeSnapshot(nil), snapshot.Switches[i].Evidence...)
+		out.Switches[i].StreamEvidence = append([]StreamProbeSnapshot(nil), snapshot.Switches[i].StreamEvidence...)
 	}
 	return out
 }

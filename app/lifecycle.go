@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -89,8 +90,20 @@ func (s *runtimeService) renderWithHome(ctx context.Context, profile []byte, int
 	if err := dns.Validate(ctx, intent, paths); err != nil {
 		return nil, core.WrapActivation(core.ActivationConfigValidation, err)
 	}
+	// The listener is reused across renders so an unchanged intent renders the
+	// same bytes and a reload does not restart Mihomo.
+	var listener mihomo.StreamListener
+	if intent.Monitor.SwitchPolicy == monitor.SwitchSteadyStream {
+		listener = s.streamProbe
+		if listener.Port <= 0 {
+			var err error
+			if listener, err = newStreamListener(); err != nil {
+				return nil, core.WrapActivation(core.ActivationConfigValidation, err)
+			}
+		}
+	}
 	candidate, err := mihomo.Render(profile, intent, mihomo.ManagedPaths(paths), mihomo.ControllerSettings{
-		Address: s.controllerAddress, Socket: s.controllerSocket, Secret: s.secret, HomeDir: home, ProxyPort: intent.Mihomo.MixedPort,
+		Address: s.controllerAddress, Socket: s.controllerSocket, Secret: s.secret, HomeDir: home, ProxyPort: intent.Mihomo.MixedPort, StreamProbe: listener,
 	}, capability)
 	if err != nil {
 		var missing *mihomo.CapabilityError
@@ -99,6 +112,7 @@ func (s *runtimeService) renderWithHome(ctx context.Context, profile []byte, int
 		}
 		return nil, core.WrapActivation(core.ActivationConfigValidation, err)
 	}
+	s.streamProbe = listener
 	return candidate, nil
 }
 
@@ -747,6 +761,12 @@ func (s *runtimeService) startProcess(ctx context.Context, capability mihomo.Cap
 	if err != nil {
 		return core.WrapActivation(core.ActivationProcessStart, err)
 	}
+	// A rollback restarts an older file, so the running listener is the one in
+	// the file started, not the one of the last render.
+	listener, err := mihomo.StreamProbe(generated)
+	if err != nil {
+		return core.WrapActivation(core.ActivationProcessStart, err)
+	}
 	// Mihomo logs a failed listener bind and keeps running without its proxy,
 	// so a taken port must be refused before start.
 	probe, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
@@ -755,6 +775,18 @@ func (s *runtimeService) startProcess(ctx context.Context, capability mihomo.Cap
 	}
 	if err := probe.Close(); err != nil {
 		return core.WrapActivation(core.ActivationMixedPort, err)
+	}
+	s.streamProbe = listener
+	if listener.Port > 0 {
+		probe, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", listener.Port))
+		if err == nil {
+			err = probe.Close()
+		}
+		if err != nil {
+			// The next render picks a new port.
+			s.streamProbe = mihomo.StreamListener{}
+			return core.WrapActivation(core.ActivationStreamProbePort, err)
+		}
 	}
 	if err := s.clearControllerEndpoint(); err != nil {
 		return core.WrapActivation(core.ActivationProcessStart, err)
@@ -930,6 +962,8 @@ func monitorPolicy(settings config.Monitor) monitor.Policy {
 	policy := monitor.DefaultPolicy()
 	policy.TestURL = settings.TestURL
 	policy.SwitchPolicy = settings.SwitchPolicy
+	policy.StreamURL = settings.StreamURL
+	policy.StreamInterval = settings.StreamInterval
 	policy.Interval = settings.Interval
 	policy.Timeout = settings.Timeout
 	policy.Concurrency = settings.Concurrency
@@ -969,10 +1003,17 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 			mihomoMillis[proxy.Name] = proxy.DelayMillis
 		}
 	}
+	var streamMembers []string
 	for groupIndex, group := range groups {
+		if group.Name == mihomo.StreamProbeName {
+			streamMembers = group.Proxies
+			continue
+		}
 		if group.Type != "Selector" && group.Type != "select" && group.Type != "url-test" && group.Type != "URLTest" {
 			continue
 		}
+		// Mihomo's GLOBAL lists every group, the probe group included.
+		group.Proxies = slices.DeleteFunc(group.Proxies, func(name string) bool { return name == mihomo.StreamProbeName })
 		id := opaqueID(group.Name)
 		managedSelector := selectorType(group.Type)
 		if s.automation[id] && !managedSelector {
@@ -992,11 +1033,13 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 			if prior, ok := carried[id+"\x00"+proxyID]; ok {
 				view.LatencyMillis, view.FinishedAt, view.Outcome = prior.LatencyMillis, prior.FinishedAt, prior.Outcome
 				view.MedianMillis, view.JitterMillis, view.Samples, view.Failures = prior.MedianMillis, prior.JitterMillis, prior.Samples, prior.Failures
+				view.StreamSamples, view.StreamCompleted, view.StreamKBps = prior.StreamSamples, prior.StreamCompleted, prior.StreamKBps
 			}
 			s.snapshot.Proxies = append(s.snapshot.Proxies, view)
 		}
 		s.snapshot.Groups = append(s.snapshot.Groups, view)
-		if managedSelector || group.Selected != "" {
+		// A selection of the hidden probe group cannot be monitored.
+		if (managedSelector || group.Selected != "") && group.Selected != mihomo.StreamProbeName {
 			monitorGroups = append(monitorGroups, monitor.GroupState{Group: group.Name, Selected: group.Selected, Proxies: append([]string(nil), group.Proxies...), ProbeEnabled: measured, AutomationEnabled: automatic, ManualOverride: s.manualOverride[id], LastSwitchAt: s.lastSwitch[id]})
 		}
 	}
@@ -1016,9 +1059,11 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 	})
 	if s.monitor == nil {
 		policy := monitorPolicy(settings)
-		s.monitor, err = monitor.NewScheduler(policy, s.controller, func(batch monitor.Batch) {
-			offerLatest(s.batches, batch)
-		})
+		var streamer monitor.StreamProber
+		if policy.SwitchPolicy == monitor.SwitchSteadyStream {
+			streamer = streamProber{controller: s.controller, listener: s.streamProbe}
+		}
+		s.monitor, err = monitor.NewScheduler(policy, s.controller, streamer, s.offerBatch)
 		if err != nil {
 			return err
 		}
@@ -1033,11 +1078,22 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 			s.monitorDone <- err
 		}()
 	}
+	// Members first: a roster change starts a stream round that needs them.
+	s.monitor.SetStreamMembers(streamMembers)
 	if err := s.monitor.SetGroups(monitorGroups); err != nil {
 		return err
 	}
 	s.publish()
 	return nil
+}
+
+// offerBatch keeps the latest pending batch of each kind for the service loop.
+func (s *runtimeService) offerBatch(batch monitor.Batch) {
+	if len(batch.Streams) > 0 {
+		offerLatest(s.streamBatches, batch)
+		return
+	}
+	offerLatest(s.batches, batch)
 }
 
 // watchDialFailures follows Mihomo's log for the monitor's lifetime. A dropped

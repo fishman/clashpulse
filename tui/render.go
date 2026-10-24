@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/localize"
 	"github.com/fishman/notmutt/lib/tui/chrome"
 	"github.com/fishman/notmutt/lib/tui/modal"
@@ -266,12 +267,12 @@ func drawLog(lines []renderLine, width, height int, model Model) {
 			role = roleError
 		}
 		if perEntry == 1 {
-			setLine(lines, y, timeLabel(diagnostic.At)+" "+localize.Code("diagnostic.severity", diagnostic.Severity)+" "+localize.Code("operation", diagnostic.Kind)+" "+diagnostic.SourceID+" "+localize.T(diagnostic.Message), role)
+			setLine(lines, y, timeLabel(diagnostic.At)+" "+localize.Code("diagnostic.severity", diagnostic.Severity)+" "+localize.Code("operation", diagnostic.Kind)+" "+core.DiagnosticSource(model.snapshot.Snapshot.Proxies, diagnostic)+" "+localize.T(diagnostic.Message), role)
 			y++
 			continue
 		}
 		setLine(lines, y, time.Unix(diagnostic.At, 0).UTC().Format("15:04:05Z")+" "+localize.Code("diagnostic.severity", diagnostic.Severity), role)
-		setLine(lines, y+1, localize.Code("operation", diagnostic.Kind)+" "+diagnostic.SourceID+" "+localize.T(diagnostic.Message), role)
+		setLine(lines, y+1, localize.Code("operation", diagnostic.Kind)+" "+core.DiagnosticSource(model.snapshot.Snapshot.Proxies, diagnostic)+" "+localize.T(diagnostic.Message), role)
 		y += 2
 	}
 }

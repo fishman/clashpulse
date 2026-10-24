@@ -11,6 +11,7 @@ import (
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/localize"
+	"github.com/fishman/clashpulse/monitor"
 )
 
 func TestLogOverlayScrollsWithoutDispatch(t *testing.T) {
@@ -840,6 +841,65 @@ func TestStabilitySettingsEditOneFieldAndRejectOutOfRange(t *testing.T) {
 	}
 }
 
+func streamSettingsModel(t *testing.T) Model {
+	t.Helper()
+	return NewModel().Apply(eventFromJSON(t, `{"Snapshot":{"Monitor":{"SwitchPolicy":"steady_stream","StreamURLConfigured":true,"StreamIntervalSeconds":1800}}}`)).selectTab(TabSettings)
+}
+
+func TestSettingsCycleSwitchPolicySendsNextPolicy(t *testing.T) {
+	model := streamSettingsModel(t)
+	for i, current := range monitor.SwitchPolicies {
+		model.snapshot.Snapshot.Monitor.SwitchPolicy = current
+		next := monitor.SwitchPolicies[(i+1)%len(monitor.SwitchPolicies)]
+		_, command, _ := model.HandleKey("y")
+		if command == nil || command.Config == nil || command.Config.MonitorSwitchPolicy == nil || *command.Config.MonitorSwitchPolicy != next {
+			t.Fatalf("%s cycled to %+v, want %s", current, command, next)
+		}
+	}
+}
+
+func TestSettingsShowSwitchPolicyAndStreamWithoutURL(t *testing.T) {
+	cells := make(map[string][]string)
+	for _, row := range streamSettingsModel(t).Rows() {
+		cells[row.ID] = row.Cells
+	}
+	if got := cells["setting:monitor:switch-policy"]; len(got) != 3 || got[1] != "Steady stream" || got[2] != "y" {
+		t.Fatalf("switch policy row = %q", got)
+	}
+	if got := cells["setting:monitor:stream-url"]; len(got) != 3 || got[1] != "configured" {
+		t.Fatalf("stream URL row = %q", got)
+	}
+	if got := cells["setting:monitor:stream-interval"]; len(got) != 3 || !strings.HasPrefix(got[1], "1800") {
+		t.Fatalf("stream interval row = %q", got)
+	}
+}
+
+func TestStreamSettingsEditValidates(t *testing.T) {
+	for _, tc := range []struct{ key, id, invalid, valid, patch string }{
+		{"I", "stream_interval", "60", "600", `{"monitor_stream_interval_seconds":600}`},
+		{"O", "stream_url", "http://speed.example.com/file", "https://speed.example.com/file", `{"monitor_stream_url":"https://speed.example.com/file"}`},
+	} {
+		open := func() Model {
+			model, _, _ := streamSettingsModel(t).HandleKey(tc.key)
+			if model.Modal == nil || model.Modal.Kind != ModalMonitorSetting {
+				t.Fatalf("%s did not open the monitor form: %#v", tc.key, model.Modal)
+			}
+			return model
+		}
+		opened := open()
+		if model, command, _ := setFormText(t, opened, tc.id, tc.invalid).HandleKey("ctrl+s"); command != nil || model.Modal == nil || model.Notice == "" || model.Notice == opened.Notice {
+			t.Fatalf("%s=%s accepted: %#v %q", tc.id, tc.invalid, command, model.Notice)
+		}
+		_, command, _ := setFormText(t, open(), tc.id, tc.valid).HandleKey("ctrl+s")
+		if command == nil || command.Config == nil {
+			t.Fatalf("%s edit sent %#v", tc.id, command)
+		}
+		if encoded, _ := json.Marshal(command.Config); string(encoded) != tc.patch {
+			t.Fatalf("%s patch = %s, want %s", tc.id, encoded, tc.patch)
+		}
+	}
+}
+
 func TestTestNotificationKeySendsOnlyThatCommand(t *testing.T) {
 	model := NewModel().selectTab(TabSettings)
 	_, command, quit := model.HandleKey("T")
@@ -852,7 +912,7 @@ func TestProxyLatencyShowsStabilityOnlyWithSamples(t *testing.T) {
 	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{
 		Groups: []core.GroupSnapshot{{ID: "main", Proxies: []string{"node-a", "node-b", "node-c"}}},
 		Proxies: []core.ProxySnapshot{
-			{GroupID: "main", ID: "node-a", Outcome: "success", LatencyMillis: 120, MedianMillis: 130, JitterMillis: 20, Samples: 5, Failures: 1},
+			{GroupID: "main", ID: "node-a", Outcome: "success", LatencyMillis: 120, MedianMillis: 130, JitterMillis: 20, Samples: 5, Failures: 1, StreamSamples: 5, StreamCompleted: 4, StreamKBps: 1800},
 			{GroupID: "main", ID: "node-b", Outcome: "success", LatencyMillis: 45},
 			{GroupID: "main", ID: "node-c", Outcome: "timeout", Samples: 3, Failures: 3},
 		},
@@ -863,7 +923,7 @@ func TestProxyLatencyShowsStabilityOnlyWithSamples(t *testing.T) {
 			latency[row.choiceID] = row.Cells[3]
 		}
 	}
-	if got := latency["node-a"]; got != "120 ms \u00b7 median 130 ms \u00b120 ms \u00b7 1/5 failed" {
+	if got := latency["node-a"]; got != "120 ms \u00b7 median 130 ms \u00b120 ms \u00b7 1/5 failed \u00b7 4/5 downloads \u00b7 1800 KB/s" {
 		t.Fatalf("stable proxy latency = %q", got)
 	}
 	if got := latency["node-b"]; got != "45 ms" {
@@ -1148,6 +1208,28 @@ func TestMainlandSwitchAndProxyOutcomeDisplayOnly(t *testing.T) {
 			t.Fatalf("proxy outcome leaked enum: %q", row.Detail)
 		}
 	}
+}
+
+func TestLastSwitchRowShowsStreamEvidence(t *testing.T) {
+	state := core.Snapshot{Switches: []core.SwitchSnapshot{{OldID: "aaaaaaaa1111", NewID: "bbbbbbbb2222", Reason: "steadier HTTPS downloads",
+		Evidence:       []core.ProbeSnapshot{{ProxyID: "aaaaaaaa1111", Outcome: "success", LatencyMillis: 90}},
+		StreamEvidence: []core.StreamProbeSnapshot{{ProxyID: "aaaaaaaa1111", Outcome: "reset"}, {ProxyID: "bbbbbbbb2222", Outcome: "success", KBps: 1800}},
+	}}}
+	for _, row := range NewModel().Apply(ipc.Event{Snapshot: state}).Rows() {
+		if row.ID != "switch:last" {
+			continue
+		}
+		for _, piece := range []string{"aaaaaaaa success 90ms", "aaaaaaaa download reset", "bbbbbbbb download completed \u00b7 1800 KB/s"} {
+			if !strings.Contains(row.Detail, piece) {
+				t.Fatalf("switch row missing %q: %q", piece, row.Detail)
+			}
+		}
+		if strings.Contains(row.Detail, "download reset \u00b7") {
+			t.Fatalf("interrupted pull shows a throughput: %q", row.Detail)
+		}
+		return
+	}
+	t.Fatal("switch row missing")
 }
 func dnsPolicyModel(t *testing.T) Model {
 	t.Helper()

@@ -97,7 +97,7 @@ func knownAction(action string) bool {
 		"refresh_subscription", "activate_subscription", "new_subscription", "edit_subscription", "delete_subscription", "refresh_filter", "refresh_resource", "new_filter", "edit_filter", "new_resource", "edit_resource",
 		"system_proxy_enable", "system_proxy_disable", "edit_mixed_port", "cycle_proxy_mode", "monitor_enable", "monitor_disable", "edit_monitor_interval", "edit_alert_threshold", "edit_binary",
 		"edit_monitor_url", "edit_monitor_timeout", "edit_monitor_concurrency", "edit_monitor_threshold", "edit_monitor_bad_samples", "edit_monitor_improvement", "edit_monitor_cooldown", "edit_monitor_jitter",
-		"edit_monitor_window", "edit_monitor_candidates", "edit_monitor_max_failures",
+		"edit_monitor_window", "edit_monitor_candidates", "edit_monitor_max_failures", "cycle_switch_policy", "edit_stream_url", "edit_stream_interval",
 		"edit_dns_listen", "new_dns_resolver", "new_dns_route", "edit_dns_entry", "delete_dns_entry",
 		"tun_enable", "tun_disable", "tun_authorize", "edit_tun_stack", "edit_tun_dns_mode",
 		"form_up", "form_down", "form_toggle", "form_edit", "form_left", "form_right", "form_backspace", "form_save", "form_cancel":

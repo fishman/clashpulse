@@ -1,11 +1,24 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/localize"
 	"github.com/fishman/clashpulse/monitor"
 )
+
+func TestMonitorPolicyNoteExplainsSteadyStreamInBothLocales(t *testing.T) {
+	if got := monitorPolicyNote(); !strings.Contains(got, "Steady stream: every stream interval, a 256 KiB HTTPS download") {
+		t.Fatalf("policy note omits steady stream: %q", got)
+	}
+	localize.SetLanguage("zh-CN")
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	if got := monitorPolicyNote(); !strings.Contains(got, "\u7a33\u5b9a\u6d41\uff1a") || strings.Contains(got, "Steady stream") {
+		t.Fatalf("Chinese policy note lacks the steady stream sentence: %q", got)
+	}
+}
 
 func TestMonitorPolicyFormKeepsSubsecondTimeoutAndZeroCooldown(t *testing.T) {
 	input := stabilityPolicyInput("5", "3", "2", "3")
@@ -50,7 +63,7 @@ func stabilityPolicyInput(window, candidates, maxFailures, badSamples string) mo
 		IntervalSeconds: "300", TimeoutMillis: "750", Concurrency: "3",
 		ThresholdMillis: "800", AlertThresholdMillis: "250", ConsecutiveBadSamples: badSamples,
 		WindowSize: window, MinCandidateSamples: candidates, MaxFailures: maxFailures,
-		MinImprovementMillis: "100", CooldownSeconds: "600", JitterMillis: "0",
+		MinImprovementMillis: "100", CooldownSeconds: "600", JitterMillis: "0", StreamIntervalSeconds: "1800",
 	}
 }
 
@@ -84,9 +97,9 @@ func TestMonitorPolicyFormBoundsStabilityByWindow(t *testing.T) {
 }
 
 func TestMonitorSwitchPolicySelectRoundTrips(t *testing.T) {
-	for _, value := range []string{monitor.SwitchFailover, monitor.SwitchLowestLatency} {
+	for _, value := range monitor.SwitchPolicies {
 		selects := switchPolicySelect(value)
-		if len(selects.Options) != 2 {
+		if len(selects.Options) != len(monitor.SwitchPolicies) {
 			t.Fatalf("switch policy options = %v", selects.Options)
 		}
 		if got, ok := switchPolicyValue(selects.Selected); !ok || got != value {
@@ -95,6 +108,32 @@ func TestMonitorSwitchPolicySelectRoundTrips(t *testing.T) {
 	}
 	if selects := switchPolicySelect(""); selects.Selected != switchPolicyLabel(monitor.DefaultPolicy().SwitchPolicy) || monitor.DefaultPolicy().SwitchPolicy != monitor.SwitchLowestLatency {
 		t.Fatalf("unset switch policy showed %q", selects.Selected)
+	}
+}
+
+func TestMonitorPolicyPatchCarriesStreamSettings(t *testing.T) {
+	input := stabilityPolicyInput("5", "3", "2", "3")
+	if patch, err := monitorPolicyPatch(input); err != nil || patch.MonitorStreamURL != nil {
+		t.Fatalf("blank stream URL did not keep the current one: %+v, %v", patch, err)
+	}
+	input.SwitchPolicy = switchPolicyLabel(monitor.SwitchSteadyStream)
+	input.StreamURL = "https://speed.example.com/file"
+	input.StreamIntervalSeconds = "600"
+	patch, err := monitorPolicyPatch(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *patch.MonitorSwitchPolicy != monitor.SwitchSteadyStream || *patch.MonitorStreamURL != input.StreamURL || *patch.MonitorStreamIntervalSeconds != 600 {
+		t.Fatalf("patch = %+v", patch)
+	}
+	input.StreamURL = "http://speed.example.com/file"
+	if _, err := monitorPolicyPatch(input); err == nil {
+		t.Fatal("HTTP stream URL accepted")
+	}
+	input.StreamURL = "https://speed.example.com/file"
+	input.StreamIntervalSeconds = "60"
+	if _, err := monitorPolicyPatch(input); err == nil {
+		t.Fatal("1 minute stream interval accepted")
 	}
 }
 
