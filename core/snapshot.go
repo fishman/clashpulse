@@ -342,6 +342,12 @@ type Snapshot struct {
 	Diagnostics  []DiagnosticSnapshot
 }
 
+// AnyGroupAutomated reports whether any group has automatic switching on;
+// steady-stream rounds pull only those groups' nodes.
+func (s Snapshot) AnyGroupAutomated() bool {
+	return slices.ContainsFunc(s.Groups, func(group GroupSnapshot) bool { return group.AutomationEnabled })
+}
+
 func NewSnapshot(groups []GroupSnapshot) Snapshot {
 	return CloneSnapshot(Snapshot{Groups: groups})
 }

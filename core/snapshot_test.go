@@ -15,6 +15,17 @@ func TestSnapshotCopiesSlices(t *testing.T) {
 	}
 }
 
+func TestAnyGroupAutomated(t *testing.T) {
+	manual := GroupSnapshot{ID: "manual"}
+	automated := GroupSnapshot{ID: "auto", AutomationEnabled: true}
+	if (Snapshot{}).AnyGroupAutomated() || (Snapshot{Groups: []GroupSnapshot{manual}}).AnyGroupAutomated() {
+		t.Fatal("no automated group reported as automated")
+	}
+	if !(Snapshot{Groups: []GroupSnapshot{manual, automated}}).AnyGroupAutomated() {
+		t.Fatal("automated group missed")
+	}
+}
+
 func TestCloneSnapshotSeparatesNestedClientState(t *testing.T) {
 	usage := &UsageSnapshot{TotalBytes: 10}
 	source := Snapshot{

@@ -437,8 +437,7 @@ func (m Model) HandleKey(key string) (Model, *ipc.Command, bool) {
 			m.Notice = localize.T("Steady-stream probing is off; choose the steady_stream policy in Settings.")
 			return m, nil, false
 		}
-		// A round pulls only automated groups' nodes; without one it has nothing to measure.
-		if !slices.ContainsFunc(m.snapshot.Snapshot.Groups, func(group core.GroupSnapshot) bool { return group.AutomationEnabled }) {
+		if !m.snapshot.Snapshot.AnyGroupAutomated() {
 			m.Notice = localize.T("No group is automated; enable automation on a group to probe downloads.")
 			return m, nil, false
 		}
