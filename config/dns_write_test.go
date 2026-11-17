@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -10,7 +11,7 @@ func TestReplaceDNSRoutingPreservesResourcesAndRejectsDanglingRoute(t *testing.T
 	dir := t.TempDir()
 	path := filepath.Join(dir, "resources.toml")
 	source := filepath.Join(dir, "cn.yaml")
-	if err := Write(path, []byte("[[resource]]\nid=\"cn\"\nkind=\"rule-set\"\nformat=\"yaml\"\nrule_type=\"domain\"\nurl=\""+source+"\"\nenabled=true\n")); err != nil {
+	if err := Write(path, []byte("[[resource]]\nid=\"cn\"\nkind=\"rule-set\"\nformat=\"yaml\"\nrule_type=\"domain\"\nurl="+strconv.Quote(source)+"\nenabled=true\n")); err != nil {
 		t.Fatal(err)
 	}
 	current, err := Load(dir)

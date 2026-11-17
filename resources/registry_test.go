@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -108,8 +109,9 @@ func TestPinnedResourceMismatchRetainsPreviousGeneration(t *testing.T) {
 	if err != nil || string(after) != string(knownGood) {
 		t.Fatalf("known-good content after mismatch = %q, err = %v", after, err)
 	}
+	// Windows has no POSIX mode bits; the private state directory's ACL applies.
 	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != 0o600 {
+	if err != nil || runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("committed file mode = %v, err = %v", info, err)
 	}
 }

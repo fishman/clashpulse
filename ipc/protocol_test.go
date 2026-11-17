@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/internal/localtest"
 )
 
 func TestCommandValidationBoundsIdentifiersAndSettings(t *testing.T) {
@@ -246,7 +247,7 @@ func TestTunPatchAndAuthorizeCommandValidation(t *testing.T) {
 }
 
 func TestSnapshotBoundsTunState(t *testing.T) {
-	valid := core.TunSnapshot{Enabled: true, Stack: "gvisor", DNSMode: "profile", Privilege: core.TunPrivilegeNoAgent, PrivilegedPath: "/tmp/clashpulse/tun/mihomo", Device: "clashpulse0", LastFailure: core.ActivationTunStart.Message()}
+	valid := core.TunSnapshot{Enabled: true, Stack: "gvisor", DNSMode: "profile", Privilege: core.TunPrivilegeNoAgent, PrivilegedPath: localtest.Abs("tmp", "clashpulse", "tun", "mihomo"), Device: "clashpulse0", LastFailure: core.ActivationTunStart.Message()}
 	for _, tun := range []core.TunSnapshot{{}, valid} {
 		if err := validateSnapshot(core.Snapshot{Tun: tun}); err != nil {
 			t.Errorf("valid tun %+v rejected: %v", tun, err)
@@ -301,7 +302,7 @@ func TestAlertThresholdMillisBounds(t *testing.T) {
 }
 
 func TestBinarySelectionIntentRejectsURLsAndRelativePaths(t *testing.T) {
-	for _, value := range []string{"system", "bundled", "/usr/local/bin/mihomo"} {
+	for _, value := range []string{"system", "bundled", localtest.Abs("usr", "local", "bin", "mihomo")} {
 		if err := (Command{Kind: CommandUpdateConfiguration, Config: &ConfigPatch{Binary: new(value)}}).validate(); err != nil {
 			t.Fatalf("binary %q rejected: %v", value, err)
 		}

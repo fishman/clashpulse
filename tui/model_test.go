@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/localize"
 	"github.com/fishman/clashpulse/monitor"
@@ -757,11 +758,12 @@ func TestBinaryModalPreservesExecutablePathCase(t *testing.T) {
 	if model.Modal == nil {
 		t.Fatal("binary action did not open input modal")
 	}
-	for _, key := range "/tmp/Mihomo?custom" {
+	path := localtest.Abs("tmp", "Mihomo?custom")
+	for _, key := range path {
 		model, _, _ = model.HandleKey(string(key))
 	}
 	model, command, _ := model.HandleKey("enter")
-	if command == nil || command.Config == nil || command.Config.Binary == nil || *command.Config.Binary != "/tmp/Mihomo?custom" {
+	if command == nil || command.Config == nil || command.Config.Binary == nil || *command.Config.Binary != path {
 		t.Fatalf("binary path case lost: %+v", command)
 	}
 	model, _, _ = model.HandleKey("b")

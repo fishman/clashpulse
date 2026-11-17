@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -82,7 +83,8 @@ func TestActiveProfileSwitchPersistsAcrossRestart(t *testing.T) {
 	if requests != 2 {
 		t.Fatalf("refresh count = %d, want 2; activation must not fetch", requests)
 	}
-	if info, err := os.Stat(filepath.Join(root, "active.json")); err != nil || info.Mode().Perm() != 0o600 {
+	// Windows has no POSIX mode bits; the user profile's ACL keeps state private.
+	if info, err := os.Stat(filepath.Join(root, "active.json")); err != nil || runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("active pointer permissions = %v, %v", info, err)
 	}
 	activeID, activeProfile, err := service.ActiveProfile()

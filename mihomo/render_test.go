@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/filters"
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/monitor"
 	"gopkg.in/yaml.v3"
 )
@@ -39,7 +41,7 @@ func TestRenderPreservesProfileAndControlsLocalController(t *testing.T) {
 
 func TestRenderPutsControllerOnUnixSocketOnly(t *testing.T) {
 	profile := []byte("proxies:\n  - name: alpha\n    type: direct\nexternal-controller: 0.0.0.0:9090\nexternal-controller-unix: /tmp/other.sock\nsecret: old\n")
-	socket := "/home/user/.local/state/clashpulse/mihomo.sock"
+	socket := localtest.Abs("home", "user", ".local", "state", "clashpulse", "mihomo.sock")
 	got, err := Render(profile, config.Snapshot{}, ManagedPaths{}, ControllerSettings{Socket: socket, Secret: "new-secret"}, Capability{})
 	if err != nil {
 		t.Fatal(err)
@@ -102,7 +104,7 @@ func TestRenderDNSRuleSetUsesStableProvider(t *testing.T) {
 
 func TestRenderRejectsMissingGeoCapability(t *testing.T) {
 	intent := config.Snapshot{Resources: []config.Resource{{ID: "geo", Kind: "geoip.dat", Enabled: true}}}
-	_, err := Render([]byte("proxies:\n  - name: alpha\n    type: direct\n"), intent, ManagedPaths{"geo": "/private/geoip.dat"}, ControllerSettings{Address: "127.0.0.1:9090", Secret: "secret"}, Capability{})
+	_, err := Render([]byte("proxies:\n  - name: alpha\n    type: direct\n"), intent, ManagedPaths{"geo": localtest.Abs("private", "geoip.dat")}, ControllerSettings{Address: "127.0.0.1:9090", Secret: "secret"}, Capability{})
 	if err == nil || !strings.Contains(err.Error(), "geoip.dat") {
 		t.Fatalf("unsupported geodata accepted: %v", err)
 	}
@@ -123,15 +125,15 @@ func TestMissingGeoSiteCapabilityNamesResource(t *testing.T) {
 func TestRenderGeodataUsesMihomoHomeNames(t *testing.T) {
 	intent := config.Snapshot{Resources: []config.Resource{{ID: "geo", Kind: "geoip.dat", Enabled: true}}}
 	profile := []byte("proxies:\n  - name: alpha\n    type: direct\n")
-	controller := ControllerSettings{Address: "127.0.0.1:9090", Secret: "secret", HomeDir: "/private"}
+	controller := ControllerSettings{Address: "127.0.0.1:9090", Secret: "secret", HomeDir: localtest.Abs("private")}
 	capability := Capability{SupportsGeoIPDat: true}
-	if _, err := Render(profile, intent, ManagedPaths{"geo": "/private/wrong.dat"}, controller, capability); err == nil {
+	if _, err := Render(profile, intent, ManagedPaths{"geo": localtest.Abs("private", "wrong.dat")}, controller, capability); err == nil {
 		t.Fatal("accepted geodata path Mihomo cannot locate")
 	}
-	if _, err := Render(profile, intent, ManagedPaths{"geo": "/elsewhere/geoip.dat"}, controller, capability); err == nil {
+	if _, err := Render(profile, intent, ManagedPaths{"geo": localtest.Abs("elsewhere", "geoip.dat")}, controller, capability); err == nil {
 		t.Fatal("accepted geodata outside Mihomo home")
 	}
-	got, err := Render(profile, intent, ManagedPaths{"geo": "/private/geoip.dat"}, controller, capability)
+	got, err := Render(profile, intent, ManagedPaths{"geo": localtest.Abs("private", "geoip.dat")}, controller, capability)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,6 +143,9 @@ func TestRenderGeodataUsesMihomoHomeNames(t *testing.T) {
 }
 
 func TestValidateUsesSelectedExecutableWithoutExposingProfile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Mihomo is a POSIX shell script")
+	}
 	dir := t.TempDir()
 	binary := filepath.Join(dir, "mihomo")
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\n[ \"$1\" = -t ] && [ \"$2\" = -f ]\n"), 0700); err != nil {
@@ -155,6 +160,9 @@ func TestValidateUsesSelectedExecutableWithoutExposingProfile(t *testing.T) {
 }
 
 func TestValidateInHomePassesManagedDataDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Mihomo is a POSIX shell script")
+	}
 	dir := t.TempDir()
 	binary := filepath.Join(dir, "mihomo")
 	home := filepath.Join(dir, "state")

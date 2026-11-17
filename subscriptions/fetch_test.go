@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -233,12 +234,14 @@ func TestRefresh304AndIdenticalHashDoNotWriteState(t *testing.T) {
 	if renderCalls != 1 || validateCalls != 1 {
 		t.Fatalf("unchanged content regenerated %d candidates and validated %d times", renderCalls, validateCalls)
 	}
-	if info, err := os.Stat(store.dir); err != nil || info.Mode().Perm() != 0o700 {
+	// Windows has no POSIX mode bits; the user profile's ACL keeps state private.
+	posix := runtime.GOOS != "windows"
+	if info, err := os.Stat(store.dir); err != nil || posix && info.Mode().Perm() != 0o700 {
 		t.Fatalf("state directory permissions = %v, %v", info, err)
 	}
 	for path := range before {
 		info, err := os.Stat(filepath.Join(stateDir, path))
-		if err != nil || info.Mode().Perm() != 0o600 {
+		if err != nil || posix && info.Mode().Perm() != 0o600 {
 			t.Fatalf("private file permissions for %q = %v, %v", path, info, err)
 		}
 	}

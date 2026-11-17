@@ -114,10 +114,18 @@ func TestLocalProfileNoFollowOpenRejectsSameInodeSymlink(t *testing.T) {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 	file, err := openLocalProfile(operand)
-	if file != nil {
-		file.Close()
+	if err != nil {
+		return // O_NOFOLLOW refuses the link outright.
 	}
-	if err == nil {
+	defer file.Close()
+	// Windows opens the reparse point itself instead of failing; the caller's
+	// handle Stat then sees a link, never the target's inode.
+	opened, err := file.Stat()
+	target, targetErr := os.Stat(original)
+	if targetErr != nil {
+		t.Fatal(targetErr)
+	}
+	if err == nil && os.SameFile(opened, target) {
 		t.Fatal("open followed symlink to original inode")
 	}
 }
