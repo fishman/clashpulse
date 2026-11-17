@@ -92,6 +92,7 @@ func TestWindowsNamedPipeRoundTrip(t *testing.T) {
 	}
 	select {
 	case got := <-queued:
+		command.JobID = ack.JobID
 		if !reflect.DeepEqual(got, command) {
 			t.Fatalf("queued command = %#v, want %#v", got, command)
 		}
