@@ -1,0 +1,26 @@
+pkgbase = clashpulse
+	pkgdesc = Desktop Mihomo client that measures nodes and switches only on proven improvement
+	pkgver = 0.1.1
+	pkgrel = 1
+	url = https://github.com/fishman/clashpulse
+	arch = x86_64
+	arch = aarch64
+	license = Apache-2.0
+	makedepends = go
+	makedepends = wayland-protocols
+	depends = glibc
+	depends = hicolor-icon-theme
+	depends = libglvnd
+	depends = libx11
+	depends = libxcursor
+	depends = libxi
+	depends = libxinerama
+	depends = libxkbcommon
+	depends = libxrandr
+	depends = libxxf86vm
+	depends = mihomo
+	depends = wayland
+	source = clashpulse-0.1.1.tar.gz::https://github.com/fishman/clashpulse/archive/refs/tags/v0.1.1.tar.gz
+	sha256sums = 543272cf7d4374bdd8b8da8b53e99e8ef2a88cac1ac0429860bf84c5a4a61503
+
+pkgname = clashpulse

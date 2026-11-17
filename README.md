@@ -19,6 +19,10 @@ The source build reports `clashpulse dev`. macOS needs Xcode Command Line Tools;
 
 `make install` copies the binary, the icon, and the desktop entry into `~/.local` (`PREFIX=/usr/local` and similar override the prefix). The desktop entry is Linux-only.
 
+### Arch Linux
+
+`packaging/aur/` holds two AUR packages: `clashpulse` builds the tagged source (and runs the test suite in `check()`), and `clashpulse-bin` repackages the release build. Both depend on `mihomo`, which the AUR `mihomo` or `mihomo-bin` package provides, so the default `binary = "system"` finds `/usr/bin/mihomo`. Build one locally with `makepkg -si` inside its directory.
+
 ## Run
 
 ```sh

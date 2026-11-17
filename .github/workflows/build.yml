@@ -57,7 +57,7 @@ jobs:
           mkdir -p package dist
           case "${{ matrix.target }}" in
             linux)
-              bash "$a" "build ${{ matrix.target }}" go build -trimpath -ldflags "$ldflags" -o package/clashpulse ./cmd/clashpulse
+              bash "$a" "build ${{ matrix.target }}" go build -buildmode=pie -trimpath -ldflags "$ldflags -linkmode=external -extldflags=-Wl,-z,relro,-z,now" -o package/clashpulse ./cmd/clashpulse
               cp README.md LICENSE THIRD_PARTY_LICENSES.txt clashpulse.desktop package/
               tar -czf "dist/$name.tar.gz" -C package .
               ;;
@@ -88,6 +88,8 @@ jobs:
             isa=$(readelf -n package/clashpulse | grep -i 'ISA needed' || true)
             echo "${isa:-no ISA note}"
             if echo "$isa" | grep -Eq 'x86-64-v[234]'; then echo "::error::binary requires more than baseline x86-64: $isa"; exit 1; fi
+            readelf -h package/clashpulse | grep -q 'Position-Independent' || { echo "::error::linux binary is not PIE"; exit 1; }
+            readelf -d package/clashpulse | grep -q BIND_NOW || { echo "::error::linux binary lacks full RELRO"; exit 1; }
             glibc=$(objdump -T package/clashpulse | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -1)
             echo "highest glibc symbol: $glibc"
             if [ "$(printf '%s\nGLIBC_2.35\n' "$glibc" | sort -V | tail -1)" != GLIBC_2.35 ]; then echo "::error::binary needs $glibc, above the 2.35 floor"; exit 1; fi

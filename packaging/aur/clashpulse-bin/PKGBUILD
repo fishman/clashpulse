@@ -1,0 +1,25 @@
+# Maintainer: Reza Jelveh <agent@jelveh.me>
+
+pkgname=clashpulse-bin
+_pkgname=clashpulse
+pkgver=0.1.1
+pkgrel=1
+pkgdesc='Desktop Mihomo client that measures nodes and switches only on proven improvement (release build)'
+arch=('x86_64')
+url='https://github.com/fishman/clashpulse'
+license=('Apache-2.0')
+depends=('glibc' 'hicolor-icon-theme' 'libglvnd' 'libx11' 'libxcursor' 'libxi' 'libxinerama' 'libxkbcommon' 'libxrandr' 'libxxf86vm' 'mihomo' 'wayland')
+provides=("$_pkgname")
+conflicts=("$_pkgname")
+source=("$_pkgname-$pkgver-linux-amd64.tar.gz::$url/releases/download/v$pkgver/$_pkgname-v$pkgver-linux-amd64.tar.gz"
+        "$_pkgname-$pkgver.svg::https://raw.githubusercontent.com/fishman/$_pkgname/v$pkgver/ui/clashpulse.svg")
+sha256sums=('3033da96a7b97633c99e1ef258cc486d6cc96e4d5795b1bb5f251e1cbc7af152'
+            '6e8161ce4436f7e4f87e68b3e4cbb1771b5219f50fb9d8fd9128a65a3ea74232')
+
+package() {
+  install -Dm755 clashpulse "$pkgdir/usr/bin/clashpulse"
+  install -Dm644 clashpulse.desktop "$pkgdir/usr/share/applications/clashpulse.desktop"
+  install -Dm644 "$_pkgname-$pkgver.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/clashpulse.svg"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 THIRD_PARTY_LICENSES.txt "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY_LICENSES.txt"
+}

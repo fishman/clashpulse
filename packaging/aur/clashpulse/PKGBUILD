@@ -1,0 +1,42 @@
+# Maintainer: Reza Jelveh <agent@jelveh.me>
+
+pkgname=clashpulse
+pkgver=0.1.1
+pkgrel=1
+pkgdesc='Desktop Mihomo client that measures nodes and switches only on proven improvement'
+arch=('x86_64' 'aarch64')
+url='https://github.com/fishman/clashpulse'
+license=('Apache-2.0')
+depends=('glibc' 'hicolor-icon-theme' 'libglvnd' 'libx11' 'libxcursor' 'libxi' 'libxinerama' 'libxkbcommon' 'libxrandr' 'libxxf86vm' 'mihomo' 'wayland')
+makedepends=('go' 'wayland-protocols')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('543272cf7d4374bdd8b8da8b53e99e8ef2a88cac1ac0429860bf84c5a4a61503')
+
+prepare() {
+  cd "$pkgname-$pkgver"
+  export GOPATH="$srcdir/gopath"
+  go mod download
+}
+
+build() {
+  cd "$pkgname-$pkgver"
+  export GOPATH="$srcdir/gopath"
+  export CGO_CPPFLAGS="$CPPFLAGS" CGO_CFLAGS="$CFLAGS" CGO_CXXFLAGS="$CXXFLAGS" CGO_LDFLAGS="$LDFLAGS"
+  export GOFLAGS='-buildmode=pie -trimpath -mod=readonly -modcacherw'
+  go build -ldflags "-linkmode=external -X 'main.version=clashpulse v$pkgver'" -o clashpulse ./cmd/clashpulse
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  export GOPATH="$srcdir/gopath"
+  go test -tags ci ./...
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  install -Dm755 clashpulse "$pkgdir/usr/bin/clashpulse"
+  install -Dm644 clashpulse.desktop "$pkgdir/usr/share/applications/clashpulse.desktop"
+  install -Dm644 ui/clashpulse.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/clashpulse.svg"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 THIRD_PARTY_LICENSES.txt "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY_LICENSES.txt"
+}

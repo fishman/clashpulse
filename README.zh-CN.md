@@ -33,6 +33,10 @@ go build -o clashpulse ./cmd/clashpulse
 
 GUI 启动时不带代理配置。Mihomo 是独立可执行文件：把它放到 `PATH`，或在设置中选择一个绝对路径。本仓库不捆绑 Mihomo 二进制。
 
+### Arch Linux
+
+`packaging/aur/` 中有两个 AUR 软件包：`clashpulse` 从带标签的源码构建（`check()` 中运行测试），`clashpulse-bin` 重新打包发布版构建。两者都依赖 `mihomo`，由 AUR 的 `mihomo` 或 `mihomo-bin` 提供，因此默认的 `binary = "system"` 会找到 `/usr/bin/mihomo`。在对应目录中运行 `makepkg -si` 即可本地构建。
+
 ## 运行
 
 ```sh
