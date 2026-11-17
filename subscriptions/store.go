@@ -766,15 +766,6 @@ func cleanupQuarantine(directory string, removeAll func(string) error) error {
 	return nil
 }
 
-func syncDirectory(directory string) error {
-	file, err := os.Open(directory)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	return file.Sync()
-}
-
 func (s *Store) writeRecord(directory string, record privateRecord) error {
 	// Applied generation pointers are derived from active.json; record.json is
 	// never a second durable commit point for runtime activation.
