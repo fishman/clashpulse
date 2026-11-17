@@ -326,7 +326,7 @@ func validateSource(resource config.Resource) error {
 			return nil
 		}
 	}
-	if strings.ContainsRune(resource.URL, '\x00') || strings.TrimSpace(resource.URL) == "" {
+	if strings.ContainsRune(resource.URL, '\x00') || strings.TrimSpace(resource.URL) == "" || config.IsNetworkSharePath(resource.URL) {
 		return fmt.Errorf("resource %q has invalid local source path", resource.ID)
 	}
 	return nil

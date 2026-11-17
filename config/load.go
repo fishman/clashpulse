@@ -631,9 +631,15 @@ func ValidSubscriptionUserAgent(value string) bool {
 	return true
 }
 
+// IsNetworkSharePath reports a Windows UNC or device path (\\server\share,
+// \\?\..., \\.\...); none of them is a local resource file.
+func IsNetworkSharePath(raw string) bool {
+	return filepath.Separator == '\\' && strings.HasPrefix(raw, `\\`)
+}
+
 func validateSourceOrPath(raw string, allowPath bool) error {
 	if allowPath && filepath.IsAbs(raw) {
-		if filepath.Separator == '\\' && strings.HasPrefix(raw, `\\`) {
+		if IsNetworkSharePath(raw) {
 			return fmt.Errorf("network share paths are not local resources")
 		}
 		return nil
