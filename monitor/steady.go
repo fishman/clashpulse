@@ -117,8 +117,7 @@ func MeasureStreams(proxy string, samples []StreamSample, windowSize int) Stream
 		}
 	}
 	if len(rates) > 0 {
-		sort.Slice(rates, func(i, j int) bool { return rates[i] < rates[j] })
-		stats.MedianThroughput = rates[len(rates)/2]
+		stats.MedianThroughput = median(rates)
 	}
 	return stats
 }

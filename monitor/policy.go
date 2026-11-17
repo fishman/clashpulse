@@ -333,7 +333,7 @@ func MeasureStability(samples []Sample, windowSize int) Stability {
 	return stats
 }
 
-func median(values []time.Duration) time.Duration {
+func median[T ~int64](values []T) T {
 	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
 	middle := len(values) / 2
 	if len(values)%2 == 1 {
