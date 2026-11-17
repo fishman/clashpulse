@@ -13,13 +13,14 @@ import (
 
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/subscriptions"
 )
 
 func TestFailedMixedReloadPreservesInactiveSubscriptionSnapshot(t *testing.T) {
 	python := requireFakeMihomo(t)
-	root := shortTempDir(t)
+	root := localtest.Dir(t)
 	binary := fakeAppMihomo(t, root, python)
 	profile := []byte(twoNodeProfile)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(profile) }))
@@ -155,7 +156,7 @@ func TestFailedMixedReloadPreservesInactiveSubscriptionSnapshot(t *testing.T) {
 
 func TestFailedPostRestartRefreshRestoresRuntimeState(t *testing.T) {
 	python := requireFakeMihomo(t)
-	root := shortTempDir(t)
+	root := localtest.Dir(t)
 	marker := filepath.Join(root, "fail-third-proxy-read")
 	binary := fakeAppMihomoFailingThirdProxyRead(t, root, python, marker)
 	candidateBinary := filepath.Join(root, "mihomo-candidate")

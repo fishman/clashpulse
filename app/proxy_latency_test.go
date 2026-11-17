@@ -13,6 +13,7 @@ import (
 
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/mihomo"
 	"github.com/fishman/clashpulse/monitor"
@@ -55,7 +56,7 @@ func TestRefreshGroupsKeepsMeasuredLatency(t *testing.T) {
 	}
 	service.controller, service.monitor = controller, scheduler
 	service.automation[opaqueID("select-main")] = true
-	service.server, err = ipc.NewServer(ipc.ServerOptions{Endpoint: filepath.Join(configDir, "ipc.sock"), Handler: func(context.Context, ipc.Command) error { return nil }, InitialSnapshot: service.snapshot})
+	service.server, err = ipc.NewServer(ipc.ServerOptions{Endpoint: localtest.Endpoint(t), Handler: func(context.Context, ipc.Command) error { return nil }, InitialSnapshot: service.snapshot})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +151,7 @@ func (m *memberStreamer) StreamPull(_ context.Context, proxy, url string) monito
 // newBareRuntimeForTest is a runtime with a publishing server and no Mihomo.
 func newBareRuntimeForTest(t *testing.T) *runtimeService {
 	t.Helper()
-	configDir := t.TempDir()
+	configDir := localtest.Dir(t)
 	initial, err := config.Load(configDir)
 	if err != nil {
 		t.Fatal(err)
@@ -159,7 +160,7 @@ func newBareRuntimeForTest(t *testing.T) *runtimeService {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service.server, err = ipc.NewServer(ipc.ServerOptions{Endpoint: filepath.Join(configDir, "ipc.sock"), Handler: func(context.Context, ipc.Command) error { return nil }, InitialSnapshot: service.snapshot})
+	service.server, err = ipc.NewServer(ipc.ServerOptions{Endpoint: localtest.Endpoint(t), Handler: func(context.Context, ipc.Command) error { return nil }, InitialSnapshot: service.snapshot})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +237,7 @@ func TestDialFailuresProbeGroupEarlyUntilMonitorStops(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service.server, err = ipc.NewServer(ipc.ServerOptions{Endpoint: filepath.Join(configDir, "ipc.sock"), Handler: func(context.Context, ipc.Command) error { return nil }, InitialSnapshot: service.snapshot})
+	service.server, err = ipc.NewServer(ipc.ServerOptions{Endpoint: localtest.Endpoint(t), Handler: func(context.Context, ipc.Command) error { return nil }, InitialSnapshot: service.snapshot})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -15,6 +15,7 @@ import (
 
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/monitor"
 	"github.com/fishman/clashpulse/tun"
@@ -534,7 +535,7 @@ func TestTunPrivilegedPathAbsoluteForRelativeStateDir(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("PrivilegedPath is reported on Linux only")
 	}
-	root := shortTempDir(t)
+	root := localtest.Dir(t)
 	t.Chdir(root)
 	initial, err := config.Load(filepath.Join(root, "config"))
 	if err != nil {

@@ -11,12 +11,13 @@ import (
 
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/examples"
+	"github.com/fishman/clashpulse/internal/localtest"
 )
 
 func TestRunAtSeedsPrivateConfigWithoutReplacingUserEdits(t *testing.T) {
-	root := shortTempDir(t)
+	root := localtest.Dir(t)
 	configDir := filepath.Join(root, "config")
-	endpoint := filepath.Join(root, "socket", "ipc.sock")
+	endpoint := localtest.Endpoint(t)
 	start := func() {
 		t.Helper()
 		ctx, cancel := context.WithCancel(context.Background())

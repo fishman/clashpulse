@@ -13,6 +13,7 @@ import (
 
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/ipc"
 )
 
@@ -24,7 +25,7 @@ func TestRunAtCancelsStaleURLWhileIntentIsRunning(t *testing.T) {
 	if err != nil {
 		t.Skip("python3 unavailable")
 	}
-	root := shortTempDir(t)
+	root := localtest.Dir(t)
 	binary := fakeAppMihomo(t, root, python)
 	oldStarted, oldCanceled := make(chan struct{}, 1), make(chan struct{}, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -25,6 +25,7 @@ import (
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/download"
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/mihomo"
 	"github.com/fishman/clashpulse/monitor"
@@ -58,7 +59,7 @@ func newStaticRuntime(t *testing.T) *staticRuntime {
 	if err != nil {
 		t.Skip("python3 unavailable for fake controller")
 	}
-	root := shortTempDir(t)
+	root := localtest.Dir(t)
 	binDir := filepath.Join(root, "bin")
 	if err := os.Mkdir(binDir, 0o700); err != nil {
 		t.Fatal(err)
@@ -208,18 +209,6 @@ func freeLoopbackPort(t *testing.T) int {
 	}
 	defer listener.Close()
 	return listener.Addr().(*net.TCPAddr).Port
-}
-
-// shortTempDir is a private test root whose path does not grow with the test
-// name, so the controller socket inside it stays under the sun_path limit.
-func shortTempDir(t *testing.T) string {
-	t.Helper()
-	dir, err := os.MkdirTemp("", "cp")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	return dir
 }
 
 func TestMixedPortFollowsConfigAndMovesSystemProxy(t *testing.T) {
@@ -1202,7 +1191,7 @@ func TestProxyModeSwitchesLiveWithoutRestart(t *testing.T) {
 }
 
 func TestProxyModeFallbacksKeepRunningModeConsistent(t *testing.T) {
-	root := shortTempDir(t)
+	root := localtest.Dir(t)
 	modes, patchFail := filepath.Join(root, "modes"), filepath.Join(root, "patch-fail")
 	t.Setenv("CLASHPULSE_FAKE_MODES", modes)
 	t.Setenv("CLASHPULSE_FAKE_PATCH_FAIL", patchFail)

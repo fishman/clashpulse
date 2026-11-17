@@ -10,13 +10,14 @@ import (
 
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/ipc"
 )
 
 func TestIPCPutsAndDeletesPrivateSubscriptionIntent(t *testing.T) {
-	root := shortTempDir(t)
+	root := localtest.Dir(t)
 	configDir := filepath.Join(root, "config")
-	endpoint := filepath.Join(root, "socket", "ipc.sock")
+	endpoint := localtest.Endpoint(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- RunAt(ctx, configDir, filepath.Join(root, "state"), endpoint) }()

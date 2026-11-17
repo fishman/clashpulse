@@ -2,19 +2,19 @@ package main
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/ipc"
 )
 
 // A refresh run while the GUI owns the state goes through the service and
 // waits for each job's outcome instead of failing on the state lock.
 func TestServiceRefreshWaitsForEachJobOutcome(t *testing.T) {
-	endpoint := filepath.Join(t.TempDir(), "private", "ipc.sock")
+	endpoint := localtest.Endpoint(t)
 	if handled, err := serviceRefresh(context.Background(), endpoint, "", "", false); handled || err != nil {
 		t.Fatalf("without a service: handled=%v err=%v, want the offline path", handled, err)
 	}
@@ -43,9 +43,16 @@ func TestServiceRefreshWaitsForEachJobOutcome(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	go func() { _ = server.Serve(ctx) }()
+	served := make(chan error, 1)
+	go func() { served <- server.Serve(ctx) }()
 	t.Cleanup(func() { _ = server.Close() })
-	<-server.Ready()
+	select {
+	case <-server.Ready():
+	case err := <-served:
+		t.Fatalf("service did not become ready: %v", err)
+	case <-ctx.Done():
+		t.Fatal("service did not become ready")
+	}
 
 	handled, err := serviceRefresh(ctx, endpoint, "subscription", "", false)
 	if !handled || err == nil {

@@ -16,12 +16,13 @@ import (
 
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/ipc"
 )
 
 func TestRunAtRefreshActivateSelectAndStop(t *testing.T) {
 	python := requireFakeMihomo(t)
-	root := shortTempDir(t)
+	root := localtest.Dir(t)
 	binary := fakeAppMihomo(t, root, python)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(twoNodeProfile))
@@ -260,7 +261,7 @@ func TestRunAtRefreshActivateSelectAndStop(t *testing.T) {
 
 func TestDownloadedProfileActivatesAfterDesktopStarts(t *testing.T) {
 	python := requireFakeMihomo(t)
-	root := shortTempDir(t)
+	root := localtest.Dir(t)
 	binary := fakeAppMihomo(t, root, python)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(twoNodeProfile))

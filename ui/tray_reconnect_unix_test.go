@@ -4,13 +4,13 @@ package ui
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/ipc"
 )
 
@@ -25,7 +25,7 @@ func TestTrayReconnectsAndSelectsManagedProxy(t *testing.T) {
 	defer a.Quit()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	endpoint := filepath.Join(t.TempDir(), "socket", "ipc.sock")
+	endpoint := localtest.Endpoint(t)
 	d := newDesktopUI(ctx, endpoint, a.NewWindow("ClashPulse"))
 	tray := &recordingTray{menus: make(chan *fyne.Menu, 3)}
 	d.tray = tray

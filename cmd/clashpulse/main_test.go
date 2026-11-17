@@ -6,19 +6,19 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/download"
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/localize"
 )
 
 func TestServiceRunningDetectsExistingOwner(t *testing.T) {
-	endpoint := filepath.Join(t.TempDir(), "private", "ipc.sock")
+	endpoint := localtest.Endpoint(t)
 	if serviceRunning(context.Background(), endpoint) {
 		t.Fatal("idle endpoint reported as owned")
 	}

@@ -15,11 +15,12 @@ import (
 	"time"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/internal/localtest"
 )
 
 func startTestServer(t *testing.T, handler Handler, initial core.Snapshot) (*Server, *Client, context.Context) {
 	t.Helper()
-	endpoint := filepath.Join(t.TempDir(), "private", "ipc.sock")
+	endpoint := filepath.Join(localtest.Dir(t), "private", "ipc.sock")
 	server, err := NewServer(ServerOptions{Endpoint: endpoint, Handler: handler, InitialSnapshot: initial})
 	if err != nil {
 		t.Fatal(err)
@@ -202,7 +203,7 @@ func TestRejectsPreviousTunlessProtocol(t *testing.T) {
 }
 
 func TestClientRejectsUnsupportedProtocol(t *testing.T) {
-	endpoint := filepath.Join(t.TempDir(), "ipc.sock")
+	endpoint := filepath.Join(localtest.Dir(t), "ipc.sock")
 	listener, err := net.Listen("unix", endpoint)
 	if err != nil {
 		t.Fatal(err)

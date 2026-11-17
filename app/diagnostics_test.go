@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/download"
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/subscriptions"
 )
@@ -103,7 +103,7 @@ func TestDiagnosticsExposeSafeActivationStage(t *testing.T) {
 		t.Fatal(err)
 	}
 	server, err := ipc.NewServer(ipc.ServerOptions{
-		Endpoint:        filepath.Join(t.TempDir(), "service.sock"),
+		Endpoint:        localtest.Endpoint(t),
 		Handler:         func(context.Context, ipc.Command) error { return nil },
 		InitialSnapshot: service.snapshot,
 	})

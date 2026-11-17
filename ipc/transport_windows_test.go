@@ -60,6 +60,13 @@ func TestWindowsNamedPipeRoundTrip(t *testing.T) {
 			t.Error("IPC server did not stop")
 		}
 	})
+	select {
+	case <-server.Ready():
+	case err := <-serveDone:
+		t.Fatalf("Serve returned before listening: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("named pipe did not become ready")
+	}
 
 	dialCtx, stopDial := context.WithTimeout(ctx, 5*time.Second)
 	defer stopDial()

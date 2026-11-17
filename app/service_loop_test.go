@@ -16,6 +16,7 @@ import (
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/download"
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/subscriptions"
 	"github.com/fishman/clashpulse/sysproxy"
@@ -46,7 +47,7 @@ func TestRunSubscriptionRefreshDoesNotBlockStop(t *testing.T) {
 	defer server.Close()
 	defer releaseSubscriptionNow()
 
-	root := shortTempDir(t)
+	root := localtest.Dir(t)
 	binary := fakeAppMihomo(t, root, python)
 	configDir := filepath.Join(root, "config")
 	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\nmixed_port = %d\n[monitor]\nenabled = false\n", binary, freeLoopbackPort(t)))); err != nil {
@@ -152,7 +153,7 @@ func TestRunSubscriptionRefreshDoesNotBlockStop(t *testing.T) {
 }
 
 func TestRunWaitsForRefreshWorkerOnShutdown(t *testing.T) {
-	root := shortTempDir(t)
+	root := localtest.Dir(t)
 	configDir := filepath.Join(root, "config")
 	profile := "proxies:\n  - name: node-a\n    type: direct\n"
 	var fetches atomic.Int32
@@ -231,7 +232,7 @@ func TestRunWaitsForRefreshWorkerOnShutdown(t *testing.T) {
 	}
 	s.snapshot = s.stateSnapshot()
 	s.lastPublished = core.CloneSnapshot(s.snapshot)
-	s.server, err = ipc.NewServer(ipc.ServerOptions{Endpoint: filepath.Join(root, "socket", "service.sock"), Handler: func(_ context.Context, cmd ipc.Command) error {
+	s.server, err = ipc.NewServer(ipc.ServerOptions{Endpoint: localtest.Endpoint(t), Handler: func(_ context.Context, cmd ipc.Command) error {
 		select {
 		case s.intents <- cmd:
 			return nil

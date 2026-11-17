@@ -13,10 +13,12 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fishman/clashpulse/internal/localtest"
 )
 
 func TestUnixControllerTalksOverPrivateSocket(t *testing.T) {
-	socket := filepath.Join(t.TempDir(), "mihomo.sock")
+	socket := filepath.Join(localtest.Dir(t), "mihomo.sock")
 	listener, err := net.Listen("unix", socket)
 	if err != nil {
 		t.Fatal(err)

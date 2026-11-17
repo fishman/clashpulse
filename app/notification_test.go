@@ -11,6 +11,7 @@ import (
 
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/localize"
 	"github.com/fishman/clashpulse/subscriptions"
@@ -82,7 +83,7 @@ func TestRunNotificationsDeliversLocalizedMessages(t *testing.T) {
 }
 
 func TestTestNotificationCommandReportsDesktopDelivery(t *testing.T) {
-	root := shortTempDir(t)
+	root := localtest.Dir(t)
 	configDir := filepath.Join(root, "config")
 	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte("[monitor]\nenabled = false\n")); err != nil {
 		t.Fatal(err)
@@ -106,7 +107,7 @@ func TestTestNotificationCommandReportsDesktopDelivery(t *testing.T) {
 		return nil
 	}
 	service.subScheduler = subscriptions.NewScheduler(service.subs, 1)
-	endpoint := filepath.Join(root, "socket", "ipc.sock")
+	endpoint := localtest.Endpoint(t)
 	service.server, err = ipc.NewServer(ipc.ServerOptions{Endpoint: endpoint, Handler: func(_ context.Context, cmd ipc.Command) error {
 		return service.enqueueIntent(cmd)
 	}, InitialSnapshot: core.CloneSnapshot(service.snapshot)})

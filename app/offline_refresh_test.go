@@ -14,6 +14,7 @@ import (
 
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/download"
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/resources"
 )
 
@@ -213,7 +214,7 @@ func TestResourceResponseForKeepsBodiesWithTheirSource(t *testing.T) {
 }
 
 func TestRefreshResourceWithoutActiveProfileCachesEnabledResources(t *testing.T) {
-	root := shortTempDir(t)
+	root := localtest.Dir(t)
 	configDir, stateDir := filepath.Join(root, "config"), filepath.Join(root, "state")
 	if err := privateDirectory(configDir); err != nil {
 		t.Fatal(err)

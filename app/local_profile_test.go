@@ -14,6 +14,7 @@ import (
 
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/subscriptions"
 )
@@ -82,7 +83,7 @@ func localOwnerFixture(t *testing.T) (string, string, string, string) {
 	if err != nil {
 		t.Skip("python3 unavailable")
 	}
-	root := shortTempDir(t)
+	root := localtest.Dir(t)
 	binary := fakeAppMihomo(t, root, python)
 	configDir, stateDir := filepath.Join(root, "config"), filepath.Join(root, "state")
 	if err := config.Write(filepath.Join(configDir, "config.toml"), []byte(fmt.Sprintf("[mihomo]\nbinary = %q\nmixed_port = %d\n[monitor]\nenabled = false\n", binary, freeLoopbackPort(t)))); err != nil {

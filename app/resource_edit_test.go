@@ -9,17 +9,18 @@ import (
 
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/ipc"
 )
 
 func TestIPCResourceAndFilterEditsPersistCrossFileIntent(t *testing.T) {
-	root := shortTempDir(t)
+	root := localtest.Dir(t)
 	source := filepath.Join(root, "cn.yaml")
 	if err := os.WriteFile(source, []byte("payload:\n  - +.example.cn\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	configDir := filepath.Join(root, "config")
-	endpoint := filepath.Join(root, "socket", "ipc.sock")
+	endpoint := localtest.Endpoint(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- RunAt(ctx, configDir, filepath.Join(root, "state"), endpoint) }()

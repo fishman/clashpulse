@@ -9,13 +9,14 @@ import (
 	"time"
 
 	"github.com/fishman/clashpulse/config"
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/ipc"
 )
 
 func TestRunAtPublishesConfigChangesOverLocalIPC(t *testing.T) {
-	root := shortTempDir(t)
+	root := localtest.Dir(t)
 	configDir, stateDir := filepath.Join(root, "config"), filepath.Join(root, "state")
-	endpoint := filepath.Join(root, "socket", "ipc.sock")
+	endpoint := localtest.Endpoint(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan error, 1)
@@ -104,7 +105,7 @@ func waitConfigError(t *testing.T, ctx context.Context, client *ipc.Client, file
 }
 
 func TestRunAtClearsConfigReloadIssueAfterNoopCorrection(t *testing.T) {
-	root := shortTempDir(t)
+	root := localtest.Dir(t)
 	configDir, stateDir := filepath.Join(root, "config"), filepath.Join(root, "state")
 	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatal(err)
@@ -114,7 +115,7 @@ func TestRunAtClearsConfigReloadIssueAfterNoopCorrection(t *testing.T) {
 	if err := config.Write(configFile, valid); err != nil {
 		t.Fatal(err)
 	}
-	endpoint := filepath.Join(root, "socket", "ipc.sock")
+	endpoint := localtest.Endpoint(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- RunAt(ctx, configDir, stateDir, endpoint) }()
