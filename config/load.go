@@ -582,7 +582,7 @@ func validateMihomoBinary(binary string) error {
 	if err != nil {
 		return fmt.Errorf("config.toml: mihomo.binary: %w", err)
 	}
-	if !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
+	if !IsExecutable(binary, info) {
 		return fmt.Errorf("config.toml: mihomo.binary: not executable %q", binary)
 	}
 	return nil

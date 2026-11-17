@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -62,9 +63,20 @@ func TestPatchSettingsValidatesBinarySelectionBeforeWriting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Windows runs a file by extension rather than by mode bit.
 	binary := filepath.Join(dir, "mihomo")
+	if runtime.GOOS == "windows" {
+		binary += ".exe"
+	}
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
 		t.Fatal(err)
+	}
+	plain := filepath.Join(dir, "plain")
+	if err := os.WriteFile(plain, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := PatchSettings(path, current, SettingsPatch{Binary: &plain}); err == nil {
+		t.Fatal("persisted a file the OS would not execute")
 	}
 	if err := PatchSettings(path, current, SettingsPatch{Binary: &binary}); err != nil {
 		t.Fatal(err)

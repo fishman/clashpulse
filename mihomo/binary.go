@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/fishman/clashpulse/config"
 )
 
 type Selection struct {
@@ -115,7 +117,7 @@ func executable(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("stat mihomo binary: %w", err)
 	}
-	if !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
+	if !config.IsExecutable(path, info) {
 		return "", fmt.Errorf("mihomo binary %q is not a regular executable file", path)
 	}
 	return path, nil
