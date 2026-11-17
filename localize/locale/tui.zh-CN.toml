@@ -369,6 +369,9 @@ other = "请先选择组，再请求测速。"
 ["Steady-stream probing is off; choose the steady_stream policy in Settings."]
 other = "稳定流探测未开启；请在设置中选择 steady_stream 策略。"
 
+["No group is automated; enable automation on a group to probe downloads."]
+other = "没有启用自动切换的分组；请先为分组启用自动切换再探测下载。"
+
 ["Select a group before changing automation."]
 other = "请先选择组，再更改自动化设置。"
 

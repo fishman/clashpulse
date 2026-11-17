@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -385,7 +386,9 @@ func (d *desktopUI) postSnapshot(snapshot core.Snapshot) {
 		if first || !reflect.DeepEqual(previous.Groups, immutable.Groups) || !reflect.DeepEqual(previous.Proxies, immutable.Proxies) {
 			d.proxyPage.update(immutable)
 		}
-		d.proxyPage.setStreamProbe(immutable.Monitor.SwitchPolicy == monitor.SwitchSteadyStream)
+		// A round pulls only automated groups' nodes; without one it has nothing to measure.
+		automated := slices.ContainsFunc(immutable.Groups, func(group core.GroupSnapshot) bool { return group.AutomationEnabled })
+		d.proxyPage.setStreamProbe(immutable.Monitor.SwitchPolicy == monitor.SwitchSteadyStream && automated)
 		if first || !reflect.DeepEqual(previous.Subscriptions, immutable.Subscriptions) {
 			d.subPage.update(immutable.Subscriptions)
 		}

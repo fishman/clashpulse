@@ -53,7 +53,15 @@ func TestStreamProbeButtonFollowsSteadyStreamPolicy(t *testing.T) {
 	if !button.Disabled() {
 		t.Fatal("stream probe enabled before the service connected")
 	}
-	view.postSnapshot(core.Snapshot{Monitor: core.MonitorSnapshot{SwitchPolicy: monitor.SwitchSteadyStream}})
+	automated := []core.GroupSnapshot{{ID: "main", Type: "Selector", Selected: "alpha", Proxies: []string{"alpha"}, AutomationEnabled: true}}
+	steady := core.MonitorSnapshot{SwitchPolicy: monitor.SwitchSteadyStream}
+	// A round pulls only automated groups' nodes, so none means nothing to probe.
+	view.postSnapshot(core.Snapshot{Monitor: steady, Groups: []core.GroupSnapshot{{ID: "main", Type: "Selector", Selected: "alpha", Proxies: []string{"alpha"}}}})
+	fyne.DoAndWait(func() {})
+	if !button.Disabled() {
+		t.Fatal("stream probe enabled with no automated group")
+	}
+	view.postSnapshot(core.Snapshot{Monitor: steady, Groups: automated})
 	fyne.DoAndWait(func() {})
 	if button.Disabled() {
 		t.Fatal("stream probe disabled under steady_stream")
@@ -67,12 +75,12 @@ func TestStreamProbeButtonFollowsSteadyStreamPolicy(t *testing.T) {
 	default:
 		t.Fatal("stream probe sent nothing")
 	}
-	view.postSnapshot(core.Snapshot{Monitor: core.MonitorSnapshot{SwitchPolicy: monitor.SwitchLowestLatency}})
+	view.postSnapshot(core.Snapshot{Monitor: core.MonitorSnapshot{SwitchPolicy: monitor.SwitchLowestLatency}, Groups: automated})
 	fyne.DoAndWait(func() {})
 	if !button.Disabled() {
 		t.Fatal("stream probe enabled under lowest_latency")
 	}
-	view.postSnapshot(core.Snapshot{Monitor: core.MonitorSnapshot{SwitchPolicy: monitor.SwitchSteadyStream}})
+	view.postSnapshot(core.Snapshot{Monitor: steady, Groups: automated})
 	view.postDisconnected()
 	fyne.DoAndWait(func() {})
 	if !button.Disabled() {

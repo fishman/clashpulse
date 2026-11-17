@@ -860,6 +860,10 @@ func TestSettingsCycleSwitchPolicySendsNextPolicy(t *testing.T) {
 
 func TestProxiesStreamProbeKeyFollowsSwitchPolicy(t *testing.T) {
 	model := streamSettingsModel(t).selectTab(TabProxies)
+	if model, command, _ := model.HandleKey("d"); command != nil || model.Notice != "No group is automated; enable automation on a group to probe downloads." {
+		t.Fatalf("unautomated stream probe = %+v notice %q", command, model.Notice)
+	}
+	model.snapshot.Snapshot.Groups = []core.GroupSnapshot{{ID: "main", Type: "Selector", AutomationEnabled: true}}
 	if _, command, quit := model.HandleKey("d"); quit || command == nil || command.Kind != ipc.CommandStreamProbe || command.GroupID != "" {
 		t.Fatalf("steady_stream stream probe = %+v quit %t", command, quit)
 	}
