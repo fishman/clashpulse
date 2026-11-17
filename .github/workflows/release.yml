@@ -36,4 +36,4 @@ jobs:
             --title "ClashPulse $TAG" \
             --generate-notes \
             --prerelease \
-            --notes "Pre-release. Unsigned native builds for Linux (amd64), macOS (Apple silicon), and Windows (amd64). Mihomo is not bundled: install it and put mihomo on PATH or select it in Settings. macOS may require removing the quarantine attribute (xattr -dr com.apple.quarantine ClashPulse.app) because the app is not notarized. Verify downloads against SHA256SUMS."
+            --notes "Pre-release. Unsigned native builds for Linux (amd64), macOS (Apple silicon), and Windows (amd64). The Linux build runs on any x86-64 CPU with glibc 2.35 or newer (Ubuntu 22.04, Debian 12, and later). Mihomo is not bundled: install it and put mihomo on PATH or select it in Settings. macOS may require removing the quarantine attribute (xattr -dr com.apple.quarantine ClashPulse.app) because the app is not notarized. Verify downloads against SHA256SUMS."

@@ -17,7 +17,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # 22.04 keeps the glibc floor at 2.35; newer runners raise both the
+          # glibc and the x86-64 ISA level the release binary demands.
+          - os: ubuntu-22.04
             target: linux
             arch: amd64
           - os: macos-latest
@@ -29,6 +31,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       VERSION: ${{ inputs.version || 'dev' }}
+      # The ISA level of cgo objects must not follow the runner's compiler default.
+      CGO_CFLAGS: ${{ matrix.target == 'linux' && '-O2 -g -march=x86-64 -mtune=generic' || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -80,6 +84,14 @@ jobs:
             windows) out=$(package/clashpulse.exe version) ;;
           esac
           echo "$out"
+          if [ "${{ matrix.target }}" = linux ]; then
+            isa=$(readelf -n package/clashpulse | grep -i 'ISA needed' || true)
+            echo "${isa:-no ISA note}"
+            if echo "$isa" | grep -Eq 'x86-64-v[234]'; then echo "::error::binary requires more than baseline x86-64: $isa"; exit 1; fi
+            glibc=$(objdump -T package/clashpulse | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -1)
+            echo "highest glibc symbol: $glibc"
+            if [ "$(printf '%s\nGLIBC_2.35\n' "$glibc" | sort -V | tail -1)" != GLIBC_2.35 ]; then echo "::error::binary needs $glibc, above the 2.35 floor"; exit 1; fi
+          fi
           test "$out" = "clashpulse $VERSION"
       - uses: actions/upload-artifact@v4
         with:
