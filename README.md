@@ -10,7 +10,7 @@ You need Go 1.26.6, a C compiler, and Fyne's native graphics headers. On Debian/
 
 ```sh
 sudo apt-get update
-sudo apt-get install -y build-essential pkg-config libgl1-mesa-dev xorg-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libxxf86vm-dev
+sudo apt-get install -y build-essential pkg-config libgl1-mesa-dev xorg-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libxxf86vm-dev libwayland-dev libxkbcommon-dev wayland-protocols
 go build -o clashpulse ./cmd/clashpulse
 ./clashpulse version
 ```
