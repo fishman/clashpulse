@@ -297,16 +297,8 @@ func (r *Registry) validateSnapshot(snapshot config.Snapshot) error {
 				return fmt.Errorf("resource %q has invalid SHA-256 pin", resource.ID)
 			}
 		}
-		u, err := url.Parse(resource.URL)
-		if err != nil {
-			return fmt.Errorf("resource %q has invalid source", resource.ID)
-		}
-		if u.Scheme != "" {
-			if u.Scheme != "https" || u.Host == "" || u.User != nil || u.Opaque != "" {
-				return fmt.Errorf("resource %q source must be an HTTPS URL without credentials", resource.ID)
-			}
-		} else if strings.ContainsRune(resource.URL, '\x00') || strings.TrimSpace(resource.URL) == "" {
-			return fmt.Errorf("resource %q has invalid local source path", resource.ID)
+		if err := validateSource(resource); err != nil {
+			return err
 		}
 		if resource.Kind == config.ResourceGeoIP || resource.Kind == config.ResourceGeoSite || resource.Kind == config.ResourceMMDB {
 			name := filename(resource)
@@ -315,6 +307,27 @@ func (r *Registry) validateSnapshot(snapshot config.Snapshot) error {
 			}
 			destinations[name] = resource.ID
 		}
+	}
+	return nil
+}
+
+// validateSource accepts an HTTPS URL or a local path. An absolute path is
+// recognized before URL parsing, where a Windows drive letter reads as a scheme.
+func validateSource(resource config.Resource) error {
+	if !filepath.IsAbs(resource.URL) {
+		u, err := url.Parse(resource.URL)
+		if err != nil {
+			return fmt.Errorf("resource %q has invalid source", resource.ID)
+		}
+		if u.Scheme != "" {
+			if u.Scheme != "https" || u.Host == "" || u.User != nil || u.Opaque != "" {
+				return fmt.Errorf("resource %q source must be an HTTPS URL without credentials", resource.ID)
+			}
+			return nil
+		}
+	}
+	if strings.ContainsRune(resource.URL, '\x00') || strings.TrimSpace(resource.URL) == "" {
+		return fmt.Errorf("resource %q has invalid local source path", resource.ID)
 	}
 	return nil
 }
