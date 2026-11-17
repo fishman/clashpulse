@@ -96,3 +96,7 @@ cmd/clashpulse -> app -> core -> mihomo
 - 代码与项目散文使用 ASCII，注释只解释非显然的约束、安全边界或权衡。
 - 新增依赖需审阅：上游活跃、许可证与来源清晰、用途单一、版本精确、传递依赖与安全审查通过，并接受移除或升级方案。优先标准库与已有依赖。
 - 未经用户明确批准，不添加遥测、崩溃上报、云后端、自动依赖更新或订阅分享。
+
+## 许可证
+
+ClashPulse 采用 [Apache License 2.0](LICENSE) 许可。所有内置 Go 模块的第三方声明见 [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt)。

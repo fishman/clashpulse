@@ -78,3 +78,7 @@ The tray's Proxies menu selects a member of an active managed `select` group; it
 First start seeds `config.toml`, `subscriptions.toml`, `resources.toml`, and `filters.toml` in the platform config directory (`~/.config/clashpulse` on Linux unless `$XDG_CONFIG_HOME` is set). The four reviewed data sources are enabled by default; the exact previous disabled resource seed is migrated once, while customized resource files are left alone. Resources download during validated profile refresh/activation or `refresh resource`; `download subscription` remains profile-only. The `cn` list is downloaded but not routed until configured. Subscription and filter examples remain commented out.
 
 Proxy-delay tests default to Clash Verge's `http://cp.cloudflare.com/generate_204`, through Mihomo. Plain HTTP can be intercepted; change the URL in Settings if that matters.
+
+## License
+
+ClashPulse is licensed under the [Apache License 2.0](LICENSE). Third-party notices for every bundled Go module are in [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt).

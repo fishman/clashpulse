@@ -54,7 +54,7 @@ jobs:
           case "${{ matrix.target }}" in
             linux)
               bash "$a" "build ${{ matrix.target }}" go build -trimpath -ldflags "$ldflags" -o package/clashpulse ./cmd/clashpulse
-              cp README.md THIRD_PARTY_LICENSES.txt clashpulse.desktop package/
+              cp README.md LICENSE THIRD_PARTY_LICENSES.txt clashpulse.desktop package/
               tar -czf "dist/$name.tar.gz" -C package .
               ;;
             darwin)
@@ -62,12 +62,12 @@ jobs:
               mkdir -p "$bundle/MacOS" "$bundle/Resources"
               bash "$a" "build ${{ matrix.target }}" go build -trimpath -ldflags "$ldflags" -o "$bundle/MacOS/clashpulse" ./cmd/clashpulse
               printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<plist version="1.0"><dict>' '<key>CFBundleIdentifier</key><string>io.github.fishman.clashpulse</string>' '<key>CFBundleName</key><string>ClashPulse</string>' '<key>CFBundleExecutable</key><string>clashpulse</string>' "<key>CFBundleShortVersionString</key><string>${VERSION#v}</string>" '<key>CFBundlePackageType</key><string>APPL</string>' '</dict></plist>' > "$bundle/Info.plist"
-              cp README.md THIRD_PARTY_LICENSES.txt "$bundle/Resources/"
+              cp README.md LICENSE THIRD_PARTY_LICENSES.txt "$bundle/Resources/"
               tar -czf "dist/$name.tar.gz" -C package ClashPulse.app
               ;;
             windows)
               bash "$a" "build ${{ matrix.target }}" go build -trimpath -ldflags "$ldflags" -o package/clashpulse.exe ./cmd/clashpulse
-              cp README.md THIRD_PARTY_LICENSES.txt package/
+              cp README.md LICENSE THIRD_PARTY_LICENSES.txt package/
               powershell.exe -NoProfile -Command "Compress-Archive -Path 'package/*' -DestinationPath 'dist/$name.zip'"
               ;;
           esac
