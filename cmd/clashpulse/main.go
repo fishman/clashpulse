@@ -14,7 +14,8 @@ import (
 	"github.com/fishman/clashpulse/ui"
 )
 
-const version = "clashpulse dev"
+// version is set by release builds with -ldflags "-X 'main.version=clashpulse vX.Y.Z'".
+var version = "clashpulse dev"
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

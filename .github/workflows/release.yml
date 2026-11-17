@@ -1,0 +1,38 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      version: ${{ github.ref_name }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS && cat SHA256SUMS
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "ClashPulse $TAG" \
+            --generate-notes \
+            --notes "Unsigned native builds for Linux (amd64), macOS (Apple silicon), and Windows (amd64). Mihomo is not bundled: install it and put mihomo on PATH or select it in Settings. macOS may require removing the quarantine attribute (xattr -dr com.apple.quarantine ClashPulse.app) because the app is not notarized. Verify downloads against SHA256SUMS."
