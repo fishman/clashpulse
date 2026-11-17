@@ -17,6 +17,7 @@ import (
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/localize"
+	"github.com/fishman/clashpulse/monitor"
 )
 
 const applicationID = "io.github.fishman.clashpulse"
@@ -384,6 +385,7 @@ func (d *desktopUI) postSnapshot(snapshot core.Snapshot) {
 		if first || !reflect.DeepEqual(previous.Groups, immutable.Groups) || !reflect.DeepEqual(previous.Proxies, immutable.Proxies) {
 			d.proxyPage.update(immutable)
 		}
+		d.proxyPage.setStreamProbe(immutable.Monitor.SwitchPolicy == monitor.SwitchSteadyStream)
 		if first || !reflect.DeepEqual(previous.Subscriptions, immutable.Subscriptions) {
 			d.subPage.update(immutable.Subscriptions)
 		}
@@ -413,6 +415,7 @@ func (d *desktopUI) postDisconnected() {
 			return
 		}
 		d.connected = false
+		d.proxyPage.setStreamProbe(false)
 		d.connection.SetText(localize.T("Disconnected"))
 		// The last snapshot keeps the tray sections populated; trayMenu disables
 		// what a disconnected UI cannot serve.

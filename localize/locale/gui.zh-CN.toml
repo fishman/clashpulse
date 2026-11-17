@@ -116,6 +116,9 @@ other = "启用组自动切换"
 ["Probe group"]
 other = "测试组延迟"
 
+["Probe downloads"]
+other = "探测下载"
+
 ["Active"]
 other = "活跃"
 

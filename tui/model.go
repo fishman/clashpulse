@@ -432,6 +432,12 @@ func (m Model) HandleKey(key string) (Model, *ipc.Command, bool) {
 			return m, nil, false
 		}
 		return m, &ipc.Command{Kind: ipc.CommandManualProbe, GroupID: groupID}, false
+	case "stream_probe":
+		if m.snapshot.Snapshot.Monitor.SwitchPolicy != monitor.SwitchSteadyStream {
+			m.Notice = localize.T("Steady-stream probing is off; choose the steady_stream policy in Settings.")
+			return m, nil, false
+		}
+		return m, command(ipc.CommandStreamProbe), false
 	case "toggle_automation":
 		groupID := m.focusedGroupID()
 		if groupID != "" && !m.managedSelector(groupID) {

@@ -858,6 +858,18 @@ func TestSettingsCycleSwitchPolicySendsNextPolicy(t *testing.T) {
 	}
 }
 
+func TestProxiesStreamProbeKeyFollowsSwitchPolicy(t *testing.T) {
+	model := streamSettingsModel(t).selectTab(TabProxies)
+	if _, command, quit := model.HandleKey("d"); quit || command == nil || command.Kind != ipc.CommandStreamProbe || command.GroupID != "" {
+		t.Fatalf("steady_stream stream probe = %+v quit %t", command, quit)
+	}
+	model.snapshot.Snapshot.Monitor.SwitchPolicy = monitor.SwitchLowestLatency
+	model, command, _ := model.HandleKey("d")
+	if command != nil || model.Notice != "Steady-stream probing is off; choose the steady_stream policy in Settings." {
+		t.Fatalf("lowest_latency stream probe = %+v notice %q", command, model.Notice)
+	}
+}
+
 func TestSettingsShowSwitchPolicyAndStreamWithoutURL(t *testing.T) {
 	cells := make(map[string][]string)
 	for _, row := range streamSettingsModel(t).Rows() {

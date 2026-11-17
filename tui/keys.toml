@@ -29,6 +29,7 @@
 [schemes.default.proxies]
 "r" = { fun = "manual_probe", desc = "probe focused group", show = true }
 "a" = { fun = "toggle_automation", desc = "toggle focused group automation", show = true }
+"d" = { fun = "stream_probe", desc = "probe downloads through nodes now", show = true }
 
 [schemes.default.subscriptions]
 "r" = { fun = "refresh_subscription", desc = "refresh subscription", show = true }

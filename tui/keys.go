@@ -93,7 +93,7 @@ func knownAction(action string) bool {
 	switch action {
 	case "quit", "next_tab", "prev_tab", "move_up", "move_down", "activate", "cancel_modal", "toggle_log", "log_older", "log_newer", "log_page_older", "log_page_newer", "log_oldest", "log_newest", "log_close", "toggle_help", "help_up", "help_down", "help_page_up", "help_page_down", "help_home", "help_end", "help_close",
 		"tab_overview", "tab_proxies", "tab_subscriptions", "tab_filters", "tab_resources", "tab_settings",
-		"start", "stop", "reload_configuration", "test_notification", "manual_probe", "toggle_automation",
+		"start", "stop", "reload_configuration", "test_notification", "manual_probe", "stream_probe", "toggle_automation",
 		"refresh_subscription", "activate_subscription", "new_subscription", "edit_subscription", "delete_subscription", "refresh_filter", "refresh_resource", "new_filter", "edit_filter", "new_resource", "edit_resource",
 		"system_proxy_enable", "system_proxy_disable", "edit_mixed_port", "cycle_proxy_mode", "monitor_enable", "monitor_disable", "edit_monitor_interval", "edit_alert_threshold", "edit_binary",
 		"edit_monitor_url", "edit_monitor_timeout", "edit_monitor_concurrency", "edit_monitor_threshold", "edit_monitor_bad_samples", "edit_monitor_improvement", "edit_monitor_cooldown", "edit_monitor_jitter",

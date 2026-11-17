@@ -366,6 +366,9 @@ other = "此组的节点由 Mihomo 选择。"
 ["Select a group before requesting a probe."]
 other = "请先选择组，再请求测速。"
 
+["Steady-stream probing is off; choose the steady_stream policy in Settings."]
+other = "稳定流探测未开启；请在设置中选择 steady_stream 策略。"
+
 ["Select a group before changing automation."]
 other = "请先选择组，再更改自动化设置。"
 
@@ -825,6 +828,9 @@ other = "上一页"
 
 ["previous tab"]
 other = "上一个标签页"
+
+["probe downloads through nodes now"]
+other = "立即通过节点探测下载"
 
 ["probe focused group"]
 other = "对焦点组测速"

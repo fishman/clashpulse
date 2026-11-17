@@ -36,6 +36,7 @@ type proxyPage struct {
 	groupSelect *widget.Select
 	automation  *widget.Check
 	probe       *widget.Button
+	streamProbe *widget.Button
 	groupMode   *widget.Label
 	list        *widget.List
 	empty       *widget.Label
@@ -71,6 +72,10 @@ func newProxyPage(send sendIntent) *proxyPage {
 			p.send(ipc.Command{Kind: ipc.CommandManualProbe, GroupID: p.selectedGroupID})
 		}
 	})
+	p.streamProbe = widget.NewButton(localize.T("Probe downloads"), func() {
+		p.send(ipc.Command{Kind: ipc.CommandStreamProbe})
+	})
+	p.streamProbe.Disable()
 	p.groupMode = widget.NewLabel("")
 	p.list = widget.NewList(
 		func() int { return len(p.choices) },
@@ -125,7 +130,7 @@ func newProxyPage(send sendIntent) *proxyPage {
 		widget.NewLabelWithStyle(localize.T("Proxy groups and choices"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		p.groupSelect,
 		p.groupMode,
-		container.NewHBox(p.automation, p.probe),
+		container.NewHBox(p.automation, p.probe, p.streamProbe),
 	)
 	p.view = container.NewBorder(header, nil, nil, nil, container.NewStack(p.empty, p.list))
 	p.list.Hide()
@@ -191,6 +196,16 @@ func (p *proxyPage) updateSelectedGroup() {
 	}
 	p.list.UnselectAll()
 	p.list.Refresh()
+}
+
+// setStreamProbe offers a download round only to a connected steady-stream
+// service; the scheduler rejects it under any other policy.
+func (p *proxyPage) setStreamProbe(available bool) {
+	if available {
+		p.streamProbe.Enable()
+	} else {
+		p.streamProbe.Disable()
+	}
 }
 
 func (p *proxyPage) selectedGroup() *core.GroupSnapshot {
