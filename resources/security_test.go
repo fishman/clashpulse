@@ -62,3 +62,25 @@ func TestStageRejectsSymlinkReplacementAndPathTraversalID(t *testing.T) {
 		t.Fatal("accepted path-traversing stable ID")
 	}
 }
+
+func TestManagedHomeAcceptsAliasedAncestorButNotSymlinkedHome(t *testing.T) {
+	target := t.TempDir()
+	alias := filepath.Join(t.TempDir(), "alias")
+	if err := os.Symlink(target, alias); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	registry, err := NewRegistry(filepath.Join(alias, "resources"), localResourceClient())
+	if err != nil {
+		t.Fatalf("home under a symlinked ancestor rejected: %v", err)
+	}
+	canonical, err := filepath.EvalSymlinks(filepath.Join(target, "resources"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if registry.Home() != canonical {
+		t.Fatalf("registry home = %q, want canonical %q", registry.Home(), canonical)
+	}
+	if _, err := NewRegistry(alias, localResourceClient()); err == nil {
+		t.Fatal("accepted a managed home that is itself a symlink")
+	}
+}

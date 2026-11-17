@@ -95,19 +95,23 @@ func NewRegistry(home string, client *download.Client) (*Registry, error) {
 	if err := os.MkdirAll(absolute, 0o700); err != nil {
 		return nil, fmt.Errorf("resources: create managed home: %w", err)
 	}
-	resolved, err := filepath.EvalSymlinks(absolute)
-	if err != nil || resolved != absolute {
-		return nil, fmt.Errorf("resources: managed home must not contain symlinks")
-	}
+	// The home itself must be a real directory, but an ancestor may be a
+	// platform alias (macOS /var -> /private/var, a Windows 8.3 short name).
+	// Every managed path derives from the canonical form, so it is resolved
+	// once here and never again.
 	info, err := os.Lstat(absolute)
 	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 		return nil, fmt.Errorf("resources: managed home must be a real directory")
 	}
-	if err := os.Chmod(absolute, 0o700); err != nil {
+	canonical, err := filepath.EvalSymlinks(absolute)
+	if err != nil {
+		return nil, fmt.Errorf("resources: resolve managed home")
+	}
+	if err := os.Chmod(canonical, 0o700); err != nil {
 		return nil, fmt.Errorf("resources: secure managed home: %w", err)
 	}
 	registry := &Registry{
-		home: absolute, client: client, maxBytes: DefaultMaxBytes,
+		home: canonical, client: client, maxBytes: DefaultMaxBytes,
 		failures: make(map[string]string),
 	}
 	if err := registry.recoverTransaction(); err != nil {
@@ -116,7 +120,7 @@ func NewRegistry(home string, client *download.Client) (*Registry, error) {
 	if err := registry.removeOrphanTransactions(); err != nil {
 		return nil, err
 	}
-	active, err := loadStateFile(filepath.Join(absolute, stateFileName))
+	active, err := loadStateFile(filepath.Join(canonical, stateFileName))
 	if err != nil {
 		return nil, err
 	}
@@ -126,8 +130,8 @@ func NewRegistry(home string, client *download.Client) (*Registry, error) {
 			return nil, err
 		}
 	}
-	if active.Version == 2 && active.CommitID != "" && verifyManifestFiles(absolute, active, registry.maxBytes) == nil {
-		if err := removeLegacyGenerations(filepath.Join(absolute, legacyDirName)); err != nil {
+	if active.Version == 2 && active.CommitID != "" && verifyManifestFiles(canonical, active, registry.maxBytes) == nil {
+		if err := removeLegacyGenerations(filepath.Join(canonical, legacyDirName)); err != nil {
 			return nil, fmt.Errorf("resources: remove migrated generations: %w", err)
 		}
 	}

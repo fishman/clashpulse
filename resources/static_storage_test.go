@@ -50,7 +50,7 @@ func TestStablePathsUseResourceRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resolvedHome != filepath.Join(root, "resources") {
+	if want, err := filepath.EvalSymlinks(filepath.Join(root, "resources")); err != nil || resolvedHome != want {
 		t.Fatalf("active resource home = %q", resolvedHome)
 	}
 	for i, resource := range resources {
@@ -106,7 +106,7 @@ func TestMigrateV1Generation(t *testing.T) {
 		if readErr != nil || string(data) != string(bodies[i]) {
 			t.Fatalf("migrated %s bytes = %q, err = %v", resource.ID, data, readErr)
 		}
-		if filepath.Dir(path) != home {
+		if filepath.Dir(path) != registry.home {
 			t.Fatalf("migrated %s path = %q", resource.ID, path)
 		}
 		if got := registry.active.Resources[resource.ID]; got != states[resource.ID] {
