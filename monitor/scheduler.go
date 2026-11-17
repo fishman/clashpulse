@@ -25,6 +25,10 @@ type StreamProber interface {
 // failures, so an outage cannot turn into a continuous probe storm.
 const DialFailureProbeSpacing = 15 * time.Second
 
+// ErrStreamProbeUnavailable rejects a stream round request when the switch
+// policy does not measure steady streams.
+var ErrStreamProbeUnavailable = errors.New("monitor: steady-stream probing is not enabled")
+
 type Scheduler struct {
 	policy   Policy
 	prober   DelayProber
@@ -39,6 +43,7 @@ type Scheduler struct {
 	dialFailures  map[string]int
 	lastDialProbe map[string]time.Time
 	members       map[string]bool
+	streamRequest bool
 	wake          chan struct{}
 	started       bool
 }
@@ -134,6 +139,19 @@ func (s *Scheduler) Request(group string) error {
 		return fmt.Errorf("monitor scheduler: unknown group %q", group)
 	}
 	s.requests[group] = struct{}{}
+	s.mu.Unlock()
+	s.signal()
+	return nil
+}
+
+// RequestStream schedules a steady-stream round as soon as no other round is
+// running; a request during a stream round is absorbed by that round.
+func (s *Scheduler) RequestStream() error {
+	if s.policy.SwitchPolicy != SwitchSteadyStream {
+		return ErrStreamProbeUnavailable
+	}
+	s.mu.Lock()
+	s.streamRequest = true
 	s.mu.Unlock()
 	s.signal()
 	return nil
@@ -299,13 +317,17 @@ func (s *Scheduler) Run(ctx context.Context) error {
 	var streamSamples []StreamSample
 	var streamGeneration uint64
 	streamRound := 0
+	streamRequested := false
 
 	refresh := func() {
 		s.mu.Lock()
 		inputs := cloneGroups(s.groups)
 		requests := s.requests
 		s.requests = make(map[string]struct{})
+		streamRequest := s.streamRequest
+		s.streamRequest = false
 		s.mu.Unlock()
+		streamRequested = streamRequested || streamRequest && !streamActive
 
 		present := make(map[string]struct{}, len(inputs))
 		for _, state := range inputs {
@@ -389,7 +411,9 @@ func (s *Scheduler) Run(ctx context.Context) error {
 				}
 			}
 			active = len(activeGroups) > 0
-			if steady && !active && !streamActive && !streamNext.IsZero() && !time.Now().Before(streamNext) {
+			streamDue := !streamNext.IsZero() && !time.Now().Before(streamNext)
+			if steady && !active && !streamActive && (streamRequested || streamDue) {
+				streamRequested = false
 				groups := make([]GroupState, 0, len(runtimes))
 				histories := make(map[string]map[string][]Sample, len(runtimes))
 				for _, name := range sortedGroupNames(runtimes) {
@@ -402,7 +426,9 @@ func (s *Scheduler) Run(ctx context.Context) error {
 				s.mu.Unlock()
 				streamPending = streamTargets(groups, histories, members, s.policy.WindowSize, streamRound)
 				streamRound++
-				streamNext = time.Now().Add(s.policy.StreamInterval + s.jitter())
+				if !streamNext.IsZero() {
+					streamNext = time.Now().Add(s.policy.StreamInterval + s.jitter())
+				}
 				streamSamples = nil
 				streamActive = len(streamPending) > 0
 			}

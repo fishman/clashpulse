@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"sync"
 	"testing"
@@ -185,5 +186,59 @@ func TestStreamRoundCancelsOnStop(t *testing.T) {
 func TestNewSchedulerRequiresStreamerForSteadyStream(t *testing.T) {
 	if _, err := NewScheduler(steadySchedulerPolicy(), instantProber{}, nil, func(Batch) {}); err == nil {
 		t.Fatal("steady_stream scheduler without a streamer accepted")
+	}
+}
+
+func TestRequestStreamRunsAnImmediateRound(t *testing.T) {
+	streamer := &recordingStreamer{}
+	batches := make(chan Batch, 16)
+	policy := steadySchedulerPolicy()
+	policy.StreamInterval = time.Hour
+	scheduler, err := NewScheduler(policy, instantProber{}, streamer, func(b Batch) { batches <- b })
+	if err != nil {
+		t.Fatal(err)
+	}
+	scheduler.SetStreamMembers([]string{"alpha", "beta"})
+	if err := scheduler.SetGroups([]GroupState{{Group: "auto", Selected: "alpha", Proxies: []string{"alpha", "beta"}, ProbeEnabled: true, AutomationEnabled: true}}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- scheduler.Run(ctx) }()
+	t.Cleanup(func() { cancel(); <-done })
+	waitStreamBatch := func(what string) {
+		t.Helper()
+		deadline := time.After(5 * time.Second)
+		for {
+			select {
+			case batch := <-batches:
+				if len(batch.Streams) > 0 {
+					return
+				}
+			case <-deadline:
+				t.Fatalf("no %s stream batch", what)
+			}
+		}
+	}
+	waitStreamBatch("scheduled")
+	if err := scheduler.RequestStream(); err != nil {
+		t.Fatal(err)
+	}
+	waitStreamBatch("requested")
+	streamer.mu.Lock()
+	pulled := slices.Clone(streamer.pulled)
+	streamer.mu.Unlock()
+	if want := []string{"alpha", "beta", "alpha", "beta"}; !slices.Equal(pulled, want) {
+		t.Fatalf("pulled = %v, want %v", pulled, want)
+	}
+}
+
+func TestRequestStreamRequiresSteadyStreamPolicy(t *testing.T) {
+	scheduler, err := NewScheduler(DefaultPolicy(), instantProber{}, nil, func(Batch) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := scheduler.RequestStream(); !errors.Is(err, ErrStreamProbeUnavailable) {
+		t.Fatalf("RequestStream under %s = %v", DefaultPolicy().SwitchPolicy, err)
 	}
 }

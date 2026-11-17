@@ -134,6 +134,11 @@ func (s *runtimeService) execute(ctx context.Context, cmd ipc.Command) error {
 			return fmt.Errorf("group is unavailable")
 		}
 		return s.monitor.Request(group.Name)
+	case ipc.CommandStreamProbe:
+		if s.monitor == nil {
+			return fmt.Errorf("monitor is unavailable")
+		}
+		return s.monitor.RequestStream()
 	case ipc.CommandSelectGroup:
 		group, ok := s.groups[cmd.GroupID]
 		proxy, found := s.proxies[cmd.ChoiceID]

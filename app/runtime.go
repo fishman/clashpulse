@@ -511,6 +511,9 @@ func (s *runtimeService) reportErrorScoped(kind, sourceID string, err error) {
 	if errors.Is(err, errTunNotEnabled) {
 		message = errTunNotEnabled.Error()
 	}
+	if errors.Is(err, monitor.ErrStreamProbeUnavailable) {
+		message = streamProbeUnavailable
+	}
 	failure := core.ErrorSnapshot{Kind: kind, SourceID: sourceID, Key: kind, Message: message}
 	if message == "operation failed" && (kind == "config" || kind == "config_reload" || kind == "reload_configuration" || kind == "update_configuration" || kind == "set_dns_routing" || kind == "delete_subscription" || strings.HasPrefix(kind, "put_")) {
 		failure.Message = "configuration change failed; previous settings remain active"

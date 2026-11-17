@@ -16,7 +16,7 @@ import (
 
 const (
 	// ProtocolVersion is negotiated in the first frame on every connection.
-	ProtocolVersion uint16 = 11
+	ProtocolVersion uint16 = 12
 	// MaxFrameSize bounds both incoming and outgoing JSON frames.
 	MaxFrameSize = 1 << 20
 )
@@ -54,6 +54,8 @@ const (
 	// CommandSetAutoFastest turns automatic switching to the lowest-latency
 	// proxy on or off for every managed select group at once.
 	CommandSetAutoFastest CommandKind = "set_auto_fastest"
+	// CommandStreamProbe runs a steady-stream download round now.
+	CommandStreamProbe CommandKind = "stream_probe"
 )
 
 // Command is a deliberately narrow user-intent schema. Sensitive URLs may
@@ -211,7 +213,7 @@ func (c Command) validate() error {
 			(want != "filter" && c.FilterID != "")
 	}
 	switch c.Kind {
-	case CommandStart, CommandStop, CommandRestart, CommandReloadConfiguration, CommandTestNotification, CommandAuthorizeTun:
+	case CommandStart, CommandStop, CommandRestart, CommandReloadConfiguration, CommandTestNotification, CommandAuthorizeTun, CommandStreamProbe:
 		if c.GroupID != "" || c.ChoiceID != "" || c.Config != nil || c.Automation != nil || hasOtherTarget("") {
 			return errors.New("unexpected command fields")
 		}

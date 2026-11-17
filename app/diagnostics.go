@@ -9,8 +9,11 @@ import (
 
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/download"
+	"github.com/fishman/clashpulse/monitor"
 	"github.com/fishman/clashpulse/subscriptions"
 )
+
+const streamProbeUnavailable = "steady-stream probing is not enabled"
 
 type diagnosticEvent struct {
 	Severity, Kind, SourceID, Message string
@@ -74,6 +77,8 @@ func safeDiagnostic(kind, sourceID string, err error) diagnosticEvent {
 		event.Message = "operation timed out"
 	case errors.Is(err, context.Canceled):
 		event.Message = "operation cancelled"
+	case errors.Is(err, monitor.ErrStreamProbeUnavailable):
+		event.Message = streamProbeUnavailable
 	}
 	return event
 }

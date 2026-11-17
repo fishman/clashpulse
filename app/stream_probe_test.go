@@ -204,3 +204,46 @@ func TestSwitchPolicyChangeRendersStreamProbe(t *testing.T) {
 		t.Fatal("leaving steady_stream kept the stream probe")
 	}
 }
+
+func TestStreamProbeCommandReachesSchedulerOrExplainsPolicy(t *testing.T) {
+	// Both the persistent issue and the activity log must name the reason.
+	streamFailure := func(service *runtimeService) (issue, diagnostic string) {
+		for _, entry := range service.snapshot.Errors {
+			if entry.Kind == string(ipc.CommandStreamProbe) {
+				issue = entry.Message
+			}
+		}
+		for _, entry := range service.snapshot.Diagnostics {
+			if entry.Kind == string(ipc.CommandStreamProbe) && entry.Severity == "error" {
+				diagnostic = entry.Message
+			}
+		}
+		return issue, diagnostic
+	}
+	for _, test := range []struct {
+		policy string
+		issue  string
+	}{
+		{monitor.SwitchLowestLatency, "steady-stream probing is not enabled"},
+		{monitor.SwitchSteadyStream, ""},
+	} {
+		service := newBareRuntimeForTest(t)
+		policy := monitor.DefaultPolicy()
+		policy.SwitchPolicy = test.policy
+		scheduler, err := monitor.NewScheduler(policy, instantDelay{}, &memberStreamer{pulled: make(chan string, 1)}, func(monitor.Batch) {})
+		if err != nil {
+			t.Fatal(err)
+		}
+		service.monitor = scheduler
+		service.runIntent(context.Background(), ipc.Command{Kind: ipc.CommandStreamProbe})
+		if issue, diagnostic := streamFailure(service); issue != test.issue || diagnostic != test.issue {
+			t.Fatalf("%s stream probe issue = %q, diagnostic = %q, want %q", test.policy, issue, diagnostic, test.issue)
+		}
+	}
+}
+
+type instantDelay struct{}
+
+func (instantDelay) Delay(context.Context, string, string, time.Duration) (time.Duration, error) {
+	return time.Millisecond, nil
+}

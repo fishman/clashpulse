@@ -16,6 +16,7 @@ func TestCommandValidationBoundsIdentifiersAndSettings(t *testing.T) {
 		{Kind: CommandSetAutoFastest, Automation: &AutomationSetting{Enabled: true}},
 		{Kind: CommandUpdateConfiguration, Config: &ConfigPatch{MonitorEnabled: new(true)}},
 		{Kind: CommandManualProbe, GroupID: "main"},
+		{Kind: CommandStreamProbe},
 		{Kind: CommandSelectGroup, GroupID: "main", ChoiceID: "proxy-a"},
 		{Kind: CommandSetAutomation, GroupID: "main", Automation: &AutomationSetting{Enabled: true}},
 		{Kind: CommandRefreshSubscription, SubscriptionID: "primary"},
@@ -38,6 +39,8 @@ func TestCommandValidationBoundsIdentifiersAndSettings(t *testing.T) {
 		{Kind: CommandTestNotification, Config: &ConfigPatch{MonitorEnabled: new(true)}},
 		{Kind: CommandSetAutoFastest},
 		{Kind: CommandSetAutoFastest, GroupID: "main", Automation: &AutomationSetting{Enabled: true}},
+		{Kind: CommandStreamProbe, GroupID: "main"},
+		{Kind: CommandStreamProbe, Automation: &AutomationSetting{Enabled: true}},
 	}
 	for _, command := range invalidCommands {
 		if err := command.validate(); err == nil {

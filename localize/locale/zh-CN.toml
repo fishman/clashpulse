@@ -337,6 +337,9 @@ other = "操作已取消"
 ["operation failed"]
 other = "操作失败"
 
+["steady-stream probing is not enabled"]
+other = "稳定流探测未开启"
+
 ["recovered"]
 other = "已恢复"
 
