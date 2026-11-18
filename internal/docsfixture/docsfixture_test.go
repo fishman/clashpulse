@@ -2,15 +2,15 @@ package docsfixture
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
+	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/ipc"
 )
 
 func TestSnapshotCrossesIPCBoundary(t *testing.T) {
 	_, err := ipc.NewServer(ipc.ServerOptions{
-		Endpoint:        filepath.Join(t.TempDir(), "private", "ipc.sock"),
+		Endpoint:        localtest.Endpoint(t),
 		Handler:         func(context.Context, ipc.Command) error { return nil },
 		InitialSnapshot: Snapshot(),
 	})
