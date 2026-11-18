@@ -6,16 +6,9 @@ nav_order: 4
 
 # Configuration
 
-All ClashPulse user intent is strict, typed TOML in four shallow files.
-Each file has one purpose; there is no overlay language, no inheritance,
-and no cross-file precedence. Downloaded snapshots, conditional-request
-validators, probe history, and observed controller state are private state,
-never TOML.
-
-## Where the files live
-
-The config directory is `clashpulse` under the platform user config
-directory (Go's `os.UserConfigDir`):
+Settings live in four TOML files, one purpose each. There is no inheritance
+or cross-file precedence. Snapshots, probe history, and controller state are
+private state, not TOML.
 
 | OS | config directory |
 | --- | --- |
@@ -24,12 +17,9 @@ directory (Go's `os.UserConfigDir`):
 | Windows | `%AppData%\clashpulse` |
 
 Private state (snapshots, generated Mihomo config, cached resources, locks)
-lives in `$XDG_STATE_HOME/clashpulse`, default `~/.local/state/clashpulse`
-under your home directory.
+lives in `$XDG_STATE_HOME/clashpulse`, default `~/.local/state/clashpulse`.
 
-First start seeds all four files from the annotated examples below.
-
-## The four files
+First start seeds the files from the examples below.
 
 | file | owns |
 | --- | --- |
@@ -38,44 +28,25 @@ First start seeds all four files from the annotated examples below.
 | `resources.toml` | data resources (GeoIP, GeoSite, MMDB, rule-sets), DNS resolver sets, and DNS routes |
 | `filters.toml` | filter lists: a rule-set resource routed to a group of the active profile |
 
-A missing file is an empty section; unknown files in the directory are
-ignored. The GUI and TUI expose the same fields as the files; no setting
-exists only in a hidden form.
+A missing file is an empty section; other files in the directory are ignored.
+The GUI and TUI expose every field in these files.
 
-## Strict decoding
+## Validation and reload
 
-Each file decodes 1:1 into named typed structs. These are load errors, not
-warnings:
-
-- unknown keys
-- duplicate stable IDs
-- invalid enum values
-- malformed URLs
-- unsupported binary or resource references
-- cross-file dangling references (a filter or DNS route naming a resource
-  that does not exist)
-
-Defaults live in the program and are applied once before validation; your
-files record only what you set.
-
-## Live reload
+These are load errors: unknown keys, duplicate IDs, invalid enum values,
+malformed URLs, unsupported binary or resource references, and references to
+a resource that does not exist. Defaults live in the program, so your files
+hold only what you set.
 
 ClashPulse watches the config directory, so editors that save by atomic
-rename work. A burst of changes is debounced, then the complete file set is
-loaded and validated in the background.
+rename work. After a short debounce it loads and validates the whole file
+set. Any error keeps the running configuration and reports the file and key
+to the GUI, TUI, and IPC clients. Mihomo reloads only when its generated
+config actually changed. Overview > Reload configuration (TUI `r`) re-reads
+the files on demand.
 
-Reload is all-or-nothing: every file is parsed, defaults are applied, and
-cross-file semantics are validated before anything changes. Any error
-keeps the running configuration and reports a structured error with the
-file and key to the GUI, TUI, and IPC clients - Mihomo and the schedulers
-are not partially restarted. A valid change applies in dependency order
-(UI settings, then monitor policy, then resources and DNS, then the
-generated Mihomo config), and Mihomo reloads only when its generated
-configuration actually changed. Overview > Reload configuration (TUI `r`)
-re-reads the files on demand.
-
-Edits made in the GUI or TUI go through the same writer: a private
-temporary file, an atomic replace, then the normal full-set reload.
+GUI and TUI edits go through the same path: a private temporary file, an
+atomic replace, then the full reload.
 
 ## config.toml
 
@@ -125,10 +96,7 @@ stack = "gvisor" # gvisor | mixed | system
 dns_mode = "profile" # profile keeps the profile's DNS mode (fake-ip if unset); fake-ip | redir-host force it.
 ```
 
-TUN is Linux only. Enabling it grants `cap_net_admin` to a private Mihomo
-copy with one `pkexec` prompt; without a polkit agent, run the `sudo setcap`
-command ClashPulse shows. Switch policy and monitor settings are explained
-in [automatic switching](switching.html).
+Monitor settings are explained in [automatic switching](switching.html).
 
 ## subscriptions.toml
 
@@ -150,9 +118,7 @@ in [automatic switching](switching.html).
 # allow_invalid_tls = false        # Explicit per-subscription exception only.
 ```
 
-Subscription URLs are secrets: keep this file 0600 and its directory 0700.
-See [subscriptions and data](sources.html) for routes and refresh
-behavior.
+Routes and refresh behavior are in [subscriptions and data](sources.html).
 
 ## resources.toml
 
