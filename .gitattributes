@@ -1,3 +1,4 @@
 # Check out every file byte-for-byte on every platform. Embedded seeds and
 # test fixtures are compared by hash, so line-ending conversion changes them.
 * -text
+docs/assets/screenshots/*.png filter=lfs diff=lfs merge=lfs -text

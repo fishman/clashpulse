@@ -23,4 +23,7 @@ run: build
 tui: build
 	./clashpulse tui
 
-.PHONY: build install test vet format run tui
+screenshots:
+	go test -tags 'ci screenshots' -count=1 -run TestDocsScreenshots ./ui ./tui
+
+.PHONY: build install test vet format run tui screenshots
