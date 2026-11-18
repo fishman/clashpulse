@@ -1,0 +1,93 @@
+//go:build screenshots
+
+package ui
+
+import (
+	"image"
+	"image/color"
+	"image/draw"
+	"image/png"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/theme"
+	"github.com/fishman/clashpulse/internal/docsfixture"
+)
+
+// lightTheme pins the default theme to its light variant; the test app has
+// no desktop appearance to follow.
+type lightTheme struct{ fyne.Theme }
+
+func (l lightTheme) Color(name fyne.ThemeColorName, _ fyne.ThemeVariant) color.Color {
+	return l.Theme.Color(name, theme.VariantLight)
+}
+
+// TestDocsScreenshots builds the real window over the docs fixture and
+// captures one PNG per page. DOCS_SCREENSHOTS overrides the output directory;
+// a relative value is taken from the repository root.
+func TestDocsScreenshots(t *testing.T) {
+	dir := os.Getenv("DOCS_SCREENSHOTS")
+	if dir == "" {
+		dir = filepath.Join("docs", "assets", "screenshots")
+	}
+	if !filepath.IsAbs(dir) {
+		dir = filepath.Join("..", dir)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	app := test.NewApp()
+	defer app.Quit()
+	app.Settings().SetTheme(lightTheme{theme.DefaultTheme()})
+	window := app.NewWindow("ClashPulse")
+	view := newDesktopUI(t.Context(), "", window)
+	window.Resize(fyne.NewSize(1100, 720))
+	view.postSnapshot(docsfixture.Snapshot())
+	fyne.DoAndWait(func() {})
+
+	// The policy shot keeps only the centered dialog: the software test
+	// painter does not clip an Entry's text to an enclosing scroll, so form
+	// rows scrolled out of the dialog would otherwise paint over the page.
+	var policy image.Rectangle
+	for _, shot := range []struct {
+		name string
+		show func()
+		crop *image.Rectangle
+	}{
+		{"gui-overview.png", func() { view.showView("Overview") }, nil},
+		{"gui-proxies.png", func() { view.showView("Proxies") }, nil},
+		{"gui-subscriptions.png", func() { view.showView("Subscriptions") }, nil},
+		{"gui-settings-monitor.png", func() {
+			view.showView("Settings")
+			view.settingsPage.selectSection("Monitor")
+		}, nil},
+		{"gui-monitor-policy.png", func() {
+			dialog := view.settingsPage.monitorPolicyDialog()
+			dialog.Show()
+			size, canvas := dialog.MinSize(), window.Canvas().Size()
+			x, y := int((canvas.Width-size.Width)/2), int((canvas.Height-size.Height)/2)
+			policy = image.Rect(x, y, x+int(size.Width), y+int(size.Height))
+		}, &policy},
+	} {
+		fyne.DoAndWait(shot.show)
+		var img image.Image = window.Canvas().Capture()
+		if shot.crop != nil {
+			cropped := image.NewNRGBA(image.Rectangle{Max: shot.crop.Size()})
+			draw.Draw(cropped, cropped.Bounds(), img, shot.crop.Min, draw.Src)
+			img = cropped
+		}
+		file, err := os.Create(filepath.Join(dir, shot.name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := png.Encode(file, img); err != nil {
+			t.Fatal(err)
+		}
+		if err := file.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
