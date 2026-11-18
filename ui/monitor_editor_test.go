@@ -4,7 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"fyne.io/fyne/v2/test"
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/localize"
 	"github.com/fishman/clashpulse/monitor"
 )
@@ -159,5 +161,35 @@ func TestURLTestDelayFormSendsOnlyTypedFields(t *testing.T) {
 	}
 	if got := urlTestDelayLabel(core.MonitorSnapshot{URLTestIntervalSeconds: 600, URLTestToleranceMillis: 50}); got != "interval 10m0s, tolerance 50 ms" {
 		t.Fatalf("url-test delay label = %q", got)
+	}
+}
+
+func TestMonitorPolicyDialogFitsDesktopWindow(t *testing.T) {
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	for _, language := range []string{"en", "zh-CN"} {
+		localize.SetLanguage(language)
+		app := test.NewApp()
+		page := newSettingsPage(func(ipc.Command) {}, app.NewWindow("ClashPulse"))
+		page.update(core.BinarySnapshot{}, core.MonitorSnapshot{SwitchPolicy: monitor.SwitchSteadyStream, TestURL: "https://probe.example.com/generate_204"}, core.SystemProxySnapshot{}, core.DNSSnapshot{})
+		size := page.monitorPolicyDialog().MinSize()
+		if size.Width > monitorPolicyMaxSize.Width || size.Height > monitorPolicyMaxSize.Height {
+			t.Errorf("%s policy dialog needs %v, beyond %v", language, size, monitorPolicyMaxSize)
+		}
+		app.Quit()
+	}
+}
+
+func TestMonitorSectionShowsSwitchPolicy(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	page := newSettingsPage(func(ipc.Command) {}, app.NewWindow("ClashPulse"))
+	if !containsObject(page.sectionViews["Monitor"], page.switchPolicy) {
+		t.Fatal("switch policy is missing from the Monitor section")
+	}
+	for _, policy := range []string{monitor.SwitchSteadyStream, monitor.SwitchFailover} {
+		page.update(core.BinarySnapshot{}, core.MonitorSnapshot{SwitchPolicy: policy}, core.SystemProxySnapshot{}, core.DNSSnapshot{})
+		if want := localize.T("gui.monitor.switch-policy." + policy); page.switchPolicy.Text != want {
+			t.Fatalf("Monitor section shows %q for %s, want %q", page.switchPolicy.Text, policy, want)
+		}
 	}
 }

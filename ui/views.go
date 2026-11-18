@@ -1156,6 +1156,7 @@ type settingsPage struct {
 	threshold           *widget.Label
 	urlTestDelay        *widget.Label
 	stability           *widget.Label
+	switchPolicy        *widget.Label
 	monitor             *widget.Check
 	monitorState        core.MonitorSnapshot
 	systemProxy         *widget.Check
@@ -1191,6 +1192,7 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 	p.threshold = widget.NewLabel(localize.T("Not configured"))
 	p.urlTestDelay = widget.NewLabel(localize.T("Profile default"))
 	p.stability = widget.NewLabel("")
+	p.switchPolicy = widget.NewLabel("")
 	p.systemProxy = widget.NewCheck(localize.T("Enable system proxy"), func(enabled bool) {
 		if p.refreshing {
 			return
@@ -1303,6 +1305,7 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 			container.NewHBox(widget.NewLabel(localize.T("Monitor interval")), p.interval),
 			container.NewHBox(widget.NewLabel(localize.T("Alert threshold")), p.threshold, widget.NewButton(localize.T("Change"), p.editThreshold)),
 			widget.NewButton(localize.T("Edit probe policy"), p.editMonitorPolicy),
+			container.NewHBox(widget.NewLabel(localize.T("Switch policy")), p.switchPolicy),
 			container.NewHBox(widget.NewLabel(localize.T("Switch stability")), p.stability),
 			container.NewHBox(widget.NewLabel(localize.T("Mihomo url-test delay")), p.urlTestDelay, widget.NewButton(localize.T("Change"), p.editURLTestDelay)),
 			widget.NewButton(localize.T("Send test notification"), func() {
@@ -1436,6 +1439,7 @@ func (p *settingsPage) update(binary core.BinarySnapshot, monitor core.MonitorSn
 		p.threshold.SetText(monitorThresholdLabel(monitor))
 		p.urlTestDelay.SetText(urlTestDelayLabel(monitor))
 		p.stability.SetText(monitorStabilityLabel(monitor))
+		p.switchPolicy.SetText(switchPolicyLabel(monitor.SwitchPolicy))
 	}
 	if monitorChanged || proxyChanged {
 		p.refreshing = true

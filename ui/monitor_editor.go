@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 	"github.com/fishman/clashpulse/core"
@@ -198,7 +200,15 @@ func urlTestDelayPatch(interval, tolerance string) (*ipc.ConfigPatch, error) {
 	return patch, nil
 }
 
+// monitorPolicyMaxSize bounds the policy dialog so it never forces the window
+// wider or taller; the form scrolls inside it.
+var monitorPolicyMaxSize = fyne.NewSize(760, 600)
+
 func (p *settingsPage) editMonitorPolicy() {
+	p.monitorPolicyDialog().Show()
+}
+
+func (p *settingsPage) monitorPolicyDialog() dialog.Dialog {
 	state := p.monitorState
 	items := make([]*widget.FormItem, 0, 16)
 	add := func(label, value string) *widget.Entry {
@@ -207,11 +217,16 @@ func (p *settingsPage) editMonitorPolicy() {
 		items = append(items, widget.NewFormItem(label, field))
 		return field
 	}
+	wrapped := func(text string) *widget.Label {
+		label := widget.NewLabel(text)
+		label.Wrapping = fyne.TextWrapWord
+		return label
+	}
 	testURL := add(localize.T("Probe URL"), state.TestURL)
-	items = append(items, widget.NewFormItem(localize.T("Warning"), widget.NewLabel(localize.T("Plain HTTP probes can be intercepted; use HTTPS for probe integrity."))))
+	items = append(items, widget.NewFormItem(localize.T("Warning"), wrapped(localize.T("Plain HTTP probes can be intercepted; use HTTPS for probe integrity."))))
 	policy := switchPolicySelect(state.SwitchPolicy)
 	items = append(items, widget.NewFormItem(localize.T("Switch policy"), policy))
-	items = append(items, widget.NewFormItem(localize.T("Note"), widget.NewLabel(monitorPolicyNote())))
+	items = append(items, widget.NewFormItem(localize.T("Note"), wrapped(monitorPolicyNote())))
 	interval := add(localize.T("Interval (seconds)"), strconv.FormatInt(state.IntervalSeconds, 10))
 	timeout := add(localize.T("Timeout (ms)"), strconv.FormatInt(state.TimeoutMillis, 10))
 	concurrency := add(localize.T("Concurrent probes"), strconv.Itoa(state.Concurrency))
@@ -227,7 +242,9 @@ func (p *settingsPage) editMonitorPolicy() {
 	streamURL := add(localize.T("Stream URL"), "")
 	streamURL.SetPlaceHolder(localize.T("Leave blank to keep the current stream URL"))
 	streamInterval := add(localize.T("Stream interval (seconds)"), strconv.FormatInt(state.StreamIntervalSeconds, 10))
-	dialog.NewForm(localize.T("Monitor probe policy"), localize.T("Apply"), localize.T("Cancel"), items, func(confirmed bool) {
+	form := container.NewVScroll(widget.NewForm(items...))
+	form.SetMinSize(fyne.NewSize(640, 420))
+	return dialog.NewCustomConfirm(localize.T("Monitor probe policy"), localize.T("Apply"), localize.T("Cancel"), form, func(confirmed bool) {
 		if !confirmed {
 			return
 		}
@@ -244,7 +261,7 @@ func (p *settingsPage) editMonitorPolicy() {
 			return
 		}
 		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: patch})
-	}, p.window).Show()
+	}, p.window)
 }
 
 func monitorPolicyNote() string {
