@@ -25,5 +25,6 @@ tui: build
 
 screenshots:
 	go test -tags 'ci screenshots' -count=1 -run TestDocsScreenshots ./ui ./tui
+	DOCS_SCREENSHOTS_LANG=zh-CN go test -tags 'ci screenshots' -count=1 -run TestDocsScreenshots ./tui
 
 .PHONY: build install test vet format run tui screenshots

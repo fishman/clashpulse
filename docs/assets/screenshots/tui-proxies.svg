@@ -4,46 +4,316 @@
 <circle cx="40" cy="16" r="6" fill="#f9e2af"/>
 <circle cx="60" cy="16" r="6" fill="#a6e3a1"/>
 <text x="856" y="20" fill="#7f849c" font-family="sans-serif" font-size="12" text-anchor="middle">clashpulse tui</text>
-<g transform="translate(16 46)" font-family="ui-monospace, 'JetBrains Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="14" xml:space="preserve">
+<g transform="translate(16 46)" font-family="ui-monospace, 'JetBrains Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="14">
 <rect x="0" y="0" width="109.2" height="18" fill="#313244"/>
 <rect x="109.2" y="0" width="92.4" height="18" fill="#89b4fa"/>
 <rect x="201.60000000000002" y="0" width="1478.4" height="18" fill="#313244"/>
-<text x="0" y="13.5" fill="#cdd6f4" textLength="109.2" lengthAdjust="spacingAndGlyphs"> 1 Overview  </text>
-<text x="109.2" y="13.5" fill="#1e1e2e" font-weight="bold" textLength="92.4" lengthAdjust="spacingAndGlyphs"> 2 Proxies </text>
-<text x="201.60000000000002" y="13.5" fill="#cdd6f4" textLength="1478.4" lengthAdjust="spacingAndGlyphs">  3 Subscriptions   4 Filter Lists   5 Data Resources   6 Settings                                                                                                              </text>
-<text x="0" y="31.5" fill="#7f849c" textLength="1411.2" lengthAdjust="spacingAndGlyphs">Group                 Proxy                     Selected    Latency                                                                           Outcome       Automation  </text>
-<text x="0" y="49.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">Proxy                 Proxy                     Example To                                                                                                  enabled                                     </text>
-<text x="0" y="67.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">Proxy                 Example Tokyo 01                      68 ms · median 71 ms ±6 ms · 0/5 failed · 5/5 downloads · 2860 KB/s               success       enabled                                     </text>
+<text x="8.4" y="13.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">1</text>
+<text x="25.200000000000003" y="13.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">Overview</text>
+<text x="117.60000000000001" y="13.5" fill="#1e1e2e" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">2</text>
+<text x="134.4" y="13.5" fill="#1e1e2e" font-weight="bold" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Proxies</text>
+<text x="218.4" y="13.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">3</text>
+<text x="235.20000000000002" y="13.5" fill="#cdd6f4" textLength="109.2" lengthAdjust="spacingAndGlyphs">Subscriptions</text>
+<text x="369.6" y="13.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">4</text>
+<text x="386.40000000000003" y="13.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">Filter</text>
+<text x="445.20000000000005" y="13.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">Lists</text>
+<text x="512.4" y="13.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">5</text>
+<text x="529.2" y="13.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">Data</text>
+<text x="571.2" y="13.5" fill="#cdd6f4" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">Resources</text>
+<text x="672" y="13.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">6</text>
+<text x="688.8000000000001" y="13.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">Settings</text>
+<text x="0" y="31.5" fill="#7f849c" textLength="42" lengthAdjust="spacingAndGlyphs">Group</text>
+<text x="184.8" y="31.5" fill="#7f849c" textLength="42" lengthAdjust="spacingAndGlyphs">Proxy</text>
+<text x="403.20000000000005" y="31.5" fill="#7f849c" textLength="67.2" lengthAdjust="spacingAndGlyphs">Selected</text>
+<text x="504" y="31.5" fill="#7f849c" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Latency</text>
+<text x="1192.8" y="31.5" fill="#7f849c" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Outcome</text>
+<text x="1310.4" y="31.5" fill="#7f849c" textLength="84" lengthAdjust="spacingAndGlyphs">Automation</text>
+<text x="0" y="49.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">Proxy</text>
+<text x="184.8" y="49.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">Proxy</text>
+<text x="403.20000000000005" y="49.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="470.40000000000003" y="49.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">To</text>
+<text x="1310.4" y="49.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">enabled</text>
+<text x="0" y="67.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">Proxy</text>
+<text x="184.8" y="67.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="252" y="67.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">Tokyo</text>
+<text x="302.40000000000003" y="67.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">01</text>
+<text x="504" y="67.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">68</text>
+<text x="529.2" y="67.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="554.4" y="67.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="571.2" y="67.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">median</text>
+<text x="630" y="67.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">71</text>
+<text x="655.2" y="67.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="680.4" y="67.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">±6</text>
+<text x="705.6" y="67.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="730.8000000000001" y="67.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="747.6" y="67.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">0/5</text>
+<text x="781.2" y="67.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">failed</text>
+<text x="840" y="67.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="856.8000000000001" y="67.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">5/5</text>
+<text x="890.4000000000001" y="67.5" fill="#cdd6f4" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">downloads</text>
+<text x="974.4000000000001" y="67.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="991.2" y="67.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">2860</text>
+<text x="1033.2" y="67.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">KB/s</text>
+<text x="1192.8" y="67.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">success</text>
+<text x="1310.4" y="67.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">enabled</text>
 <rect x="0" y="72" width="1411.2" height="18" fill="#89b4fa"/>
-<text x="0" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="1411.2" lengthAdjust="spacingAndGlyphs">Proxy                 Example Tokyo 02          yes         74 ms · median 76 ms ±4 ms · 0/5 failed · 5/5 downloads · 3410 KB/s               success       enabled     </text>
-<text x="0" y="103.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">Proxy                 Example Singapore 01                  112 ms · median 118 ms ±31 ms · 1/5 failed · 3/5 downloads · 1240 KB/s            success       enabled                                     </text>
-<text x="0" y="121.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">Proxy                 Example Hong Kong 03                  49 ms · median 52 ms ±9 ms · 0/5 failed · 4/5 downloads · 2210 KB/s               success       enabled                                     </text>
-<text x="0" y="139.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">Proxy                 Example Frankfurt 02                  231 ms · median 236 ms ±14 ms · 0/5 failed · 4/4 downloads · 1980 KB/s            success       enabled                                     </text>
-<text x="0" y="157.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">Proxy                 Example London 01                     248 ms · median 252 ms ±18 ms · 0/5 failed · 4/4 downloads · 1720 KB/s            success       enabled                                     </text>
-<text x="0" y="175.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">Proxy                 Example Los Angeles 03                162 ms · median 171 ms ±22 ms · 1/5 failed · 3/4 downloads · 1530 KB/s            success       enabled                                     </text>
-<text x="0" y="193.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">Proxy                 Example Toronto 01                    5/5 failed · 0/3 downloads                                                        timeout       enabled                                     </text>
-<text x="0" y="211.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                GLOBAL                    Proxy                                                                                                       disabled                                    </text>
-<text x="0" y="229.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                Proxy                     yes                                                                                                         disabled                                    </text>
-<text x="0" y="247.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                DIRECT                                                                                                                                disabled                                    </text>
-<text x="0" y="265.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                REJECT                                                                                                                                disabled                                    </text>
-<text x="0" y="283.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Tokyo 01                      70 ms (mihomo)                                                                                  disabled                                    </text>
-<text x="0" y="301.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Tokyo 02                      75 ms (mihomo)                                                                                  disabled                                    </text>
-<text x="0" y="319.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Singapore 01                  109 ms (mihomo)                                                                                 disabled                                    </text>
-<text x="0" y="337.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Hong Kong 03                  50 ms (mihomo)                                                                                  disabled                                    </text>
-<text x="0" y="355.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Frankfurt 02                  228 ms (mihomo)                                                                                 disabled                                    </text>
-<text x="0" y="373.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                Example London 01                     251 ms (mihomo)                                                                                 disabled                                    </text>
-<text x="0" y="391.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Los Angeles 03                160 ms (mihomo)                                                                                 disabled                                    </text>
-<text x="0" y="409.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Toronto 01                                                                                                                    disabled                                    </text>
+<text x="0" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="42" lengthAdjust="spacingAndGlyphs">Proxy</text>
+<text x="184.8" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="252" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="42" lengthAdjust="spacingAndGlyphs">Tokyo</text>
+<text x="302.40000000000003" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="16.8" lengthAdjust="spacingAndGlyphs">02</text>
+<text x="403.20000000000005" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">yes</text>
+<text x="504" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="16.8" lengthAdjust="spacingAndGlyphs">74</text>
+<text x="529.2" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="554.4" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="571.2" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">median</text>
+<text x="630" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="16.8" lengthAdjust="spacingAndGlyphs">76</text>
+<text x="655.2" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="680.4" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="16.8" lengthAdjust="spacingAndGlyphs">±4</text>
+<text x="705.6" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="730.8000000000001" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="747.6" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">0/5</text>
+<text x="781.2" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">failed</text>
+<text x="840" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="856.8000000000001" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">5/5</text>
+<text x="890.4000000000001" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">downloads</text>
+<text x="974.4000000000001" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="991.2" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="33.6" lengthAdjust="spacingAndGlyphs">3410</text>
+<text x="1033.2" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="33.6" lengthAdjust="spacingAndGlyphs">KB/s</text>
+<text x="1192.8" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">success</text>
+<text x="1310.4" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">enabled</text>
+<text x="0" y="103.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">Proxy</text>
+<text x="184.8" y="103.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="252" y="103.5" fill="#cdd6f4" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">Singapore</text>
+<text x="336" y="103.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">01</text>
+<text x="504" y="103.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">112</text>
+<text x="537.6" y="103.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="562.8000000000001" y="103.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="579.6" y="103.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">median</text>
+<text x="638.4" y="103.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">118</text>
+<text x="672" y="103.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="697.2" y="103.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">±31</text>
+<text x="730.8000000000001" y="103.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="756" y="103.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="772.8000000000001" y="103.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">1/5</text>
+<text x="806.4000000000001" y="103.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">failed</text>
+<text x="865.2" y="103.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="882" y="103.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">3/5</text>
+<text x="915.6" y="103.5" fill="#cdd6f4" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">downloads</text>
+<text x="999.6" y="103.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="1016.4000000000001" y="103.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">1240</text>
+<text x="1058.4" y="103.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">KB/s</text>
+<text x="1192.8" y="103.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">success</text>
+<text x="1310.4" y="103.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">enabled</text>
+<text x="0" y="121.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">Proxy</text>
+<text x="184.8" y="121.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="252" y="121.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">Hong</text>
+<text x="294" y="121.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">Kong</text>
+<text x="336" y="121.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">03</text>
+<text x="504" y="121.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">49</text>
+<text x="529.2" y="121.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="554.4" y="121.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="571.2" y="121.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">median</text>
+<text x="630" y="121.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">52</text>
+<text x="655.2" y="121.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="680.4" y="121.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">±9</text>
+<text x="705.6" y="121.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="730.8000000000001" y="121.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="747.6" y="121.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">0/5</text>
+<text x="781.2" y="121.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">failed</text>
+<text x="840" y="121.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="856.8000000000001" y="121.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">4/5</text>
+<text x="890.4000000000001" y="121.5" fill="#cdd6f4" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">downloads</text>
+<text x="974.4000000000001" y="121.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="991.2" y="121.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">2210</text>
+<text x="1033.2" y="121.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">KB/s</text>
+<text x="1192.8" y="121.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">success</text>
+<text x="1310.4" y="121.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">enabled</text>
+<text x="0" y="139.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">Proxy</text>
+<text x="184.8" y="139.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="252" y="139.5" fill="#cdd6f4" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">Frankfurt</text>
+<text x="336" y="139.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">02</text>
+<text x="504" y="139.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">231</text>
+<text x="537.6" y="139.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="562.8000000000001" y="139.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="579.6" y="139.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">median</text>
+<text x="638.4" y="139.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">236</text>
+<text x="672" y="139.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="697.2" y="139.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">±14</text>
+<text x="730.8000000000001" y="139.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="756" y="139.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="772.8000000000001" y="139.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">0/5</text>
+<text x="806.4000000000001" y="139.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">failed</text>
+<text x="865.2" y="139.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="882" y="139.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">4/4</text>
+<text x="915.6" y="139.5" fill="#cdd6f4" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">downloads</text>
+<text x="999.6" y="139.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="1016.4000000000001" y="139.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">1980</text>
+<text x="1058.4" y="139.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">KB/s</text>
+<text x="1192.8" y="139.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">success</text>
+<text x="1310.4" y="139.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">enabled</text>
+<text x="0" y="157.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">Proxy</text>
+<text x="184.8" y="157.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="252" y="157.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">London</text>
+<text x="310.8" y="157.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">01</text>
+<text x="504" y="157.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">248</text>
+<text x="537.6" y="157.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="562.8000000000001" y="157.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="579.6" y="157.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">median</text>
+<text x="638.4" y="157.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">252</text>
+<text x="672" y="157.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="697.2" y="157.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">±18</text>
+<text x="730.8000000000001" y="157.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="756" y="157.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="772.8000000000001" y="157.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">0/5</text>
+<text x="806.4000000000001" y="157.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">failed</text>
+<text x="865.2" y="157.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="882" y="157.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">4/4</text>
+<text x="915.6" y="157.5" fill="#cdd6f4" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">downloads</text>
+<text x="999.6" y="157.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="1016.4000000000001" y="157.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">1720</text>
+<text x="1058.4" y="157.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">KB/s</text>
+<text x="1192.8" y="157.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">success</text>
+<text x="1310.4" y="157.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">enabled</text>
+<text x="0" y="175.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">Proxy</text>
+<text x="184.8" y="175.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="252" y="175.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">Los</text>
+<text x="285.6" y="175.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Angeles</text>
+<text x="352.8" y="175.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">03</text>
+<text x="504" y="175.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">162</text>
+<text x="537.6" y="175.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="562.8000000000001" y="175.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="579.6" y="175.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">median</text>
+<text x="638.4" y="175.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">171</text>
+<text x="672" y="175.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="697.2" y="175.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">±22</text>
+<text x="730.8000000000001" y="175.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="756" y="175.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="772.8000000000001" y="175.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">1/5</text>
+<text x="806.4000000000001" y="175.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">failed</text>
+<text x="865.2" y="175.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="882" y="175.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">3/4</text>
+<text x="915.6" y="175.5" fill="#cdd6f4" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">downloads</text>
+<text x="999.6" y="175.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="1016.4000000000001" y="175.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">1530</text>
+<text x="1058.4" y="175.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">KB/s</text>
+<text x="1192.8" y="175.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">success</text>
+<text x="1310.4" y="175.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">enabled</text>
+<text x="0" y="193.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">Proxy</text>
+<text x="184.8" y="193.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="252" y="193.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Toronto</text>
+<text x="319.2" y="193.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">01</text>
+<text x="504" y="193.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">5/5</text>
+<text x="537.6" y="193.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">failed</text>
+<text x="596.4" y="193.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="613.2" y="193.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">0/3</text>
+<text x="646.8000000000001" y="193.5" fill="#cdd6f4" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">downloads</text>
+<text x="1192.8" y="193.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">timeout</text>
+<text x="1310.4" y="193.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">enabled</text>
+<text x="0" y="211.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">GLOBAL</text>
+<text x="184.8" y="211.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">GLOBAL</text>
+<text x="403.20000000000005" y="211.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">Proxy</text>
+<text x="1310.4" y="211.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">disabled</text>
+<text x="0" y="229.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">GLOBAL</text>
+<text x="184.8" y="229.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">Proxy</text>
+<text x="403.20000000000005" y="229.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">yes</text>
+<text x="1310.4" y="229.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">disabled</text>
+<text x="0" y="247.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">GLOBAL</text>
+<text x="184.8" y="247.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">DIRECT</text>
+<text x="1310.4" y="247.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">disabled</text>
+<text x="0" y="265.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">GLOBAL</text>
+<text x="184.8" y="265.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">REJECT</text>
+<text x="1310.4" y="265.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">disabled</text>
+<text x="0" y="283.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">GLOBAL</text>
+<text x="184.8" y="283.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="252" y="283.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">Tokyo</text>
+<text x="302.40000000000003" y="283.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">01</text>
+<text x="504" y="283.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">70</text>
+<text x="529.2" y="283.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="554.4" y="283.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">(mihomo)</text>
+<text x="1310.4" y="283.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">disabled</text>
+<text x="0" y="301.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">GLOBAL</text>
+<text x="184.8" y="301.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="252" y="301.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">Tokyo</text>
+<text x="302.40000000000003" y="301.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">02</text>
+<text x="504" y="301.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">75</text>
+<text x="529.2" y="301.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="554.4" y="301.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">(mihomo)</text>
+<text x="1310.4" y="301.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">disabled</text>
+<text x="0" y="319.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">GLOBAL</text>
+<text x="184.8" y="319.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="252" y="319.5" fill="#cdd6f4" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">Singapore</text>
+<text x="336" y="319.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">01</text>
+<text x="504" y="319.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">109</text>
+<text x="537.6" y="319.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="562.8000000000001" y="319.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">(mihomo)</text>
+<text x="1310.4" y="319.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">disabled</text>
+<text x="0" y="337.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">GLOBAL</text>
+<text x="184.8" y="337.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="252" y="337.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">Hong</text>
+<text x="294" y="337.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">Kong</text>
+<text x="336" y="337.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">03</text>
+<text x="504" y="337.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">50</text>
+<text x="529.2" y="337.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="554.4" y="337.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">(mihomo)</text>
+<text x="1310.4" y="337.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">disabled</text>
+<text x="0" y="355.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">GLOBAL</text>
+<text x="184.8" y="355.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="252" y="355.5" fill="#cdd6f4" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">Frankfurt</text>
+<text x="336" y="355.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">02</text>
+<text x="504" y="355.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">228</text>
+<text x="537.6" y="355.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="562.8000000000001" y="355.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">(mihomo)</text>
+<text x="1310.4" y="355.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">disabled</text>
+<text x="0" y="373.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">GLOBAL</text>
+<text x="184.8" y="373.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="252" y="373.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">London</text>
+<text x="310.8" y="373.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">01</text>
+<text x="504" y="373.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">251</text>
+<text x="537.6" y="373.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="562.8000000000001" y="373.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">(mihomo)</text>
+<text x="1310.4" y="373.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">disabled</text>
+<text x="0" y="391.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">GLOBAL</text>
+<text x="184.8" y="391.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="252" y="391.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">Los</text>
+<text x="285.6" y="391.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Angeles</text>
+<text x="352.8" y="391.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">03</text>
+<text x="504" y="391.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">160</text>
+<text x="537.6" y="391.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="562.8000000000001" y="391.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">(mihomo)</text>
+<text x="1310.4" y="391.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">disabled</text>
+<text x="0" y="409.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">GLOBAL</text>
+<text x="184.8" y="409.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="252" y="409.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Toronto</text>
+<text x="319.2" y="409.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">01</text>
+<text x="1310.4" y="409.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">disabled</text>
 <rect x="814.8000000000001" y="576" width="865.2" height="18" fill="#313244"/>
-<text x="0" y="589.5" fill="#7f849c" textLength="814.8000000000001" lengthAdjust="spacingAndGlyphs"> a toggle focused group automation   d probe downloads through nodes now   r probe focused group </text>
+<text x="8.4" y="589.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs">a</text>
+<text x="25.200000000000003" y="589.5" fill="#7f849c" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">toggle</text>
+<text x="84" y="589.5" fill="#7f849c" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">focused</text>
+<text x="151.20000000000002" y="589.5" fill="#7f849c" textLength="42" lengthAdjust="spacingAndGlyphs">group</text>
+<text x="201.60000000000002" y="589.5" fill="#7f849c" textLength="84" lengthAdjust="spacingAndGlyphs">automation</text>
+<text x="310.8" y="589.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs">d</text>
+<text x="327.6" y="589.5" fill="#7f849c" textLength="42" lengthAdjust="spacingAndGlyphs">probe</text>
+<text x="378" y="589.5" fill="#7f849c" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">downloads</text>
+<text x="462" y="589.5" fill="#7f849c" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">through</text>
+<text x="529.2" y="589.5" fill="#7f849c" textLength="42" lengthAdjust="spacingAndGlyphs">nodes</text>
+<text x="579.6" y="589.5" fill="#7f849c" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">now</text>
+<text x="630" y="589.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs">r</text>
+<text x="646.8000000000001" y="589.5" fill="#7f849c" textLength="42" lengthAdjust="spacingAndGlyphs">probe</text>
+<text x="697.2" y="589.5" fill="#7f849c" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">focused</text>
+<text x="764.4" y="589.5" fill="#7f849c" textLength="42" lengthAdjust="spacingAndGlyphs">group</text>
 <rect x="0" y="594" width="126" height="18" fill="#a6e3a1"/>
 <rect x="126" y="594" width="8.4" height="18" fill="#313244"/>
 <rect x="134.4" y="594" width="218.4" height="18" fill="#89b4fa"/>
 <rect x="352.8" y="594" width="8.4" height="18" fill="#313244"/>
 <rect x="361.2" y="594" width="100.80000000000001" height="18" fill="#f9e2af"/>
 <rect x="462" y="594" width="1218" height="18" fill="#313244"/>
-<text x="0" y="607.5" fill="#1e1e2e" font-weight="bold" textLength="126" lengthAdjust="spacingAndGlyphs"> IPC connected </text>
-<text x="134.4" y="607.5" fill="#1e1e2e" textLength="218.4" lengthAdjust="spacingAndGlyphs"> profile Example Provider </text>
-<text x="361.2" y="607.5" fill="#1e1e2e" textLength="100.80000000000001" lengthAdjust="spacingAndGlyphs"> Jobs: idle </text>
+<text x="8.4" y="607.5" fill="#1e1e2e" font-weight="bold" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">IPC</text>
+<text x="42" y="607.5" fill="#1e1e2e" font-weight="bold" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">connected</text>
+<text x="142.8" y="607.5" fill="#1e1e2e" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">profile</text>
+<text x="210" y="607.5" fill="#1e1e2e" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="277.2" y="607.5" fill="#1e1e2e" textLength="67.2" lengthAdjust="spacingAndGlyphs">Provider</text>
+<text x="369.6" y="607.5" fill="#1e1e2e" textLength="42" lengthAdjust="spacingAndGlyphs">Jobs:</text>
+<text x="420" y="607.5" fill="#1e1e2e" textLength="33.6" lengthAdjust="spacingAndGlyphs">idle</text>
 </g>
 </svg>

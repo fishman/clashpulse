@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="674" viewBox="0 0 1040 674">
+<rect width="1040" height="674" rx="10" fill="#1e1e2e" stroke="#45475a"/>
+<circle cx="20" cy="16" r="6" fill="#f38ba8"/>
+<circle cx="40" cy="16" r="6" fill="#f9e2af"/>
+<circle cx="60" cy="16" r="6" fill="#a6e3a1"/>
+<text x="520" y="20" fill="#7f849c" font-family="sans-serif" font-size="12" text-anchor="middle">clashpulse tui</text>
+<g transform="translate(16 46)" font-family="ui-monospace, 'JetBrains Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="14">
+<rect x="0" y="0" width="445.20000000000005" height="18" fill="#313244"/>
+<rect x="445.20000000000005" y="0" width="67.2" height="18" fill="#89b4fa"/>
+<rect x="512.4" y="0" width="495.6" height="18" fill="#313244"/>
+<text x="8.4" y="13.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">1</text>
+<text x="25.200000000000003" y="13.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">概览</text>
+<text x="84" y="13.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">2</text>
+<text x="100.80000000000001" y="13.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">代理</text>
+<text x="159.6" y="13.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">3</text>
+<text x="176.4" y="13.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">订阅</text>
+<text x="235.20000000000002" y="13.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">4</text>
+<text x="252" y="13.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">过滤列表</text>
+<text x="344.40000000000003" y="13.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">5</text>
+<text x="361.2" y="13.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">数据资源</text>
+<text x="453.6" y="13.5" fill="#1e1e2e" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">6</text>
+<text x="470.40000000000003" y="13.5" fill="#1e1e2e" font-weight="bold" textLength="33.6" lengthAdjust="spacingAndGlyphs">设置</text>
+<text x="0" y="31.5" fill="#7f849c" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">设置项</text>
+<text x="252" y="31.5" fill="#7f849c" textLength="16.8" lengthAdjust="spacingAndGlyphs">值</text>
+<text x="806.4000000000001" y="31.5" fill="#7f849c" textLength="33.6" lengthAdjust="spacingAndGlyphs">操作</text>
+<text x="0" y="49.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">Mihomo</text>
+<text x="58.800000000000004" y="49.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">内核</text>
+<text x="252" y="49.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">system</text>
+<text x="806.4000000000001" y="49.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">b</text>
+<text x="0" y="67.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">系统代理</text>
+<text x="252" y="67.5" fill="#cdd6f4" textLength="218.4" lengthAdjust="spacingAndGlyphs">请求状态：是；启用状态：是</text>
+<text x="806.4000000000001" y="67.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">d</text>
+<text x="0" y="85.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">混合端口</text>
+<text x="252" y="85.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">7899</text>
+<text x="806.4000000000001" y="85.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">P</text>
+<text x="0" y="103.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">代理模式</text>
+<text x="252" y="103.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">规则</text>
+<text x="806.4000000000001" y="103.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">R</text>
+<text x="0" y="121.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">延迟监测</text>
+<text x="252" y="121.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">已启用</text>
+<text x="806.4000000000001" y="121.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">n</text>
+<text x="0" y="139.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">TUN</text>
+<text x="252" y="139.5" fill="#cdd6f4" textLength="319.2" lengthAdjust="spacingAndGlyphs">请求状态：否；启用状态：否；权限：就绪</text>
+<text x="806.4000000000001" y="139.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">U</text>
+<text x="0" y="157.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">TUN</text>
+<text x="33.6" y="157.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">协议栈</text>
+<text x="252" y="157.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">mixed</text>
+<text x="806.4000000000001" y="157.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">S</text>
+<text x="0" y="175.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">TUN</text>
+<text x="33.6" y="175.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">DNS</text>
+<text x="67.2" y="175.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">模式</text>
+<text x="252" y="175.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">fake-ip</text>
+<text x="806.4000000000001" y="175.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">M</text>
+<text x="0" y="193.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">监控测试</text>
+<text x="75.60000000000001" y="193.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">URL</text>
+<text x="252" y="193.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">已配置</text>
+<text x="806.4000000000001" y="193.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">u</text>
+<rect x="0" y="198" width="940.8000000000001" height="18" fill="#89b4fa"/>
+<text x="0" y="211.5" fill="#1e1e2e" font-weight="bold" textLength="67.2" lengthAdjust="spacingAndGlyphs">切换策略</text>
+<text x="252" y="211.5" fill="#1e1e2e" font-weight="bold" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">稳定流</text>
+<text x="806.4000000000001" y="211.5" fill="#1e1e2e" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">y</text>
+<text x="0" y="229.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">流测试</text>
+<text x="58.800000000000004" y="229.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">URL</text>
+<text x="252" y="229.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">已配置</text>
+<text x="806.4000000000001" y="229.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">O</text>
+<text x="0" y="247.5" fill="#cdd6f4" textLength="84" lengthAdjust="spacingAndGlyphs">流探测间隔</text>
+<text x="252" y="247.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">300</text>
+<text x="285.6" y="247.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">秒</text>
+<text x="806.4000000000001" y="247.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">I</text>
+<text x="0" y="265.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">监测间隔</text>
+<text x="252" y="265.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">60</text>
+<text x="277.2" y="265.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">秒</text>
+<text x="806.4000000000001" y="265.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">i</text>
+<text x="0" y="283.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">监控超时</text>
+<text x="252" y="283.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">5000</text>
+<text x="294" y="283.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">毫秒</text>
+<text x="806.4000000000001" y="283.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">o</text>
+<text x="0" y="301.5" fill="#cdd6f4" textLength="84" lengthAdjust="spacingAndGlyphs">监控并发数</text>
+<text x="252" y="301.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">3</text>
+<text x="806.4000000000001" y="301.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">c</text>
+<text x="0" y="319.5" fill="#cdd6f4" textLength="100.80000000000001" lengthAdjust="spacingAndGlyphs">监控延迟阈值</text>
+<text x="252" y="319.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">800</text>
+<text x="285.6" y="319.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">毫秒</text>
+<text x="806.4000000000001" y="319.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">h</text>
+<text x="0" y="337.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">告警阈值</text>
+<text x="252" y="337.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">250</text>
+<text x="285.6" y="337.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">毫秒</text>
+<text x="806.4000000000001" y="337.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">t</text>
+<text x="0" y="355.5" fill="#cdd6f4" textLength="117.60000000000001" lengthAdjust="spacingAndGlyphs">连续异常样本数</text>
+<text x="252" y="355.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">3</text>
+<text x="806.4000000000001" y="355.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">s</text>
+<text x="0" y="373.5" fill="#cdd6f4" textLength="100.80000000000001" lengthAdjust="spacingAndGlyphs">最小改善幅度</text>
+<text x="252" y="373.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">100</text>
+<text x="285.6" y="373.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">毫秒</text>
+<text x="806.4000000000001" y="373.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">p</text>
+<text x="0" y="391.5" fill="#cdd6f4" textLength="100.80000000000001" lengthAdjust="spacingAndGlyphs">监控冷却时间</text>
+<text x="252" y="391.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">300</text>
+<text x="285.6" y="391.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">秒</text>
+<text x="806.4000000000001" y="391.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">z</text>
+<text x="0" y="409.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">监控抖动</text>
+<text x="252" y="409.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">10000</text>
+<text x="302.40000000000003" y="409.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">毫秒</text>
+<text x="806.4000000000001" y="409.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">w</text>
+<text x="0" y="427.5" fill="#cdd6f4" textLength="100.80000000000001" lengthAdjust="spacingAndGlyphs">统计窗口大小</text>
+<text x="252" y="427.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">5</text>
+<text x="806.4000000000001" y="427.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">W</text>
+<text x="0" y="445.5" fill="#cdd6f4" textLength="151.20000000000002" lengthAdjust="spacingAndGlyphs">候选节点最少样本数</text>
+<text x="252" y="445.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">3</text>
+<text x="806.4000000000001" y="445.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">C</text>
+<text x="0" y="463.5" fill="#cdd6f4" textLength="100.80000000000001" lengthAdjust="spacingAndGlyphs">最大失败次数</text>
+<text x="252" y="463.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">2</text>
+<text x="806.4000000000001" y="463.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">f</text>
+<text x="0" y="481.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">DNS</text>
+<text x="33.6" y="481.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">监听地址</text>
+<text x="252" y="481.5" fill="#cdd6f4" textLength="117.60000000000001" lengthAdjust="spacingAndGlyphs">127.0.0.1:1053</text>
+<text x="806.4000000000001" y="481.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">l</text>
+<text x="0" y="499.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">DNS</text>
+<text x="33.6" y="499.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">解析器组</text>
+<text x="109.2" y="499.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">default</text>
+<text x="252" y="499.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">DNSCrypt</text>
+<text x="319.2" y="499.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">：否；</text>
+<text x="369.6" y="499.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">2</text>
+<text x="386.40000000000003" y="499.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">个端点</text>
+<text x="806.4000000000001" y="499.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">g</text>
+<text x="0" y="517.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">DNS</text>
+<text x="33.6" y="517.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">路由</text>
+<text x="75.60000000000001" y="517.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">suffix</text>
+<text x="134.4" y="517.5" fill="#cdd6f4" textLength="100.80000000000001" lengthAdjust="spacingAndGlyphs">corp.invalid</text>
+<text x="252" y="517.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">解析器</text>
+<text x="310.8" y="517.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">default</text>
+<text x="806.4000000000001" y="517.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">g</text>
+<text x="8.4" y="589.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs">A</text>
+<text x="25.200000000000003" y="589.5" fill="#7f849c" textLength="33.6" lengthAdjust="spacingAndGlyphs">授权</text>
+<text x="67.2" y="589.5" fill="#7f849c" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">TUN</text>
+<text x="100.80000000000001" y="589.5" fill="#7f849c" textLength="33.6" lengthAdjust="spacingAndGlyphs">权限</text>
+<text x="159.6" y="589.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs">C</text>
+<text x="176.4" y="589.5" fill="#7f849c" textLength="184.8" lengthAdjust="spacingAndGlyphs">设置候选节点最少样本数</text>
+<text x="386.40000000000003" y="589.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs">D</text>
+<text x="403.20000000000005" y="589.5" fill="#7f849c" textLength="33.6" lengthAdjust="spacingAndGlyphs">停用</text>
+<text x="445.20000000000005" y="589.5" fill="#7f849c" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">TUN</text>
+<text x="495.6" y="589.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs">I</text>
+<text x="512.4" y="589.5" fill="#7f849c" textLength="168" lengthAdjust="spacingAndGlyphs">设置流探测间隔（秒）</text>
+<text x="705.6" y="589.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs">M</text>
+<text x="722.4" y="589.5" fill="#7f849c" textLength="33.6" lengthAdjust="spacingAndGlyphs">设置</text>
+<text x="764.4" y="589.5" fill="#7f849c" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">TUN</text>
+<text x="798" y="589.5" fill="#7f849c" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">DNS</text>
+<text x="831.6" y="589.5" fill="#7f849c" textLength="33.6" lengthAdjust="spacingAndGlyphs">模式</text>
+<text x="890.4000000000001" y="589.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs">O</text>
+<text x="907.2" y="589.5" fill="#7f849c" textLength="84" lengthAdjust="spacingAndGlyphs">设置流测试</text>
+<text x="999.6" y="589.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs">U</text>
+<rect x="0" y="594" width="100.80000000000001" height="18" fill="#a6e3a1"/>
+<rect x="100.80000000000001" y="594" width="8.4" height="18" fill="#313244"/>
+<rect x="109.2" y="594" width="201.60000000000002" height="18" fill="#89b4fa"/>
+<rect x="310.8" y="594" width="8.4" height="18" fill="#313244"/>
+<rect x="319.2" y="594" width="100.80000000000001" height="18" fill="#f9e2af"/>
+<rect x="420" y="594" width="588" height="18" fill="#313244"/>
+<text x="8.4" y="607.5" fill="#1e1e2e" font-weight="bold" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">IPC</text>
+<text x="42" y="607.5" fill="#1e1e2e" font-weight="bold" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">已连接</text>
+<text x="117.60000000000001" y="607.5" fill="#1e1e2e" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">配置：</text>
+<text x="168" y="607.5" fill="#1e1e2e" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="235.20000000000002" y="607.5" fill="#1e1e2e" textLength="67.2" lengthAdjust="spacingAndGlyphs">Provider</text>
+<text x="327.6" y="607.5" fill="#1e1e2e" textLength="84" lengthAdjust="spacingAndGlyphs">任务：空闲</text>
+</g>
+</svg>

@@ -6,15 +6,13 @@ nav_order: 6
 
 # Subscriptions and data
 
-ClashPulse never edits a source profile. A subscription is an immutable
-remote input plus private metadata and a last-known-good snapshot; filter
-lists, data resources, and DNS routes are rendered into the generated
-Mihomo configuration alongside it.
+ClashPulse never edits a source profile. It keeps a private last-known-good
+snapshot of each subscription and adds filters, data resources, and DNS
+routes in the generated Mihomo config.
 
 ## Subscriptions
 
-Add one in the GUI (Subscriptions > Add subscription), the TUI
-(Subscriptions `n`), or `subscriptions.toml`:
+Add one in the GUI, with TUI Subscriptions `n`, or in `subscriptions.toml`:
 
 ```toml
 [[subscription]]
@@ -26,68 +24,39 @@ refresh_interval = "12h"
 route = "auto"
 ```
 
-Sources are HTTPS by default. `allow_http` and `allow_invalid_tls` are
-explicit per-subscription exceptions; neither has a global switch. A URL
-with embedded `user:password@` is rejected. A download follows at most 5
-redirects, and every redirect target passes the same checks (HTTPS unless
-`allow_http`, no userinfo). Stored ETag/Last-Modified validators and a
-custom `user_agent` are sent only to the subscription's original origin.
-Response bodies are size-capped.
+HTTPS is required unless the subscription sets `allow_http`;
+`allow_invalid_tls` is the other per-subscription exception. URLs with
+`user:password@` are rejected. Up to 5 redirects are followed, each checked
+the same way. Validators and a custom `user_agent` (printable ASCII, at most
+256 bytes, default `clash-pulse`) go only to the original origin. `timeout`
+covers download, render, and validation.
 
-`user_agent` (printable ASCII, at most 256 bytes) overrides the default
-`clash-pulse` for providers that need it. `timeout` bounds the whole
-refresh: download, render, and Mihomo validation. One shared timer
-schedules every automatic refresh.
+Download (`clashpulse download subscription [id]`) stores an inactive
+snapshot without touching Mihomo. Refresh (GUI Refresh, TUI `r`,
+`clashpulse refresh`) also renders the full config and validates it with
+Mihomo, but does not switch. Activate (GUI Activate, TUI `a`) validates and
+applies it as one transaction.
 
-### Download, refresh, activate
+A failure leaves the active config and previous snapshot alone. An unchanged
+`304` or a body with the stored hash replaces nothing. A profile without
+`proxies` or `proxy-providers` is a failure too; providers often send one for
+an expired account.
 
-Three steps, each explicit:
-
-- **Download** (`clashpulse download subscription [id]`) fetches and parses
-  a profile, then stores it as an inactive private snapshot. It does not
-  inspect or run Mihomo.
-- **Refresh** (GUI Refresh, TUI `r`, `clashpulse refresh`) downloads the
-  profile, renders the complete config, validates it with the selected
-  Mihomo, and stores the result as the new candidate. Refreshing does not
-  switch Mihomo.
-- **Activate** (GUI Activate, TUI `a`) renders the profile, validates the
-  complete generated config with the selected Mihomo, and applies it
-  transactionally.
-
-A failed download or validation leaves the active configuration and the
-prior snapshot untouched. Remote sources with ETag or Last-Modified use
-conditional requests, so an unchanged `304` downloads no body and replaces
-no file; a body whose hash matches the stored snapshot is likewise not
-stored again.
-
-### The empty-profile rule
-
-A download must contain at least one proxy or proxy provider (`proxies` or
-`proxy-providers`). An empty profile - how providers often answer an
-expired account - is a failure, and the last good snapshot stays.
-
-### Download routes
-
-`route` selects how a subscription is fetched:
-
-| route | connection |
+| `route` | connection |
 | --- | --- |
-| `auto` (default) | through the running Mihomo; while Mihomo is stopped, terminal `download` and `refresh` honor `http_proxy`, `https_proxy`, and `no_proxy`, and the desktop service connects directly |
-| `direct` | a direct connection, ignoring proxy environment variables |
-| `system_proxy` | the OS HTTP or HTTPS proxy setting; fails when none is set |
-| `mihomo_proxy` | the running Mihomo's mixed port; fails while Mihomo is stopped |
+| `auto` (default) | through the running Mihomo; while it is stopped, terminal commands honor `http_proxy`, `https_proxy`, and `no_proxy`, and the desktop service connects directly |
+| `direct` | direct, ignoring proxy variables |
+| `system_proxy` | the OS proxy; fails when none is set |
+| `mihomo_proxy` | Mihomo's mixed port; fails while Mihomo is stopped |
 
-An unavailable route is an error, not a silent switch to another route.
-Data resources always use `auto`.
-
-Short-lived provider URLs: save the latest URL, then request a refresh
-before it expires.
+An unavailable route is an error, never a fallback. Data resources always use
+`auto`. Refresh short-lived provider URLs before they expire.
 
 ## Data resources
 
-`resources.toml` declares the data files Mihomo reads. New configs enable
-four reviewed [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)
-sources:
+New configs enable four
+[MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)
+sources in `resources.toml`:
 
 | id | kind | format |
 | --- | --- | --- |
@@ -96,29 +65,20 @@ sources:
 | `country` | `Country.mmdb` | `mmdb` |
 | `cn` | `rule-set` (domain) | `mrs` |
 
-The `cn` list is downloaded but not routed until a filter or DNS route uses
-it. Formats are `dat` for geoip.dat/geosite.dat, `mmdb` for Country.mmdb,
-and `yaml`, `text`, or `mrs` for rule-sets; rule types are `domain`,
-`ipcidr`, or `classical` (classical cannot use `mrs`). Local sources use
-absolute paths; Windows network shares are not local.
+`cn` routes nothing until a filter or DNS route uses it.
 
-Resources download during validated profile refresh or activation, or with
+Resources download on refresh or activation, or with
 `clashpulse refresh resource [id]`, which also works without an active
-profile: it caches enabled resources under stable filenames in the private
-state directory's `resources/` root without starting Mihomo. When a profile
-is active, Mihomo stops before those files change and restarts only after
-validation; a failed update restores the prior files and runtime.
+profile. With a profile active, Mihomo stops before the files change and
+restarts after validation; a failed update restores the old files.
 
-The default `releases/download/latest` URLs are mutable and carry no static
-SHA-256 pin. If you need a fixed digest, select a versioned asset and pin
-its matching digest. Every source can be disabled or replaced; see
-[dependencies](dependencies.html) for provenance and licensing notes.
+The default `releases/download/latest` URLs move and have no SHA-256 pin. For
+a fixed digest, use a versioned asset. Licensing is in
+[dependencies](dependencies.html).
 
 ## Filter lists
 
-A filter list routes a rule-set resource to a proxy or group of the active
-profile. It references a resource from `resources.toml` - there is no second
-downloader:
+A filter routes a rule-set resource to a proxy or group of the active profile:
 
 ```toml
 [[filter]]
@@ -129,20 +89,14 @@ target = "Proxy"  # A proxy or group in the active profile, or DIRECT/REJECT.
 enabled = true
 ```
 
-The resource must be a `rule-set` or `rule-provider` resource, `format` must
-equal its format, and an enabled filter cannot reference a disabled
-resource. Managed `RULE-SET` rules are placed ahead of all of the profile's
-own rules; a target that names no proxy, group, `DIRECT`, or `REJECT` in the
-active profile fails the render. The source profile is not modified.
+Managed `RULE-SET` rules go before the profile's own rules. An unknown target
+fails the render.
 
 ## DNS routing
 
-The Mihomo DNS listener defaults to `127.0.0.1:1053` (`[dns] listen` in
-`config.toml`) and must be a loopback address.
-
-DNS routing maps matchers to resolver sets and renders Mihomo's
-`nameserver-policy`. Resolver sets and routes live in `resources.toml` (GUI
-Settings > DNS; TUI Settings `v` adds a resolver set, `a` a route):
+The DNS listener defaults to `127.0.0.1:1053` (`[dns] listen`) and must be
+loopback. Routes map a matcher to a resolver set and become Mihomo's
+`nameserver-policy` (GUI Settings > DNS, TUI Settings `v` and `a`):
 
 ```toml
 [[resolver_set]]
@@ -154,15 +108,11 @@ resource = "cn"   # Alternatively suffix = "example.cn" or geosite = "cn".
 resolver_set = "domestic"
 ```
 
-Each route names exactly one matcher: `suffix`, `geosite`, or a domain
-rule-set `resource`. Nothing is routed until the resource, resolver set, and
-route are all configured. An endpoint that loops back to the DNS listener
-is a load error.
+Each route has exactly one of `suffix`, `geosite`, or `resource`. An endpoint
+that loops back to the listener is a load error.
 
-### DNSCrypt
-
-ClashPulse does not run DNSCrypt. Run `dnscrypt-proxy` yourself on a
-loopback UDP or TCP listener and mark the resolver set:
+ClashPulse does not run DNSCrypt. Run `dnscrypt-proxy` on loopback UDP or TCP
+and mark the resolver set:
 
 ```toml
 [[resolver_set]]
@@ -171,9 +121,6 @@ endpoints = ["udp://127.0.0.1:5353"]
 dnscrypt = true   # Requires a reachable loopback UDP/TCP DNSCrypt listener.
 ```
 
-Mihomo stays the DNS policy engine and sends the selected queries to that
-listener; DNSCrypt encrypts the upstream hop. A non-loopback or non-UDP/TCP
-endpoint with `dnscrypt = true` is rejected at load. Every time the config
-is rendered (activation, refresh, reload), ClashPulse sends a DNS query to
-each DNSCrypt endpoint with a 2 second timeout; if one does not answer, the
-change fails and the running configuration stays.
+On every render ClashPulse queries each DNSCrypt endpoint with a 2 second
+timeout. If one does not answer, the change fails and the running config
+stays.

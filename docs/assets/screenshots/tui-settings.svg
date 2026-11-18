@@ -4,50 +4,195 @@
 <circle cx="40" cy="16" r="6" fill="#f9e2af"/>
 <circle cx="60" cy="16" r="6" fill="#a6e3a1"/>
 <text x="520" y="20" fill="#7f849c" font-family="sans-serif" font-size="12" text-anchor="middle">clashpulse tui</text>
-<g transform="translate(16 46)" font-family="ui-monospace, 'JetBrains Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="14" xml:space="preserve">
+<g transform="translate(16 46)" font-family="ui-monospace, 'JetBrains Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="14">
 <rect x="0" y="0" width="663.6" height="18" fill="#313244"/>
 <rect x="663.6" y="0" width="100.80000000000001" height="18" fill="#89b4fa"/>
 <rect x="764.4" y="0" width="243.60000000000002" height="18" fill="#313244"/>
-<text x="0" y="13.5" fill="#cdd6f4" textLength="663.6" lengthAdjust="spacingAndGlyphs"> 1 Overview   2 Proxies   3 Subscriptions   4 Filter Lists   5 Data Resources  </text>
-<text x="663.6" y="13.5" fill="#1e1e2e" font-weight="bold" textLength="100.80000000000001" lengthAdjust="spacingAndGlyphs"> 6 Settings </text>
-<text x="0" y="31.5" fill="#7f849c" textLength="940.8000000000001" lengthAdjust="spacingAndGlyphs">Setting                       Value                                                             Action          </text>
-<text x="0" y="49.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Mihomo binary                 system                                                            b                       </text>
-<text x="0" y="67.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">System proxy                  requested true; active true                                       d                       </text>
-<text x="0" y="85.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Mixed port                    7899                                                              P                       </text>
-<text x="0" y="103.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Proxy mode                    Rule                                                              R                       </text>
-<text x="0" y="121.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Monitor                       enabled                                                           n                       </text>
-<text x="0" y="139.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">TUN                           requested false; active false; privilege ready                    U                       </text>
-<text x="0" y="157.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">TUN stack                     mixed                                                             S                       </text>
-<text x="0" y="175.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">TUN DNS mode                  fake-ip                                                           M                       </text>
-<text x="0" y="193.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Monitor test URL              configured                                                        u                       </text>
+<text x="8.4" y="13.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">1</text>
+<text x="25.200000000000003" y="13.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">Overview</text>
+<text x="117.60000000000001" y="13.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">2</text>
+<text x="134.4" y="13.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Proxies</text>
+<text x="218.4" y="13.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">3</text>
+<text x="235.20000000000002" y="13.5" fill="#cdd6f4" textLength="109.2" lengthAdjust="spacingAndGlyphs">Subscriptions</text>
+<text x="369.6" y="13.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">4</text>
+<text x="386.40000000000003" y="13.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">Filter</text>
+<text x="445.20000000000005" y="13.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">Lists</text>
+<text x="512.4" y="13.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">5</text>
+<text x="529.2" y="13.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">Data</text>
+<text x="571.2" y="13.5" fill="#cdd6f4" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">Resources</text>
+<text x="672" y="13.5" fill="#1e1e2e" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">6</text>
+<text x="688.8000000000001" y="13.5" fill="#1e1e2e" font-weight="bold" textLength="67.2" lengthAdjust="spacingAndGlyphs">Settings</text>
+<text x="0" y="31.5" fill="#7f849c" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Setting</text>
+<text x="252" y="31.5" fill="#7f849c" textLength="42" lengthAdjust="spacingAndGlyphs">Value</text>
+<text x="806.4000000000001" y="31.5" fill="#7f849c" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">Action</text>
+<text x="0" y="49.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">Mihomo</text>
+<text x="58.800000000000004" y="49.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">binary</text>
+<text x="252" y="49.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">system</text>
+<text x="806.4000000000001" y="49.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">b</text>
+<text x="0" y="67.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">System</text>
+<text x="58.800000000000004" y="67.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">proxy</text>
+<text x="252" y="67.5" fill="#cdd6f4" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">requested</text>
+<text x="336" y="67.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">true;</text>
+<text x="386.40000000000003" y="67.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">active</text>
+<text x="445.20000000000005" y="67.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">true</text>
+<text x="806.4000000000001" y="67.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">d</text>
+<text x="0" y="85.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">Mixed</text>
+<text x="50.400000000000006" y="85.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">port</text>
+<text x="252" y="85.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">7899</text>
+<text x="806.4000000000001" y="85.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">P</text>
+<text x="0" y="103.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">Proxy</text>
+<text x="50.400000000000006" y="103.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">mode</text>
+<text x="252" y="103.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">Rule</text>
+<text x="806.4000000000001" y="103.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">R</text>
+<text x="0" y="121.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Monitor</text>
+<text x="252" y="121.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">enabled</text>
+<text x="806.4000000000001" y="121.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">n</text>
+<text x="0" y="139.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">TUN</text>
+<text x="252" y="139.5" fill="#cdd6f4" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">requested</text>
+<text x="336" y="139.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">false;</text>
+<text x="394.8" y="139.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">active</text>
+<text x="453.6" y="139.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">false;</text>
+<text x="512.4" y="139.5" fill="#cdd6f4" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">privilege</text>
+<text x="596.4" y="139.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">ready</text>
+<text x="806.4000000000001" y="139.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">U</text>
+<text x="0" y="157.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">TUN</text>
+<text x="33.6" y="157.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">stack</text>
+<text x="252" y="157.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">mixed</text>
+<text x="806.4000000000001" y="157.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">S</text>
+<text x="0" y="175.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">TUN</text>
+<text x="33.6" y="175.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">DNS</text>
+<text x="67.2" y="175.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">mode</text>
+<text x="252" y="175.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">fake-ip</text>
+<text x="806.4000000000001" y="175.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">M</text>
+<text x="0" y="193.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Monitor</text>
+<text x="67.2" y="193.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">test</text>
+<text x="109.2" y="193.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">URL</text>
+<text x="252" y="193.5" fill="#cdd6f4" textLength="84" lengthAdjust="spacingAndGlyphs">configured</text>
+<text x="806.4000000000001" y="193.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">u</text>
 <rect x="0" y="198" width="940.8000000000001" height="18" fill="#89b4fa"/>
-<text x="0" y="211.5" fill="#1e1e2e" font-weight="bold" textLength="940.8000000000001" lengthAdjust="spacingAndGlyphs">Switch policy                 Steady stream                                                     y               </text>
-<text x="0" y="229.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Stream URL                    configured                                                        O                       </text>
-<text x="0" y="247.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Stream interval               300 seconds                                                       I                       </text>
-<text x="0" y="265.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Monitor interval              60 seconds                                                        i                       </text>
-<text x="0" y="283.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Monitor timeout               5000 ms                                                           o                       </text>
-<text x="0" y="301.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Monitor concurrency           3                                                                 c                       </text>
-<text x="0" y="319.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Monitor threshold             800 ms                                                            h                       </text>
-<text x="0" y="337.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Alert threshold               250 ms                                                            t                       </text>
-<text x="0" y="355.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Consecutive bad samples       3                                                                 s                       </text>
-<text x="0" y="373.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Minimum improvement           100 ms                                                            p                       </text>
-<text x="0" y="391.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Monitor cooldown              300 seconds                                                       z                       </text>
-<text x="0" y="409.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Monitor jitter                10000 ms                                                          w                       </text>
-<text x="0" y="427.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Window size                   5                                                                 W                       </text>
-<text x="0" y="445.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Minimum candidate samples     3                                                                 C                       </text>
-<text x="0" y="463.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Maximum failures              2                                                                 f                       </text>
-<text x="0" y="481.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">DNS listener                  127.0.0.1:1053                                                    l                       </text>
-<text x="0" y="499.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">DNS resolver set default      DNSCrypt no; 2 endpoint(s)                                        g                       </text>
-<text x="0" y="517.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">DNS route suffix corp.invali  resolver default                                                  g                       </text>
-<text x="0" y="589.5" fill="#7f849c" textLength="1008" lengthAdjust="spacingAndGlyphs"> A authorize TUN privilege   C set minimum candidate samples   D disable TUN   I set stream interval in seconds   M set </text>
+<text x="0" y="211.5" fill="#1e1e2e" font-weight="bold" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">Switch</text>
+<text x="58.800000000000004" y="211.5" fill="#1e1e2e" font-weight="bold" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">policy</text>
+<text x="252" y="211.5" fill="#1e1e2e" font-weight="bold" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">Steady</text>
+<text x="310.8" y="211.5" fill="#1e1e2e" font-weight="bold" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">stream</text>
+<text x="806.4000000000001" y="211.5" fill="#1e1e2e" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">y</text>
+<text x="0" y="229.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">Stream</text>
+<text x="58.800000000000004" y="229.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">URL</text>
+<text x="252" y="229.5" fill="#cdd6f4" textLength="84" lengthAdjust="spacingAndGlyphs">configured</text>
+<text x="806.4000000000001" y="229.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">O</text>
+<text x="0" y="247.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">Stream</text>
+<text x="58.800000000000004" y="247.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">interval</text>
+<text x="252" y="247.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">300</text>
+<text x="285.6" y="247.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">seconds</text>
+<text x="806.4000000000001" y="247.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">I</text>
+<text x="0" y="265.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Monitor</text>
+<text x="67.2" y="265.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">interval</text>
+<text x="252" y="265.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">60</text>
+<text x="277.2" y="265.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">seconds</text>
+<text x="806.4000000000001" y="265.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">i</text>
+<text x="0" y="283.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Monitor</text>
+<text x="67.2" y="283.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">timeout</text>
+<text x="252" y="283.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">5000</text>
+<text x="294" y="283.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="806.4000000000001" y="283.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">o</text>
+<text x="0" y="301.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Monitor</text>
+<text x="67.2" y="301.5" fill="#cdd6f4" textLength="92.4" lengthAdjust="spacingAndGlyphs">concurrency</text>
+<text x="252" y="301.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">3</text>
+<text x="806.4000000000001" y="301.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">c</text>
+<text x="0" y="319.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Monitor</text>
+<text x="67.2" y="319.5" fill="#cdd6f4" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">threshold</text>
+<text x="252" y="319.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">800</text>
+<text x="285.6" y="319.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="806.4000000000001" y="319.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">h</text>
+<text x="0" y="337.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">Alert</text>
+<text x="50.400000000000006" y="337.5" fill="#cdd6f4" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">threshold</text>
+<text x="252" y="337.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">250</text>
+<text x="285.6" y="337.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="806.4000000000001" y="337.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">t</text>
+<text x="0" y="355.5" fill="#cdd6f4" textLength="92.4" lengthAdjust="spacingAndGlyphs">Consecutive</text>
+<text x="100.80000000000001" y="355.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">bad</text>
+<text x="134.4" y="355.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">samples</text>
+<text x="252" y="355.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">3</text>
+<text x="806.4000000000001" y="355.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">s</text>
+<text x="0" y="373.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Minimum</text>
+<text x="67.2" y="373.5" fill="#cdd6f4" textLength="92.4" lengthAdjust="spacingAndGlyphs">improvement</text>
+<text x="252" y="373.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">100</text>
+<text x="285.6" y="373.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="806.4000000000001" y="373.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">p</text>
+<text x="0" y="391.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Monitor</text>
+<text x="67.2" y="391.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">cooldown</text>
+<text x="252" y="391.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">300</text>
+<text x="285.6" y="391.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">seconds</text>
+<text x="806.4000000000001" y="391.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">z</text>
+<text x="0" y="409.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Monitor</text>
+<text x="67.2" y="409.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">jitter</text>
+<text x="252" y="409.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">10000</text>
+<text x="302.40000000000003" y="409.5" fill="#cdd6f4" textLength="16.8" lengthAdjust="spacingAndGlyphs">ms</text>
+<text x="806.4000000000001" y="409.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">w</text>
+<text x="0" y="427.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">Window</text>
+<text x="58.800000000000004" y="427.5" fill="#cdd6f4" textLength="33.6" lengthAdjust="spacingAndGlyphs">size</text>
+<text x="252" y="427.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">5</text>
+<text x="806.4000000000001" y="427.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">W</text>
+<text x="0" y="445.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Minimum</text>
+<text x="67.2" y="445.5" fill="#cdd6f4" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">candidate</text>
+<text x="151.20000000000002" y="445.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">samples</text>
+<text x="252" y="445.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">3</text>
+<text x="806.4000000000001" y="445.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">C</text>
+<text x="0" y="463.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Maximum</text>
+<text x="67.2" y="463.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">failures</text>
+<text x="252" y="463.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">2</text>
+<text x="806.4000000000001" y="463.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">f</text>
+<text x="0" y="481.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">DNS</text>
+<text x="33.6" y="481.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">listener</text>
+<text x="252" y="481.5" fill="#cdd6f4" textLength="117.60000000000001" lengthAdjust="spacingAndGlyphs">127.0.0.1:1053</text>
+<text x="806.4000000000001" y="481.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">l</text>
+<text x="0" y="499.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">DNS</text>
+<text x="33.6" y="499.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">resolver</text>
+<text x="109.2" y="499.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">set</text>
+<text x="142.8" y="499.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">default</text>
+<text x="252" y="499.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">DNSCrypt</text>
+<text x="327.6" y="499.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">no;</text>
+<text x="361.2" y="499.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">2</text>
+<text x="378" y="499.5" fill="#cdd6f4" textLength="92.4" lengthAdjust="spacingAndGlyphs">endpoint(s)</text>
+<text x="806.4000000000001" y="499.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">g</text>
+<text x="0" y="517.5" fill="#cdd6f4" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">DNS</text>
+<text x="33.6" y="517.5" fill="#cdd6f4" textLength="42" lengthAdjust="spacingAndGlyphs">route</text>
+<text x="84" y="517.5" fill="#cdd6f4" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">suffix</text>
+<text x="142.8" y="517.5" fill="#cdd6f4" textLength="92.4" lengthAdjust="spacingAndGlyphs">corp.invali</text>
+<text x="252" y="517.5" fill="#cdd6f4" textLength="67.2" lengthAdjust="spacingAndGlyphs">resolver</text>
+<text x="327.6" y="517.5" fill="#cdd6f4" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">default</text>
+<text x="806.4000000000001" y="517.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">g</text>
+<text x="8.4" y="589.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs">A</text>
+<text x="25.200000000000003" y="589.5" fill="#7f849c" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">authorize</text>
+<text x="109.2" y="589.5" fill="#7f849c" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">TUN</text>
+<text x="142.8" y="589.5" fill="#7f849c" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">privilege</text>
+<text x="243.60000000000002" y="589.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs">C</text>
+<text x="260.40000000000003" y="589.5" fill="#7f849c" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">set</text>
+<text x="294" y="589.5" fill="#7f849c" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">minimum</text>
+<text x="361.2" y="589.5" fill="#7f849c" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">candidate</text>
+<text x="445.20000000000005" y="589.5" fill="#7f849c" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">samples</text>
+<text x="529.2" y="589.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs">D</text>
+<text x="546" y="589.5" fill="#7f849c" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">disable</text>
+<text x="613.2" y="589.5" fill="#7f849c" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">TUN</text>
+<text x="663.6" y="589.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs">I</text>
+<text x="680.4" y="589.5" fill="#7f849c" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">set</text>
+<text x="714" y="589.5" fill="#7f849c" textLength="50.400000000000006" lengthAdjust="spacingAndGlyphs">stream</text>
+<text x="772.8000000000001" y="589.5" fill="#7f849c" textLength="67.2" lengthAdjust="spacingAndGlyphs">interval</text>
+<text x="848.4000000000001" y="589.5" fill="#7f849c" textLength="16.8" lengthAdjust="spacingAndGlyphs">in</text>
+<text x="873.6" y="589.5" fill="#7f849c" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">seconds</text>
+<text x="957.6" y="589.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs">M</text>
+<text x="974.4000000000001" y="589.5" fill="#7f849c" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">set</text>
 <rect x="0" y="594" width="126" height="18" fill="#a6e3a1"/>
 <rect x="126" y="594" width="8.4" height="18" fill="#313244"/>
 <rect x="134.4" y="594" width="218.4" height="18" fill="#89b4fa"/>
 <rect x="352.8" y="594" width="8.4" height="18" fill="#313244"/>
 <rect x="361.2" y="594" width="100.80000000000001" height="18" fill="#f9e2af"/>
 <rect x="462" y="594" width="546" height="18" fill="#313244"/>
-<text x="0" y="607.5" fill="#1e1e2e" font-weight="bold" textLength="126" lengthAdjust="spacingAndGlyphs"> IPC connected </text>
-<text x="134.4" y="607.5" fill="#1e1e2e" textLength="218.4" lengthAdjust="spacingAndGlyphs"> profile Example Provider </text>
-<text x="361.2" y="607.5" fill="#1e1e2e" textLength="100.80000000000001" lengthAdjust="spacingAndGlyphs"> Jobs: idle </text>
+<text x="8.4" y="607.5" fill="#1e1e2e" font-weight="bold" textLength="25.200000000000003" lengthAdjust="spacingAndGlyphs">IPC</text>
+<text x="42" y="607.5" fill="#1e1e2e" font-weight="bold" textLength="75.60000000000001" lengthAdjust="spacingAndGlyphs">connected</text>
+<text x="142.8" y="607.5" fill="#1e1e2e" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">profile</text>
+<text x="210" y="607.5" fill="#1e1e2e" textLength="58.800000000000004" lengthAdjust="spacingAndGlyphs">Example</text>
+<text x="277.2" y="607.5" fill="#1e1e2e" textLength="67.2" lengthAdjust="spacingAndGlyphs">Provider</text>
+<text x="369.6" y="607.5" fill="#1e1e2e" textLength="42" lengthAdjust="spacingAndGlyphs">Jobs:</text>
+<text x="420" y="607.5" fill="#1e1e2e" textLength="33.6" lengthAdjust="spacingAndGlyphs">idle</text>
 </g>
 </svg>

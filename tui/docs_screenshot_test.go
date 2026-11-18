@@ -11,17 +11,25 @@ import (
 
 	"github.com/fishman/clashpulse/internal/docsfixture"
 	"github.com/fishman/clashpulse/ipc"
+	"github.com/fishman/clashpulse/localize"
 	"github.com/gdamore/tcell/v3"
 	"github.com/gdamore/tcell/v3/vt"
 )
 
 // TestDocsScreenshots renders the real model over the docs fixture and writes
-// one SVG per tab. DOCS_SCREENSHOTS overrides the output directory; a relative
-// value is taken from the repository root.
+// one SVG per tab. DOCS_SCREENSHOTS_LANG selects the interface language and,
+// unless DOCS_SCREENSHOTS overrides the output directory, writes into a
+// subdirectory of that name. A relative DOCS_SCREENSHOTS is taken from the
+// repository root.
 func TestDocsScreenshots(t *testing.T) {
+	lang := os.Getenv("DOCS_SCREENSHOTS_LANG")
+	if lang != "" {
+		localize.SetLanguage(lang)
+		t.Cleanup(func() { localize.SetLanguage("en") })
+	}
 	dir := os.Getenv("DOCS_SCREENSHOTS")
 	if dir == "" {
-		dir = filepath.Join("docs", "assets", "screenshots")
+		dir = filepath.Join("docs", "assets", "screenshots", lang)
 	}
 	if !filepath.IsAbs(dir) {
 		dir = filepath.Join("..", dir)
@@ -91,7 +99,7 @@ func renderSVG(t *testing.T, model Model, width, height int) string {
 		fmt.Fprintf(&b, `<circle cx="%d" cy="16" r="6" fill="%s"/>`+"\n", 20+i*20, dot)
 	}
 	fmt.Fprintf(&b, `<text x="%g" y="20" fill="#7f849c" font-family="sans-serif" font-size="12" text-anchor="middle">clashpulse tui</text>`+"\n", frameW/2)
-	fmt.Fprintf(&b, `<g transform="translate(%d %d)" font-family="ui-monospace, 'JetBrains Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="14" xml:space="preserve">`+"\n", svgPad, svgPad+svgTitle)
+	fmt.Fprintf(&b, `<g transform="translate(%d %d)" font-family="ui-monospace, 'JetBrains Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="14">`+"\n", svgPad, svgPad+svgTitle)
 
 	type cell struct {
 		text, fg, bg string
@@ -129,21 +137,27 @@ func renderSVG(t *testing.T, model Model, width, height int) string {
 		}
 		col = 0
 		for i := 0; i < len(row); {
+			if row[i].text == " " {
+				col += row[i].width
+				i++
+				continue
+			}
 			j, span := i, 0
 			var run strings.Builder
-			for j < len(row) && row[j].fg == row[i].fg && row[j].bold == row[i].bold {
+			// A run holds no spaces and mixes no cell widths: browsers drop
+			// trailing and collapse repeated spaces before textLength stretches
+			// the glyphs, and a CJK glyph is not twice a monospace cell.
+			for j < len(row) && row[j].text != " " && row[j].fg == row[i].fg && row[j].bold == row[i].bold && row[j].width == row[i].width {
 				run.WriteString(row[j].text)
 				span += row[j].width
 				j++
 			}
-			if content := run.String(); strings.TrimSpace(content) != "" {
-				weight := ""
-				if row[i].bold {
-					weight = ` font-weight="bold"`
-				}
-				fmt.Fprintf(&b, `<text x="%g" y="%g" fill="%s"%s textLength="%g" lengthAdjust="spacingAndGlyphs">%s</text>`+"\n",
-					float64(col)*svgCellWidth, top+13.5, row[i].fg, weight, float64(span)*svgCellWidth, xmlEscape(content))
+			weight := ""
+			if row[i].bold {
+				weight = ` font-weight="bold"`
 			}
+			fmt.Fprintf(&b, `<text x="%g" y="%g" fill="%s"%s textLength="%g" lengthAdjust="spacingAndGlyphs">%s</text>`+"\n",
+				float64(col)*svgCellWidth, top+13.5, row[i].fg, weight, float64(span)*svgCellWidth, xmlEscape(run.String()))
 			col += span
 			i = j
 		}
