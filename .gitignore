@@ -7,3 +7,7 @@
 /clash-verge.yaml
 /fyne.txt
 /v2
+# Local docs builds (bundle exec jekyll serve -s docs).
+docs/_site/
+docs/.jekyll-cache/
+.bundle/

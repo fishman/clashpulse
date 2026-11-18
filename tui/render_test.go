@@ -441,3 +441,19 @@ func TestOverviewRendersIssueSourceIDs(t *testing.T) {
 		}
 	}
 }
+
+// The latency cell carries latency, stability, and download statistics; a wide
+// terminal must show all of it rather than truncate it beside unused space.
+func TestRenderProxyLatencyFitsInWideTerminal(t *testing.T) {
+	model := NewModel()
+	model.Tab = TabProxies
+	model = model.Apply(ipc.Event{Snapshot: core.Snapshot{
+		Groups: []core.GroupSnapshot{{ID: "main", Label: "Main", Selected: "alpha", Proxies: []string{"alpha"}}},
+		Proxies: []core.ProxySnapshot{{GroupID: "main", ID: "alpha", Label: "Example Tokyo 02", Outcome: "success", LatencyMillis: 74,
+			MedianMillis: 76, JitterMillis: 4, Samples: 5, StreamSamples: 5, StreamCompleted: 5, StreamKBps: 3410}},
+	}})
+	rows := strings.Join(mockRender(t, model, 200, 12), "\n")
+	if !strings.Contains(rows, "5/5 downloads") || !strings.Contains(rows, "3410 KB/s") {
+		t.Fatalf("latency cell truncated at 200 columns:\n%s", rows)
+	}
+}
