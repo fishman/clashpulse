@@ -35,16 +35,19 @@ func TestDocsScreenshots(t *testing.T) {
 	proxies.Selection[TabProxies] = "proxy:" + snapshot.Groups[0].ID + ":" + snapshot.Groups[0].Selected
 	settings := model.selectTab(TabSettings)
 	settings.Selection[TabSettings] = "setting:monitor:switch-policy"
+	// The Proxies table needs 200 columns before the latency column shows the
+	// stability and download statistics the docs describe.
 	for _, shot := range []struct {
 		name  string
 		model Model
+		width int
 	}{
-		{"tui-overview.svg", model},
-		{"tui-proxies.svg", proxies},
-		{"tui-subscriptions.svg", model.selectTab(TabSubscriptions)},
-		{"tui-settings.svg", settings},
+		{"tui-overview.svg", model, 120},
+		{"tui-proxies.svg", proxies, 200},
+		{"tui-subscriptions.svg", model.selectTab(TabSubscriptions), 120},
+		{"tui-settings.svg", settings, 120},
 	} {
-		svg := renderSVG(t, shot.model, 120, 34)
+		svg := renderSVG(t, shot.model, shot.width, 34)
 		if err := os.WriteFile(filepath.Join(dir, shot.name), []byte(svg), 0o644); err != nil {
 			t.Fatal(err)
 		}

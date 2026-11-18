@@ -1,47 +1,47 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="674" viewBox="0 0 1040 674">
-<rect width="1040" height="674" rx="10" fill="#1e1e2e" stroke="#45475a"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1712" height="674" viewBox="0 0 1712 674">
+<rect width="1712" height="674" rx="10" fill="#1e1e2e" stroke="#45475a"/>
 <circle cx="20" cy="16" r="6" fill="#f38ba8"/>
 <circle cx="40" cy="16" r="6" fill="#f9e2af"/>
 <circle cx="60" cy="16" r="6" fill="#a6e3a1"/>
-<text x="520" y="20" fill="#7f849c" font-family="sans-serif" font-size="12" text-anchor="middle">clashpulse tui</text>
+<text x="856" y="20" fill="#7f849c" font-family="sans-serif" font-size="12" text-anchor="middle">clashpulse tui</text>
 <g transform="translate(16 46)" font-family="ui-monospace, 'JetBrains Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="14" xml:space="preserve">
 <rect x="0" y="0" width="109.2" height="18" fill="#313244"/>
 <rect x="109.2" y="0" width="92.4" height="18" fill="#89b4fa"/>
-<rect x="201.60000000000002" y="0" width="806.4000000000001" height="18" fill="#313244"/>
+<rect x="201.60000000000002" y="0" width="1478.4" height="18" fill="#313244"/>
 <text x="0" y="13.5" fill="#cdd6f4" textLength="109.2" lengthAdjust="spacingAndGlyphs"> 1 Overview  </text>
 <text x="109.2" y="13.5" fill="#1e1e2e" font-weight="bold" textLength="92.4" lengthAdjust="spacingAndGlyphs"> 2 Proxies </text>
-<text x="201.60000000000002" y="13.5" fill="#cdd6f4" textLength="806.4000000000001" lengthAdjust="spacingAndGlyphs">  3 Subscriptions   4 Filter Lists   5 Data Resources   6 Settings                              </text>
-<text x="0" y="31.5" fill="#7f849c" textLength="1008" lengthAdjust="spacingAndGlyphs">Group                 Proxy                     Selected    Latency                                Outcome   Automation </text>
-<text x="0" y="49.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Proxy                 Proxy                     Example To                                                   enabled    </text>
-<text x="0" y="67.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Proxy                 Example Tokyo 01                      68 ms · median 71 ms ±6 ms · 0/5 fail  success   enabled    </text>
-<rect x="0" y="72" width="1008" height="18" fill="#89b4fa"/>
-<text x="0" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="1008" lengthAdjust="spacingAndGlyphs">Proxy                 Example Tokyo 02          yes         74 ms · median 76 ms ±4 ms · 0/5 fail  success   enabled    </text>
-<text x="0" y="103.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Proxy                 Example Singapore 01                  112 ms · median 118 ms ±31 ms · 1/5 f  success   enabled    </text>
-<text x="0" y="121.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Proxy                 Example Hong Kong 03                  49 ms · median 52 ms ±9 ms · 0/5 fail  success   enabled    </text>
-<text x="0" y="139.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Proxy                 Example Frankfurt 02                  231 ms · median 236 ms ±14 ms · 0/5 f  success   enabled    </text>
-<text x="0" y="157.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Proxy                 Example London 01                     248 ms · median 252 ms ±18 ms · 0/5 f  success   enabled    </text>
-<text x="0" y="175.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Proxy                 Example Los Angeles 03                162 ms · median 171 ms ±22 ms · 1/5 f  success   enabled    </text>
-<text x="0" y="193.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">Proxy                 Example Toronto 01                    5/5 failed · 0/3 downloads             timeout   enabled    </text>
-<text x="0" y="211.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">GLOBAL                GLOBAL                    Proxy                                                        disabled   </text>
-<text x="0" y="229.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">GLOBAL                Proxy                     yes                                                          disabled   </text>
-<text x="0" y="247.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">GLOBAL                DIRECT                                                                                 disabled   </text>
-<text x="0" y="265.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">GLOBAL                REJECT                                                                                 disabled   </text>
-<text x="0" y="283.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Tokyo 01                      70 ms (mihomo)                                   disabled   </text>
-<text x="0" y="301.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Tokyo 02                      75 ms (mihomo)                                   disabled   </text>
-<text x="0" y="319.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Singapore 01                  109 ms (mihomo)                                  disabled   </text>
-<text x="0" y="337.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Hong Kong 03                  50 ms (mihomo)                                   disabled   </text>
-<text x="0" y="355.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Frankfurt 02                  228 ms (mihomo)                                  disabled   </text>
-<text x="0" y="373.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">GLOBAL                Example London 01                     251 ms (mihomo)                                  disabled   </text>
-<text x="0" y="391.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Los Angeles 03                160 ms (mihomo)                                  disabled   </text>
-<text x="0" y="409.5" fill="#cdd6f4" textLength="1008" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Toronto 01                                                                     disabled   </text>
-<rect x="814.8000000000001" y="576" width="193.20000000000002" height="18" fill="#313244"/>
+<text x="201.60000000000002" y="13.5" fill="#cdd6f4" textLength="1478.4" lengthAdjust="spacingAndGlyphs">  3 Subscriptions   4 Filter Lists   5 Data Resources   6 Settings                                                                                                              </text>
+<text x="0" y="31.5" fill="#7f849c" textLength="1411.2" lengthAdjust="spacingAndGlyphs">Group                 Proxy                     Selected    Latency                                                                           Outcome       Automation  </text>
+<text x="0" y="49.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">Proxy                 Proxy                     Example To                                                                                                  enabled                                     </text>
+<text x="0" y="67.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">Proxy                 Example Tokyo 01                      68 ms · median 71 ms ±6 ms · 0/5 failed · 5/5 downloads · 2860 KB/s               success       enabled                                     </text>
+<rect x="0" y="72" width="1411.2" height="18" fill="#89b4fa"/>
+<text x="0" y="85.5" fill="#1e1e2e" font-weight="bold" textLength="1411.2" lengthAdjust="spacingAndGlyphs">Proxy                 Example Tokyo 02          yes         74 ms · median 76 ms ±4 ms · 0/5 failed · 5/5 downloads · 3410 KB/s               success       enabled     </text>
+<text x="0" y="103.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">Proxy                 Example Singapore 01                  112 ms · median 118 ms ±31 ms · 1/5 failed · 3/5 downloads · 1240 KB/s            success       enabled                                     </text>
+<text x="0" y="121.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">Proxy                 Example Hong Kong 03                  49 ms · median 52 ms ±9 ms · 0/5 failed · 4/5 downloads · 2210 KB/s               success       enabled                                     </text>
+<text x="0" y="139.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">Proxy                 Example Frankfurt 02                  231 ms · median 236 ms ±14 ms · 0/5 failed · 4/4 downloads · 1980 KB/s            success       enabled                                     </text>
+<text x="0" y="157.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">Proxy                 Example London 01                     248 ms · median 252 ms ±18 ms · 0/5 failed · 4/4 downloads · 1720 KB/s            success       enabled                                     </text>
+<text x="0" y="175.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">Proxy                 Example Los Angeles 03                162 ms · median 171 ms ±22 ms · 1/5 failed · 3/4 downloads · 1530 KB/s            success       enabled                                     </text>
+<text x="0" y="193.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">Proxy                 Example Toronto 01                    5/5 failed · 0/3 downloads                                                        timeout       enabled                                     </text>
+<text x="0" y="211.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                GLOBAL                    Proxy                                                                                                       disabled                                    </text>
+<text x="0" y="229.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                Proxy                     yes                                                                                                         disabled                                    </text>
+<text x="0" y="247.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                DIRECT                                                                                                                                disabled                                    </text>
+<text x="0" y="265.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                REJECT                                                                                                                                disabled                                    </text>
+<text x="0" y="283.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Tokyo 01                      70 ms (mihomo)                                                                                  disabled                                    </text>
+<text x="0" y="301.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Tokyo 02                      75 ms (mihomo)                                                                                  disabled                                    </text>
+<text x="0" y="319.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Singapore 01                  109 ms (mihomo)                                                                                 disabled                                    </text>
+<text x="0" y="337.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Hong Kong 03                  50 ms (mihomo)                                                                                  disabled                                    </text>
+<text x="0" y="355.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Frankfurt 02                  228 ms (mihomo)                                                                                 disabled                                    </text>
+<text x="0" y="373.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                Example London 01                     251 ms (mihomo)                                                                                 disabled                                    </text>
+<text x="0" y="391.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Los Angeles 03                160 ms (mihomo)                                                                                 disabled                                    </text>
+<text x="0" y="409.5" fill="#cdd6f4" textLength="1680" lengthAdjust="spacingAndGlyphs">GLOBAL                Example Toronto 01                                                                                                                    disabled                                    </text>
+<rect x="814.8000000000001" y="576" width="865.2" height="18" fill="#313244"/>
 <text x="0" y="589.5" fill="#7f849c" textLength="814.8000000000001" lengthAdjust="spacingAndGlyphs"> a toggle focused group automation   d probe downloads through nodes now   r probe focused group </text>
 <rect x="0" y="594" width="126" height="18" fill="#a6e3a1"/>
 <rect x="126" y="594" width="8.4" height="18" fill="#313244"/>
 <rect x="134.4" y="594" width="218.4" height="18" fill="#89b4fa"/>
 <rect x="352.8" y="594" width="8.4" height="18" fill="#313244"/>
 <rect x="361.2" y="594" width="100.80000000000001" height="18" fill="#f9e2af"/>
-<rect x="462" y="594" width="546" height="18" fill="#313244"/>
+<rect x="462" y="594" width="1218" height="18" fill="#313244"/>
 <text x="0" y="607.5" fill="#1e1e2e" font-weight="bold" textLength="126" lengthAdjust="spacingAndGlyphs"> IPC connected </text>
 <text x="134.4" y="607.5" fill="#1e1e2e" textLength="218.4" lengthAdjust="spacingAndGlyphs"> profile Example Provider </text>
 <text x="361.2" y="607.5" fill="#1e1e2e" textLength="100.80000000000001" lengthAdjust="spacingAndGlyphs"> Jobs: idle </text>
