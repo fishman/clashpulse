@@ -17,7 +17,7 @@ pkgbase = clashpulse-bin
 	depends = libxxf86vm
 	depends = mihomo
 	depends = wayland
-	provides = clashpulse
+	provides = clashpulse=0.1.1
 	conflicts = clashpulse
 	source = clashpulse-0.1.1-linux-amd64.tar.gz::https://github.com/fishman/clashpulse/releases/download/v0.1.1/clashpulse-v0.1.1-linux-amd64.tar.gz
 	source = clashpulse-0.1.1.svg::https://raw.githubusercontent.com/fishman/clashpulse/v0.1.1/ui/clashpulse.svg

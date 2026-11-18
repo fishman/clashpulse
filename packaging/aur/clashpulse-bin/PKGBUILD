@@ -9,7 +9,7 @@ arch=('x86_64')
 url='https://github.com/fishman/clashpulse'
 license=('Apache-2.0')
 depends=('glibc' 'hicolor-icon-theme' 'libglvnd' 'libx11' 'libxcursor' 'libxi' 'libxinerama' 'libxkbcommon' 'libxrandr' 'libxxf86vm' 'mihomo' 'wayland')
-provides=("$_pkgname")
+provides=("$_pkgname=$pkgver")
 conflicts=("$_pkgname")
 source=("$_pkgname-$pkgver-linux-amd64.tar.gz::$url/releases/download/v$pkgver/$_pkgname-v$pkgver-linux-amd64.tar.gz"
         "$_pkgname-$pkgver.svg::https://raw.githubusercontent.com/fishman/$_pkgname/v$pkgver/ui/clashpulse.svg")
