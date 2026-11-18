@@ -1,3 +1,9 @@
+---
+layout: default
+title: Dependencies
+nav_order: 9
+---
+
 # Dependencies and desktop builds
 
 `go.mod` pins all direct modules, including Fyne v2.8.2 (released; [upstream](https://github.com/fyne-io/fyne/tree/v2.8.2), BSD-3-Clause), `tcell/v3` v3.6.0, `lipgloss/v2` v2.1.1, and notmutt `lib/xdg` and `lib/localipc` v0.1.0 plus `lib/tui` v0.1.3 (Apache-2.0; independently tagged `lib/tui/v0.1.3`). A `replace` directive builds Fyne from [fishing-agents/fyne](https://github.com/fishing-agents/fyne/tree/fix/wayland-visible-create) `v2.8.2-0.20261001232054-d7b412429937` (BSD-3-Clause): v2.8.1 plus one commit that keeps Wayland windows visible at creation except the systray monitor; neither upstream v2.8.2 nor the fork's default branch contains that fix, so the build does not include upstream's v2.8.2 changes until the fix is rebased. The TUI module provides shared theme resolution, table geometry, tab strip, and status layout; its sole direct dependency is `github.com/mattn/go-runewidth`, selected at v0.0.31 (MIT); existing `github.com/clipperhouse/uax29/v2` stays at v2.7.0. Windows named-pipe I/O uses [Microsoft/go-winio](https://github.com/Microsoft/go-winio) v0.6.4 (MIT): its cancellable `DialPipeContext`, secured `ListenPipe`, and first-instance/remote-rejection behavior replace hand-rolled overlapped Win32 I/O. Its selected graph adds `github.com/sirupsen/logrus` v1.10.2 (MIT). Go 1.26.6 is required. Mihomo is a separately selected executable, not a Go dependency; no core binary is bundled.
