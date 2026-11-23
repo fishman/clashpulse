@@ -1247,9 +1247,11 @@ func (settingsLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 
 type settingsPage struct {
 	view                fyne.CanvasObject
-	sidebar             *widget.RadioGroup
+	sectionList         fyne.CanvasObject
+	sectionEntries      []*sidebarEntry
 	sectionSelect       *widget.Select
 	sectionContent      *fyne.Container
+	section             string
 	sectionViews        map[string]fyne.CanvasObject
 	binary              *widget.Form
 	binaryValues        [4]*widget.Label
@@ -1423,31 +1425,45 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 			}
 		}
 	}
-	p.sectionContent = container.NewStack(p.sectionViews[sections[0]])
-	p.sidebar = widget.NewRadioGroup(sectionNames, selectSection)
+	// Every section stays in the tree so a theme change reaches the hidden
+	// ones too; selectSection only toggles visibility.
+	p.sectionContent = container.NewStack()
+	for _, section := range sections {
+		p.sectionViews[section].Hide()
+		p.sectionContent.Add(p.sectionViews[section])
+	}
+	list := container.NewVBox()
+	for i, section := range sections {
+		entry := newSidebarEntry(section, sectionNames[i], nil, p.selectSection)
+		p.sectionEntries = append(p.sectionEntries, entry)
+		list.Add(entry)
+	}
+	p.sectionList = list
 	p.sectionSelect = widget.NewSelect(sectionNames, selectSection)
-	p.sidebar.SetSelected(sectionNames[0])
-	p.sectionSelect.SetSelected(sectionNames[0])
 	surface := newSurface(colorNameCard)
 	p.view = container.New(paintLayout{settingsLayout{}, func() {
 		surface.FillColor = theme.Color(colorNameCard)
 		surface.StrokeColor = theme.Color(theme.ColorNameSeparator)
-	}}, surface, p.sidebar, p.sectionSelect, container.NewVScroll(p.sectionContent))
+	}}, surface, p.sectionList, p.sectionSelect, container.NewVScroll(p.sectionContent))
+	p.selectSection(sections[0])
 	return p
 }
 
 func (p *settingsPage) selectSection(name string) {
 	view, ok := p.sectionViews[name]
-	if !ok || p.sectionContent.Objects[0] == view {
+	if !ok || name == p.section {
 		return
 	}
-	p.sectionContent.Objects = []fyne.CanvasObject{view}
-	p.view.Refresh()
-	label := localize.T("gui.settings.section." + name)
-	if p.sidebar.Selected != label {
-		p.sidebar.SetSelected(label)
+	if current, ok := p.sectionViews[p.section]; ok {
+		current.Hide()
 	}
-	if p.sectionSelect.Selected != label {
+	p.section = name
+	view.Show()
+	p.view.Refresh()
+	for _, e := range p.sectionEntries {
+		e.setSelected(e.id == name)
+	}
+	if label := localize.T("gui.settings.section." + name); p.sectionSelect.Selected != label {
 		p.sectionSelect.SetSelected(label)
 	}
 }

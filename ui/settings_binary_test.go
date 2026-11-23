@@ -1,13 +1,16 @@
 package ui
 
 import (
+	"image/color"
 	"reflect"
 	"strings"
 	"testing"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
@@ -62,36 +65,86 @@ func TestSettingsNavigationCollapsesOnlyWhenSectionsCannotFit(t *testing.T) {
 	page := newSettingsPage(func(ipc.Command) {}, w)
 	w.SetContent(page.view)
 	w.Resize(fyne.NewSize(1200, 640))
-	if !page.sidebar.Visible() || page.sectionSelect.Visible() {
-		t.Fatal("wide settings page did not show its sidebar")
+	if !page.sectionList.Visible() || page.sectionSelect.Visible() {
+		t.Fatal("wide settings page did not show its section list")
 	}
-	page.sidebar.SetSelected("DNS")
-	if page.sectionSelect.Selected != "DNS" || page.sectionContent.Objects[0] != page.dns.view {
-		t.Fatal("sidebar did not select the DNS section")
+	for _, e := range page.sectionEntries {
+		if e.selected != (e.id == "Mihomo binary") {
+			t.Fatalf("initial selection marks %q = %t", e.id, e.selected)
+		}
+	}
+	test.Tap(sectionEntry(t, page, "DNS"))
+	if page.sectionSelect.Selected != "DNS" || !page.dns.view.Visible() || !sectionEntry(t, page, "DNS").selected || sectionEntry(t, page, "Mihomo binary").selected {
+		t.Fatal("section list did not select the DNS section")
 	}
 	w.Resize(fyne.NewSize(480, 640))
-	if page.sidebar.Visible() || !page.sectionSelect.Visible() || page.sectionSelect.Selected != "DNS" || page.sectionContent.Objects[0] != page.dns.view {
+	if page.sectionList.Visible() || !page.sectionSelect.Visible() || page.sectionSelect.Selected != "DNS" || !page.dns.view.Visible() {
 		t.Fatal("collapsed navigation lost the DNS section")
 	}
 	if page.sectionViews["Mihomo binary"].MinSize().Width > page.sectionContent.Size().Width {
 		t.Fatal("binary actions overflow the compact settings viewport")
 	}
 	page.sectionSelect.SetSelected("Mihomo binary")
-	if !page.sidebar.Visible() || page.sectionSelect.Visible() {
-		t.Fatal("settings switched to dropdown despite enough room for the sidebar")
+	if !page.sectionList.Visible() || page.sectionSelect.Visible() {
+		t.Fatal("settings switched to dropdown despite enough room for the section list")
 	}
 	page.sectionSelect.SetSelected("DNS")
-	if page.sidebar.Visible() || page.sectionContent.Size().Width < page.dns.view.MinSize().Width {
-		t.Fatal("DNS controls are clipped instead of collapsing the sidebar")
+	if page.sectionList.Visible() || page.sectionContent.Size().Width < page.dns.view.MinSize().Width {
+		t.Fatal("DNS controls are clipped instead of collapsing the section list")
 	}
 	page.sectionSelect.SetSelected("Monitor")
-	if page.sidebar.Selected != "Monitor" || page.sectionContent.Objects[0] == page.dns.view {
+	if !sectionEntry(t, page, "Monitor").selected || page.dns.view.Visible() || !page.sectionViews["Monitor"].Visible() {
 		t.Fatal("dropdown did not change sections")
 	}
 	w.Resize(fyne.NewSize(1200, 640))
-	if !page.sidebar.Visible() || page.sectionSelect.Visible() || page.sidebar.Selected != "Monitor" {
-		t.Fatal("expanding settings did not restore the selected sidebar section")
+	if !page.sectionList.Visible() || page.sectionSelect.Visible() || !sectionEntry(t, page, "Monitor").selected {
+		t.Fatal("expanding settings did not restore the selected section")
 	}
+}
+
+// TestHiddenSettingsSectionFollowsThemeChange flips the variant while another
+// section is shown; the hidden DNS section must repaint too.
+func TestHiddenSettingsSectionFollowsThemeChange(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	a.Settings().SetTheme(variantTheme{newTheme(), theme.VariantLight})
+	w := a.NewWindow("ClashPulse")
+	page := newSettingsPage(func(ipc.Command) {}, w)
+	w.SetContent(page.view)
+	w.Resize(fyne.NewSize(1200, 640))
+	page.selectSection("DNS")
+	page.selectSection("Monitor")
+	dark := variantTheme{newTheme(), theme.VariantDark}
+	a.Settings().SetTheme(dark)
+	want := dark.Color(theme.ColorNameForeground, theme.VariantDark)
+	var lightText color.Color = newTheme().Color(theme.ColorNameForeground, theme.VariantLight)
+	repainted := 0
+	for _, object := range paintedObjects(page.dns.view) {
+		text, ok := object.(*canvas.Text)
+		if !ok || text.Text == "" {
+			continue
+		}
+		if text.Color == lightText {
+			t.Fatalf("hidden DNS text %q kept the light foreground", text.Text)
+		}
+		if text.Color == want {
+			repainted++
+		}
+	}
+	if repainted == 0 {
+		t.Fatal("no DNS text repainted with the dark foreground")
+	}
+}
+
+func sectionEntry(t *testing.T, page *settingsPage, id string) *sidebarEntry {
+	t.Helper()
+	for _, e := range page.sectionEntries {
+		if e.id == id {
+			return e
+		}
+	}
+	t.Fatalf("no settings section %q", id)
+	return nil
 }
 
 func findSettingsButton(object fyne.CanvasObject, text string) *widget.Button {

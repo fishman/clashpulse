@@ -21,7 +21,10 @@ func TestSettingsTunRendersSnapshotAndSendsExactPatches(t *testing.T) {
 	if page.sectionViews["TUN"] == nil {
 		t.Fatal("settings has no TUN section")
 	}
-	options := page.sidebar.Options
+	var options []string
+	for _, e := range page.sectionEntries {
+		options = append(options, e.id)
+	}
 	if slices.Index(options, "TUN") != slices.Index(options, "System Proxy")+1 {
 		t.Fatalf("TUN section does not follow System Proxy: %q", options)
 	}

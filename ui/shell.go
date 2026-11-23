@@ -15,8 +15,8 @@ import (
 	"github.com/fishman/clashpulse/localize"
 )
 
-// sidebarEntry is one tappable navigation row: icon and label over an accent
-// tint shown while selected.
+// sidebarEntry is one tappable navigation row: an optional icon and a label
+// over an accent tint shown while selected.
 type sidebarEntry struct {
 	widget.BaseWidget
 	id       string
@@ -27,11 +27,14 @@ type sidebarEntry struct {
 	onTap    func(id string)
 }
 
-func newSidebarEntry(id string, icon fyne.Resource, onTap func(string)) *sidebarEntry {
-	e := &sidebarEntry{id: id, label: widget.NewLabel(localize.T(id)), tint: canvas.NewRectangle(color.Transparent), onTap: onTap}
+func newSidebarEntry(id, label string, icon fyne.Resource, onTap func(string)) *sidebarEntry {
+	e := &sidebarEntry{id: id, label: widget.NewLabel(label), tint: canvas.NewRectangle(color.Transparent), onTap: onTap}
 	e.tint.CornerRadius = theme.Size(theme.SizeNameSelectionRadius)
 	e.ExtendBaseWidget(e)
-	e.content = container.NewHBox(widget.NewIcon(icon), e.label)
+	e.content = e.label
+	if icon != nil {
+		e.content = container.NewHBox(widget.NewIcon(icon), e.label)
+	}
 	return e
 }
 
@@ -74,7 +77,7 @@ type sidebar struct {
 func newSidebar(onSelect func(id string)) *sidebar {
 	s := &sidebar{}
 	entry := func(id string, icon fyne.Resource) *sidebarEntry {
-		e := newSidebarEntry(id, icon, onSelect)
+		e := newSidebarEntry(id, localize.T(id), icon, onSelect)
 		s.entries = append(s.entries, e)
 		return e
 	}
