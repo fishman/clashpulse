@@ -1,4 +1,6 @@
 # Check out every file byte-for-byte on every platform. Embedded seeds and
 # test fixtures are compared by hash, so line-ending conversion changes them.
 * -text
+# Generated docs screenshots are binary and regenerated often: store them in
+# Git LFS so each refresh does not grow the repository history.
 docs/assets/screenshots/*.png filter=lfs diff=lfs merge=lfs -text
