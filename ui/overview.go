@@ -58,17 +58,16 @@ type overviewModel struct {
 // buildOverview derives every Overview card from one snapshot; it touches
 // no widget, so it is tested without a display.
 func buildOverview(s core.Snapshot) overviewModel {
-	policy := s.Monitor.SwitchPolicy
-	if policy == "" {
-		policy = monitor.DefaultPolicy().SwitchPolicy
-	}
 	m := overviewModel{
 		Profile: localize.T("None"),
 		Mode:    localize.Code("proxy.mode", s.ProxyMode),
-		Policy:  localize.Code("monitor.policy", policy),
+		Policy:  localize.Code("monitor.policy", s.Monitor.SwitchPolicy),
 	}
 	if m.Mode == "" {
 		m.Mode = "-"
+	}
+	if m.Policy == "" {
+		m.Policy = "-"
 	}
 	binary := binaryFieldValues(s.Binary)
 	m.Mihomo = binary[1] + " \u00b7 " + binary[0]
@@ -119,16 +118,19 @@ func buildOverview(s core.Snapshot) overviewModel {
 		if node != nil {
 			switch {
 			case node.Outcome == "success" && node.LatencyMillis > 0:
-				m.Node.Latency, m.Node.Unit = strconv.FormatInt(node.LatencyMillis, 10), "ms"
+				m.Node.Latency, m.Node.Unit = strconv.FormatInt(node.LatencyMillis, 10), localize.T("ms")
 			case node.MihomoMillis > 0:
-				m.Node.Latency, m.Node.Unit = strconv.FormatInt(node.MihomoMillis, 10), "ms (mihomo)"
+				m.Node.Latency, m.Node.Unit = strconv.FormatInt(node.MihomoMillis, 10), localize.T("ms (mihomo)")
 			}
 			m.Node.Detail = node.StabilityLabel()
 		}
 	}
 
 	m.Stream.Title = localize.T("URL test")
-	m.Stream.Summary = fmt.Sprintf(localize.T("URL test every %d s, timeout %d ms"), s.Monitor.IntervalSeconds, s.Monitor.TimeoutMillis)
+	m.Stream.Summary = "-"
+	if s.Monitor.IntervalSeconds > 0 {
+		m.Stream.Summary = fmt.Sprintf(localize.T("URL test every %d s, timeout %d ms"), s.Monitor.IntervalSeconds, s.Monitor.TimeoutMillis)
+	}
 	if s.Monitor.SwitchPolicy == monitor.SwitchSteadyStream && node != nil && node.StreamSamples > 0 {
 		fraction := float64(node.StreamCompleted) / float64(node.StreamSamples)
 		color := theme.ColorNameWarning
@@ -294,6 +296,7 @@ func newOverviewView(openActivity func()) *overviewView {
 	content := container.NewVBox(facts, container.NewGridWithColumns(2, v.node, stream), v.switchCard, container.NewGridWithColumns(2, v.usage, health))
 	v.object = container.NewVScroll(container.NewPadded(content))
 	v.update(buildOverview(core.Snapshot{}))
+	v.disconnect()
 	return v
 }
 
@@ -364,6 +367,12 @@ func (v *overviewView) update(m overviewModel) {
 	setLabel(v.healthCounts, m.Health.Counts)
 	setLabel(v.healthIssue, m.Health.Issue)
 	v.healthDot.set(m.Health.State.color())
+}
+
+// disconnect greys the health dot: without a live snapshot there is no
+// health to report.
+func (v *overviewView) disconnect() {
+	v.healthDot.set(pillOff.color())
 }
 
 // tapArea makes a whole card open something when tapped.

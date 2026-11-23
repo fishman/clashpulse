@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
+	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
 
 	"github.com/fishman/clashpulse/core"
@@ -16,14 +18,36 @@ func TestBuildOverviewEmptySnapshot(t *testing.T) {
 	if m.Node.Visible || m.Stream.Visible || m.Usage.Visible {
 		t.Fatalf("empty snapshot shows cards: %+v", m)
 	}
-	if !m.Switch.Empty || m.Switch.Title != "No switch yet" {
+	if !m.Switch.Empty || m.Switch.Title != localize.T("No switch yet") {
 		t.Fatalf("empty switch = %+v", m.Switch)
 	}
-	if m.Health.Issue != "No issues" || m.Health.State != pillOn {
+	if m.Health.Issue != localize.T("No issues") || m.Health.State != pillOn {
 		t.Fatalf("empty health = %+v", m.Health)
 	}
-	if m.Profile != "None" {
+	if m.Profile != localize.T("None") {
 		t.Fatalf("empty profile = %q", m.Profile)
+	}
+	// Before the first snapshot nothing is configured yet: no default policy
+	// and no zero-interval URL test.
+	if m.Policy != "-" || m.Mode != "-" || m.Stream.Summary != "-" {
+		t.Fatalf("empty facts = policy %q mode %q summary %q", m.Policy, m.Mode, m.Stream.Summary)
+	}
+}
+
+func TestOverviewHealthDotOffWithoutSnapshot(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	v := newOverviewView(nil)
+	if v.healthDot.color != pillOff.color() {
+		t.Fatalf("health dot before snapshot = %v", v.healthDot.color)
+	}
+	v.update(buildOverview(core.Snapshot{Revision: 1}))
+	if v.healthDot.color != pillOn.color() {
+		t.Fatalf("health dot after snapshot = %v", v.healthDot.color)
+	}
+	v.disconnect()
+	if v.healthDot.color != pillOff.color() {
+		t.Fatalf("health dot after disconnect = %v", v.healthDot.color)
 	}
 }
 
@@ -39,7 +63,7 @@ func TestBuildOverviewPrefersAutomatedGroup(t *testing.T) {
 		},
 	}
 	m := buildOverview(s)
-	if !m.Node.Visible || m.Node.Node != "Example Tokyo 02" || m.Node.Group != "Auto" || m.Node.Latency != "120" || m.Node.Unit != "ms" {
+	if !m.Node.Visible || m.Node.Node != "Example Tokyo 02" || m.Node.Group != "Auto" || m.Node.Latency != "120" || m.Node.Unit != localize.T("ms") {
 		t.Fatalf("node card = %+v", m.Node)
 	}
 	s.Groups[1].AutomationEnabled = false
@@ -47,7 +71,7 @@ func TestBuildOverviewPrefersAutomatedGroup(t *testing.T) {
 		t.Fatalf("fallback node card = %+v", m.Node)
 	}
 	s.Proxies[0].MihomoMillis = 75
-	if m := buildOverview(s); m.Node.Latency != "75" || m.Node.Unit != "ms (mihomo)" {
+	if m := buildOverview(s); m.Node.Latency != "75" || m.Node.Unit != localize.T("ms (mihomo)") {
 		t.Fatalf("mihomo latency = %+v", m.Node)
 	}
 }
@@ -63,7 +87,7 @@ func TestBuildOverviewStreamVisibility(t *testing.T) {
 		t.Fatalf("stream card = %+v", m.Stream)
 	}
 	s.Proxies[0].StreamSamples = 0
-	if m := buildOverview(s); m.Stream.Visible || m.Stream.Summary != "URL test every 60 s, timeout 5000 ms" {
+	if m := buildOverview(s); m.Stream.Visible || m.Stream.Summary != fmt.Sprintf(localize.T("URL test every %d s, timeout %d ms"), 60, 5000) {
 		t.Fatalf("no-sample stream card = %+v", m.Stream)
 	}
 	s.Proxies[0].StreamSamples = 4
@@ -99,7 +123,7 @@ func TestBuildOverviewSwitchUsesLabelsOrPrefix(t *testing.T) {
 		Proxies: []core.ProxySnapshot{{ID: "bbbbbbbb22222222", Label: "Example Tokyo 02"}},
 	}
 	m := buildOverview(s)
-	if m.Switch.Empty || m.Switch.Title != "aaaaaaaa -> Example Tokyo 02" || m.Switch.Time != "2026-01-01 00:00 UTC" || m.Switch.Reason != "materially better candidate" {
+	if m.Switch.Empty || m.Switch.Title != "aaaaaaaa -> Example Tokyo 02" || m.Switch.Time != "2026-01-01 00:00 UTC" || m.Switch.Reason != localize.T("materially better candidate") {
 		t.Fatalf("switch card = %+v", m.Switch)
 	}
 	for _, piece := range []string{"aaaaaaaa timeout 0 ms", "Example Tokyo 02 success 180 ms", "aaaaaaaa download reset", "Example Tokyo 02 download completed \u00b7 1800 KB/s"} {
@@ -137,18 +161,22 @@ func TestBuildOverviewShortLabels(t *testing.T) {
 		Filters:       []core.FilterSnapshot{{ID: "ads"}},
 	}
 	m := buildOverview(s)
-	if m.Policy != "Steady stream" || m.Stream.Title != "Steady stream" || m.Node.Group != "Proxy" {
+	if m.Policy != localize.Code("monitor.policy", monitor.SwitchSteadyStream) || m.Stream.Title != localize.T("Steady stream") || m.Node.Group != "Proxy" {
 		t.Fatalf("labels = %q %q %q", m.Policy, m.Stream.Title, m.Node.Group)
 	}
-	if m.Health.Counts != "Subscriptions 1 \u00b7 Data resources 0 \u00b7 Filter lists 1" {
+	if m.Health.Counts != fmt.Sprintf(localize.T("Subscriptions %d \u00b7 Data resources %d \u00b7 Filter lists %d"), 1, 0, 1) {
 		t.Fatalf("counts = %q", m.Health.Counts)
 	}
 	s.Proxies[0].StreamSamples = 0
-	if m := buildOverview(s); m.Stream.Title != "URL test" {
+	if m := buildOverview(s); m.Stream.Title != localize.T("URL test") {
 		t.Fatalf("summary title = %q", m.Stream.Title)
 	}
 	localize.SetLanguage("zh-CN")
 	t.Cleanup(func() { localize.SetLanguage("en") })
+	s.Proxies[0].LatencyMillis, s.Proxies[0].Outcome = 120, "success"
+	if m := buildOverview(s); m.Node.Unit != "\u6beb\u79d2" {
+		t.Fatalf("zh latency unit = %q", m.Node.Unit)
+	}
 	if m := buildOverview(s); m.Policy != "\u7a33\u5b9a\u6d41" || m.Health.Counts != "\u8ba2\u9605 1 \u00b7 \u6570\u636e\u8d44\u6e90 0 \u00b7 \u8fc7\u6ee4\u5217\u8868 1" {
 		t.Fatalf("zh labels = %q %q", m.Policy, m.Health.Counts)
 	}

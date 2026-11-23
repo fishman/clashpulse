@@ -16,6 +16,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestNavigationLabelsAcrossLocales(t *testing.T) {
+	t.Cleanup(func() { localize.SetLanguage("en") })
 	for _, tc := range []struct{ locale, labels string }{
 		{"en", "Overview|Proxies|Subscriptions|Filter Lists|Data Resources|Settings"},
 		{"zh-CN", "概览|代理|订阅|过滤列表|数据资源|设置"},
@@ -32,5 +33,4 @@ func TestNavigationLabelsAcrossLocales(t *testing.T) {
 		}
 		a.Quit()
 	}
-	localize.SetLanguage("en")
 }

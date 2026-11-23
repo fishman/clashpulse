@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image/color"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -77,7 +78,7 @@ func newSidebar(onSelect func(id string)) *sidebar {
 		s.entries = append(s.entries, e)
 		return e
 	}
-	sources := newMutedText(localize.T("Sources"), sizeNameCaption)
+	sources := newMutedText(strings.ToUpper(localize.T("Sources")), sizeNameCaption)
 	sources.TextStyle.Bold = true
 	top := container.NewVBox(
 		entry("Overview", theme.HomeIcon()),
@@ -148,10 +149,15 @@ func newTopBar(w fyne.Window, connection *widget.Label, items ...*fyne.MenuItem)
 		position := fyne.CurrentApp().Driver().AbsolutePositionForObject(t.menu)
 		widget.NewPopUpMenu(menu, w.Canvas()).ShowAtPosition(position.AddXY(0, t.menu.Size().Height))
 	}
-	status := container.NewHBox(connection, center(t.mihomo.object), center(t.systemProxy.object), center(t.tun.object), t.menu)
-	row := container.NewBorder(nil, nil, nil, status, container.New(paintLayout{layout.NewVBoxLayout(), func() {
+	// The connection text takes whatever width is left and truncates, so a
+	// long status never widens the window.
+	connection.Truncation = fyne.TextTruncateEllipsis
+	connection.Alignment = fyne.TextAlignTrailing
+	status := container.NewHBox(center(t.mihomo.object), center(t.systemProxy.object), center(t.tun.object), t.menu)
+	title := container.New(paintLayout{layout.NewVBoxLayout(), func() {
 		t.title.Color = theme.Color(theme.ColorNameForeground)
-	}}, t.title))
+	}}, t.title)
+	row := container.NewBorder(nil, nil, title, status, connection)
 	t.object = container.New(layout.NewCustomPaddedLayout(12, 6, 16, 12), row)
 	return t
 }

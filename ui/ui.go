@@ -369,6 +369,7 @@ func (d *desktopUI) postDisconnected() {
 		d.connected = false
 		d.proxyPage.setStreamProbe(false)
 		d.topBar.disconnect()
+		d.overview.disconnect()
 		// The last snapshot keeps the tray sections populated; trayMenu disables
 		// what a disconnected UI cannot serve.
 		d.updateTray(d.current)

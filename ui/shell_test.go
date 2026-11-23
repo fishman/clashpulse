@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"image/color"
+	"strings"
 	"testing"
 
 	"fyne.io/fyne/v2"
@@ -35,6 +36,7 @@ func TestPillStates(t *testing.T) {
 }
 
 func TestShowViewSelectsSidebarAndTitle(t *testing.T) {
+	t.Cleanup(func() { localize.SetLanguage("en") })
 	for _, locale := range []string{"en", "zh-CN"} {
 		localize.SetLanguage(locale)
 		a := test.NewApp()
@@ -48,7 +50,6 @@ func TestShowViewSelectsSidebarAndTitle(t *testing.T) {
 		}
 		a.Quit()
 	}
-	localize.SetLanguage("en")
 }
 
 func TestTopBarDisconnectedTurnsPillsOff(t *testing.T) {
@@ -62,6 +63,18 @@ func TestTopBarDisconnectedTurnsPillsOff(t *testing.T) {
 	view.topBar.disconnect()
 	if view.topBar.mihomo.state != pillOff || view.topBar.tun.state != pillOff || view.connection.Text != "Disconnected" {
 		t.Fatalf("disconnected top bar = %v %v %q", view.topBar.mihomo.state, view.topBar.tun.state, view.connection.Text)
+	}
+}
+
+func TestTopBarWidthIgnoresStatusLength(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	view := newDesktopUI(context.Background(), "", a.NewWindow("ClashPulse"))
+	view.topBar.setConnection("ok")
+	short := view.topBar.object.MinSize().Width
+	view.topBar.setConnection(strings.Repeat("a very long service status ", 8))
+	if got := view.topBar.object.MinSize().Width; got != short {
+		t.Fatalf("top bar min width grew from %v to %v", short, got)
 	}
 }
 

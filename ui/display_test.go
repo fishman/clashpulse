@@ -62,9 +62,8 @@ func TestProxyRowShowsOnlySelectionAndLatency(t *testing.T) {
 	})
 	row := page.list.CreateItem()
 	page.list.UpdateItem(0, row)
-	labels := rowLabels(row)
-	if strings.Join(labels, ",") != "node-a,,Active,42 ms" || strings.Contains(strings.Join(labels, " "), "private detail") {
-		t.Fatalf("proxy row exposed outcome or lost separate cells: %v", labels)
+	if got := proxyRowCells(page, row); got != (proxyRowText{"node-a", "", localize.T("Active"), "42 ms"}) || strings.Contains(strings.Join(rowLabels(row), " "), "private detail") {
+		t.Fatalf("proxy row exposed outcome or lost separate cells: %+v", got)
 	}
 }
 
@@ -78,8 +77,8 @@ func TestProxyRowFallsBackToMihomoReportedLatency(t *testing.T) {
 	})
 	row := page.list.CreateItem()
 	page.list.UpdateItem(0, row)
-	if got, want := strings.Join(rowLabels(row), ","), "node-a,,Active,123 ms (mihomo)"; got != want {
-		t.Fatalf("url-test row = %q, want %q", got, want)
+	if got, want := proxyRowCells(page, row), (proxyRowText{"node-a", "", localize.T("Active"), "123 ms (mihomo)"}); got != want {
+		t.Fatalf("url-test row = %+v, want %+v", got, want)
 	}
 }
 
@@ -104,8 +103,8 @@ func TestProxyRowShowsStabilityOnlyAfterSamples(t *testing.T) {
 		})
 		row := page.list.CreateItem()
 		page.list.UpdateItem(0, row)
-		if got, want := strings.Join(rowLabels(row), ","), "node-a,"+tc.detail+",Active,"+tc.badge; got != want {
-			t.Fatalf("proxy row = %q, want %q", got, want)
+		if got, want := proxyRowCells(page, row), (proxyRowText{"node-a", tc.detail, localize.T("Active"), tc.badge}); got != want {
+			t.Fatalf("proxy row = %+v, want %+v", got, want)
 		}
 	}
 }
@@ -297,4 +296,12 @@ func TestProxyStatusReportsWhetherTrafficIsProxied(t *testing.T) {
 func overviewSwitchText(snapshot core.Snapshot) string {
 	card := buildOverview(snapshot).Switch
 	return strings.Join([]string{card.Title, card.Reason, card.Evidence}, " ")
+}
+
+// proxyRowText is what one proxy row shows, cell by cell.
+type proxyRowText struct{ name, detail, state, badge string }
+
+func proxyRowCells(page *proxyPage, row fyne.CanvasObject) proxyRowText {
+	item := page.items[row.(*fyne.Container)]
+	return proxyRowText{item.name.Text, item.detail.Text, item.state.Text, item.badge.text.Text}
 }
