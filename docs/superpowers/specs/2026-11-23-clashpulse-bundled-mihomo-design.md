@@ -15,8 +15,9 @@ depends on Homebrew's `mihomo`; the tap is a separate repository
 Windows amd64. Windows arm64 is deferred: the `windows-11-arm` runner has
 only an x86_64 mingw gcc and an MSVC-target clang, so Fyne's cgo build fails
 (probe run 80); it needs an aarch64 mingw toolchain such as llvm-mingw, a new
-build dependency. The amd64 package runs on Windows on ARM under x64
-emulation.
+build dependency. Windows on ARM can run x64 programs under emulation, but
+the amd64 package is unverified there until the release workflow's
+`windows-11-arm` smoke job (below) passes.
 
 ## Facts this relies on
 
@@ -109,6 +110,9 @@ thread.
   darwin-amd64 (`macos-26-intel`), windows-amd64 (`windows-latest`). Each
   desktop job builds natively so the existing smoke run (`clashpulse
   version`, bundled `mihomo -v`) executes on the target architecture.
+- A `windows-11-arm` job downloads the windows-amd64 artifact and runs the
+  same smoke checks (`clashpulse.exe version`, bundled `mihomo.exe -v`)
+  under x64 emulation. It proves the binaries start, not that the GUI opens.
 - macOS and Windows jobs: read `packaging/mihomo.lock`, download the asset,
   verify its SHA-256, extract, hash the executable, place it in the package,
   pass `Version` and the executable hash via `-ldflags -X`, add
