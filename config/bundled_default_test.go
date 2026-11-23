@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -53,5 +54,28 @@ func TestExplicitSystemBinaryOverridesBundledDefault(t *testing.T) {
 	}
 	if snapshot.Mihomo.Binary != "system" {
 		t.Fatalf("explicit system became %q", snapshot.Mihomo.Binary)
+	}
+}
+
+func TestSettingsEditKeepsBinaryUnsetOnSeededConfig(t *testing.T) {
+	dir := t.TempDir()
+	if err := Seed(dir); err != nil {
+		t.Fatal(err)
+	}
+	current, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	disabled := false
+	path := filepath.Join(dir, "config.toml")
+	if err := PatchSettings(path, current, SettingsPatch{MonitorEnabled: &disabled}); err != nil {
+		t.Fatal(err)
+	}
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if regexp.MustCompile(`(?m)^\s*binary\s*=`).Match(written) {
+		t.Fatalf("unrelated edit wrote a binary key:\n%s", written)
 	}
 }

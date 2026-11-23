@@ -12,7 +12,7 @@ import (
 
 type configDoc struct {
 	Mihomo struct {
-		Binary           string  `toml:"binary"`
+		Binary           string  `toml:"binary,omitempty"`
 		URLTestInterval  *string `toml:"url_test_interval"`
 		URLTestTolerance *string `toml:"url_test_tolerance"`
 		MixedPort        *int    `toml:"mixed_port"`
