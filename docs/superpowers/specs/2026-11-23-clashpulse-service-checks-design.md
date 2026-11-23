@@ -44,13 +44,13 @@ Read from `src-tauri/src/cmd/media_unlock_checker/mod.rs`,
 | | Clash Verge Rev | ClashPulse |
 |---|---|---|
 | When | on demand from the Unlock page; results cached in `localStorage` | every 30 min per enabled service, on node change, and on "Check now" |
-| Path | the user's mixed port, so the node the current rules pick | the private pinned probe listener, so a named node; candidates can be checked before a switch |
+| Path | the user's mixed port, so the node the current rules pick | a pool of private pinned probe listeners, so a named node; candidates can be checked before a switch |
 | Effect | display only; no routing, no switching | per-service group, rules, and opt-in automatic switching |
-| Scope | 11 services, 4 concurrent checks | 6 services, one check at a time on the probe worker |
+| Scope | 11 services, 4 concurrent checks | 6 services, up to 4 concurrent checks on a pool of 4 pinned probe listeners |
 | Bodies | read whole (Gemini about 0.9 MB, YouTube about 1 MB) | capped per definition; Gemini reuses the YouTube read |
 | TLS | `danger_accept_invalid_certs(true)` and invalid hostnames accepted | verified TLS 1.2+; a TLS failure is `error` |
-| Redirects and cookies | reqwest defaults (follows up to 10), cookie store on | bounded same-site redirects per definition, no cookies |
-| Timeout | 15 s per service | 10 s per service |
+| Redirects and cookies | reqwest defaults (follows up to 10), cookie store on | follows up to 10 HTTPS redirects within the service's hosts; in-memory cookie jar per check |
+| Timeout | 15 s per service | 15 s per service |
 | User-Agent | fixed desktop Chrome string | fixed desktop browser string (below) |
 
 Verge's invalid-certificate acceptance is not copied: an intercepted
@@ -84,7 +84,7 @@ type Definition struct {
 	Blocked   []string // ISO 3166-1 alpha-2 country codes refused by the service
 	Markers   []string // body phrases meaning "refused here"
 	MaxBytes  int64    // read cap; reading stops early once the signal is found
-	Redirects int      // redirects followed; 0 means a 3xx is the final response
+	Redirects int      // redirects followed: 10, or 0 when a 3xx is the signal (Netflix)
 	Hosts     []string // host suffixes a redirect may target
 	Domains   []string // default DOMAIN-SUFFIX routing set
 }
@@ -103,9 +103,9 @@ type Result struct {
 | `chatgpt` | `body_marker` | `https://chat.openai.com/cdn-cgi/trace` (region only), then `https://api.openai.com/compliance/cookie_requirements` | the second response is 2xx and its body lacks `unsupported_country` (case-insensitive); region from `loc` | 4 KiB each |
 | `claude` | `trace_loc` | `https://claude.ai/cdn-cgi/trace` | `loc` not in AF BY CN CU HK IR KP MO RU SY | 4 KiB |
 | `gemini` | Google country | shares the YouTube read | `GL` not in CN RU BY CU IR KP SY HK MO | (YouTube read) |
-| `youtube` | `body_marker` | `https://www.youtube.com/premium?hl=en`; up to 3 redirects within `youtube.com` | `GL` found and no `premium is not available in your region` marker in the read prefix | 96 KiB |
+| `youtube` | `body_marker` | `https://www.youtube.com/premium?hl=en` | `GL` found and no `premium is not available in your region` marker in the read prefix | 96 KiB |
 | `netflix` | `status_pair` | `https://www.netflix.com/title/81280792` and `https://www.netflix.com/title/70143836`, then `https://www.netflix.com/title/80018499` for the region; no redirects followed | either title not 404 and neither 403; region from the third response's `Location` path segment (`/us-en/...` gives `US`) | headers only |
-| `spotify` | `json_country` | `https://www.spotify.com/api/content/v1/country-selector?platform=web&format=json`; up to 3 redirects within `spotify.com` | final status 2xx, body lacks `not available in your country`; region from `countryCode`, else the final URL's first path segment (`/us-en/` gives `US`) | 16 KiB |
+| `spotify` | `json_country` | `https://www.spotify.com/api/content/v1/country-selector?platform=web&format=json` | final status 2xx, body lacks `not available in your country`; region from `countryCode`, else the final URL's first path segment (`/us-en/` gives `US`) | 16 KiB |
 
 The Netflix title IDs are the ones the reference client probes
 (`netflix.rs:39` and `:74`).
@@ -119,18 +119,31 @@ Outcome rules:
 - A blocked list match uses the detected region; an empty region with no
   marker is `error`, never `usable`.
 
-Every request: GET, HTTPS only, TLS 1.2+, no cookies, a fixed desktop
-browser `User-Agent` (services can serve a different page to Go's default
-agent; the measurements above used a browser-style agent),
-`DisableKeepAlives`,
-a 10 s total timeout across its redirects, the read cap above, and context
-cancellation. Redirects follow the definition: at most `Redirects` hops, each
-to an HTTPS URL whose host equals or ends in `.` + one of `Hosts`; any other
-target, or a 3xx beyond the cap, ends the check as `error`. A redirect that
-stays in bounds but lands on a page without the expected signal (for
-example `consent.youtube.com` without `GL`) is `error`, never `usable`.
+Every request: GET, HTTPS only, TLS 1.2+, a fixed desktop browser
+`User-Agent` (services can serve a different page to Go's default agent; the
+measurements above used a browser-style agent), `DisableKeepAlives`, a 15 s
+total timeout per service check across all its requests and redirects, the
+read cap above, and context cancellation.
+
+Cookies: each service check gets a fresh in-memory `cookiejar.Jar`, shared
+by that check's requests and redirects (consent and region pages set cookies
+on the first hop) and discarded when the check ends. A jar is never reused
+across nodes, services, or checks, never written to disk, and never logged,
+so one node's region cookie cannot colour another node's result.
+
+Redirects: up to 10 hops (Netflix: none, because its status and `Location`
+are the signal). Each hop must be HTTPS to a host equal to one of the
+definition's `Hosts` or a subdomain of one (for example `youtube.com`,
+`google.com` for YouTube and Gemini; `spotify.com` for Spotify;
+`openai.com`, `chatgpt.com` for ChatGPT; `claude.ai`, `anthropic.com` for
+Claude). Any
+other target, or an 11th hop, ends the check as `error`; landing on another
+site's page would otherwise be read as this service's region. A redirect
+that stays in bounds but lands on a page without the expected signal (for
+example a consent page without `GL`) is `error`, never `usable`.
+
 Region codes and outcomes are the only parsed values that leave the
-`services` package; bodies are discarded.
+`services` package; bodies and cookies are discarded.
 
 ## Routing
 
@@ -172,14 +185,20 @@ the first scheduled check follows immediately.
 
 ## Probing
 
-Checks run through the existing private loopback probe listener and its
-pinned group (`clashpulse-stream-probe`). Today the listener renders only for
-`switch_policy = "steady_stream"`; it now renders when steady stream **or**
-any service is enabled. Its credential handling is unchanged.
+Checks run through a pool of 4 private loopback probe listeners, each pinned
+to its own select group (`clashpulse-probe-1` .. `clashpulse-probe-4`, all
+`include-all: true`, each with its own in-memory credential). The pool
+replaces today's single `clashpulse-stream-probe` pair; steady-stream pulls
+take a slot from the same pool. The pool renders when steady stream **or**
+any service is enabled, and not otherwise.
 
-Selecting a node on the probe group and reading through the listener is not
-concurrent-safe, so the monitor runs steady-stream pulls and service checks
-on one probe worker, one request sequence at a time.
+A slot is selected to one node through the controller, then carries every
+due request for that node: all due services for one node run concurrently on
+one slot, because they share its selection. Different nodes use different
+slots, so up to 4 nodes are checked at once. A slot is held from its select
+call until its last request ends, so no other work can re-point it mid-check.
+`mihomo -t` validates four such pairs (checked 2026-11-23); the plan adds a
+runtime check that each listener follows only its own group.
 
 Scheduling, owned by the existing `monitor.Scheduler` timer:
 
@@ -211,8 +230,10 @@ Per service group:
    detected region for this service qualifies only after it is checked).
    Ordered by median latency from the existing delay history; nodes without
    latency history go last. At most 8 candidates per search.
-3. Candidates are checked one at a time on the probe worker. The first
-   `usable` candidate in the preferred regions wins.
+3. Candidates are checked up to 4 at a time (one slot each), in latency
+   order. When a wave finishes, the lowest-latency `usable` candidate in the
+   preferred regions wins; if none is usable, the next wave starts, up to the
+   8-candidate cap.
 4. The app selects it through the controller with the existing guard rules:
    one switch in flight per group, the policy cooldown, and no switch while
    the group has a manual override.
@@ -284,17 +305,23 @@ TUI: the same rows and actions through the declarative keymap.
 
 - `services`: `httptest` TLS servers for each rule kind: usable, blocked by
   region, blocked by marker, Netflix originals-only and 403, missing signal is
-  `error`, cap stops reading, cancellation, no redirect leak of cookies.
-  Redirects: an in-bounds 302 is followed to the signal; a hop to another
-  host, to plain HTTP, or past the cap is `error`; a no-redirect definition
-  treats a 302 as `error`; an in-bounds landing page without the signal
-  (consent page) is `error`.
+  `error`, cap stops reading, 15 s budget spans all hops, cancellation.
+  Redirects: an in-bounds chain of 10 is followed to the signal; an 11th hop,
+  a hop to another host, or to plain HTTP is `error`; Netflix treats a 302 as
+  its signal without following it; an in-bounds landing page without the
+  signal (consent page) is `error`.
+  Cookies: a cookie set on the first hop is sent on the next hop of the same
+  check, and never on a later check, another service, or another node.
   Fixtures use reserved names and synthetic bodies only.
 - `monitor`: only the selected node is checked on a due round; node change
-  and "Check now" force a check; candidate search caps at 8 and honours
-  regions; cooldown, manual override, circuit breaker; probe worker never
-  overlaps a stream pull and a service check; disabled services schedule
+  and "Check now" force a check; candidate search runs waves of at most 4 and
+  caps at 8, picks the lowest-latency usable candidate of a wave, and honours
+  regions; cooldown, manual override, circuit breaker; at most 4 slots in
+  use; a slot is never re-pointed while a check or stream pull holds it;
+  services due on one node share one slot; disabled services schedule
   nothing.
+- `mihomo`: runtime test with the installed binary that four pool listeners
+  each egress through only their own group's selection.
 - `mihomo`: deterministic group and rule rendering, `domains_resource`
   rendering, name collision error, listener rendered for services without
   steady stream; validated with the selected Mihomo binary in the existing
