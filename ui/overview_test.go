@@ -7,6 +7,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/localize"
 	"github.com/fishman/clashpulse/monitor"
 )
 
@@ -124,5 +125,31 @@ func TestBuildOverviewHealth(t *testing.T) {
 	m = buildOverview(core.Snapshot{Binary: core.BinarySnapshot{LastCompatibilityFailure: "bundled Mihomo is not installed"}})
 	if m.Health.State != pillFailed || m.Health.Issue != "bundled Mihomo is not installed" {
 		t.Fatalf("compatibility health = %+v", m.Health)
+	}
+}
+
+func TestBuildOverviewShortLabels(t *testing.T) {
+	s := core.Snapshot{
+		Monitor:       core.MonitorSnapshot{SwitchPolicy: monitor.SwitchSteadyStream},
+		Groups:        []core.GroupSnapshot{{ID: "g", Label: "Proxy", Type: "Selector", Selected: "a", AutomationEnabled: true}},
+		Proxies:       []core.ProxySnapshot{{ID: "a", GroupID: "g", StreamSamples: 1, StreamCompleted: 1}},
+		Subscriptions: []core.SubscriptionSnapshot{{ID: "one"}},
+		Filters:       []core.FilterSnapshot{{ID: "ads"}},
+	}
+	m := buildOverview(s)
+	if m.Policy != "Steady stream" || m.Stream.Title != "Steady stream" || m.Node.Group != "Proxy" {
+		t.Fatalf("labels = %q %q %q", m.Policy, m.Stream.Title, m.Node.Group)
+	}
+	if m.Health.Counts != "Subscriptions 1 \u00b7 Data resources 0 \u00b7 Filter lists 1" {
+		t.Fatalf("counts = %q", m.Health.Counts)
+	}
+	s.Proxies[0].StreamSamples = 0
+	if m := buildOverview(s); m.Stream.Title != "URL test" {
+		t.Fatalf("summary title = %q", m.Stream.Title)
+	}
+	localize.SetLanguage("zh-CN")
+	t.Cleanup(func() { localize.SetLanguage("en") })
+	if m := buildOverview(s); m.Policy != "\u7a33\u5b9a\u6d41" || m.Health.Counts != "\u8ba2\u9605 1 \u00b7 \u6570\u636e\u8d44\u6e90 0 \u00b7 \u8fc7\u6ee4\u5217\u8868 1" {
+		t.Fatalf("zh labels = %q %q", m.Policy, m.Health.Counts)
 	}
 }

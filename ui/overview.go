@@ -23,10 +23,10 @@ type nodeCard struct {
 }
 
 type streamCard struct {
-	Visible              bool
-	KBps, Label, Summary string
-	Fraction             float64
-	Color                fyne.ThemeColorName
+	Visible                     bool
+	Title, KBps, Label, Summary string
+	Fraction                    float64
+	Color                       fyne.ThemeColorName
 }
 
 type switchCard struct {
@@ -58,10 +58,14 @@ type overviewModel struct {
 // buildOverview derives every Overview card from one snapshot; it touches
 // no widget, so it is tested without a display.
 func buildOverview(s core.Snapshot) overviewModel {
+	policy := s.Monitor.SwitchPolicy
+	if policy == "" {
+		policy = monitor.DefaultPolicy().SwitchPolicy
+	}
 	m := overviewModel{
 		Profile: localize.T("None"),
 		Mode:    localize.Code("proxy.mode", s.ProxyMode),
-		Policy:  switchPolicyLabel(s.Monitor.SwitchPolicy),
+		Policy:  localize.Code("monitor.policy", policy),
 	}
 	if m.Mode == "" {
 		m.Mode = "-"
@@ -93,7 +97,11 @@ func buildOverview(s core.Snapshot) overviewModel {
 				break
 			}
 		}
-		m.Node = nodeCard{Visible: true, Group: groupLabel(group), Node: core.ProxyLabel(s.Proxies, group.Selected), Latency: "-"}
+		groupName := group.Label
+		if groupName == "" {
+			groupName = group.ID
+		}
+		m.Node = nodeCard{Visible: true, Group: groupName, Node: core.ProxyLabel(s.Proxies, group.Selected), Latency: "-"}
 		switch {
 		case group.ManualOverride:
 			m.Node.Automation = localize.T("Manual override")
@@ -119,6 +127,7 @@ func buildOverview(s core.Snapshot) overviewModel {
 		}
 	}
 
+	m.Stream.Title = localize.T("URL test")
 	m.Stream.Summary = fmt.Sprintf(localize.T("URL test every %d s, timeout %d ms"), s.Monitor.IntervalSeconds, s.Monitor.TimeoutMillis)
 	if s.Monitor.SwitchPolicy == monitor.SwitchSteadyStream && node != nil && node.StreamSamples > 0 {
 		fraction := float64(node.StreamCompleted) / float64(node.StreamSamples)
@@ -129,7 +138,7 @@ func buildOverview(s core.Snapshot) overviewModel {
 		case fraction <= 0:
 			color = theme.ColorNameError
 		}
-		m.Stream = streamCard{Visible: true, KBps: strconv.FormatInt(node.StreamKBps, 10), Label: node.StreamLabel(), Fraction: fraction, Color: color, Summary: m.Stream.Summary}
+		m.Stream = streamCard{Visible: true, Title: localize.T("Steady stream"), KBps: strconv.FormatInt(node.StreamKBps, 10), Label: node.StreamLabel(), Fraction: fraction, Color: color, Summary: m.Stream.Summary}
 	}
 
 	m.Switch = switchCard{Empty: true, Title: localize.T("No switch yet")}
@@ -157,7 +166,7 @@ func buildOverview(s core.Snapshot) overviewModel {
 	}
 
 	m.Health = healthCard{
-		Counts: fmt.Sprintf(localize.T("%d subscriptions \u00b7 %d resources \u00b7 %d filters"), len(s.Subscriptions), len(s.Resources), len(s.Filters)),
+		Counts: fmt.Sprintf(localize.T("Subscriptions %d \u00b7 Data resources %d \u00b7 Filter lists %d"), len(s.Subscriptions), len(s.Resources), len(s.Filters)),
 		Issue:  localize.T("No issues"),
 		State:  pillOn,
 	}
@@ -170,16 +179,24 @@ func buildOverview(s core.Snapshot) overviewModel {
 	return m
 }
 
-// switchEvidence lists the probe and download samples behind a switch.
+// switchEvidence lists the probe samples behind a switch on one line and the
+// download samples on a second.
 func switchEvidence(proxies []core.ProxySnapshot, event core.SwitchSnapshot) string {
-	pieces := make([]string, 0, len(event.Evidence)+len(event.StreamEvidence))
+	probes := make([]string, 0, len(event.Evidence))
 	for _, sample := range event.Evidence {
-		pieces = append(pieces, fmt.Sprintf(localize.T("%s %s %d ms"), core.ProxyLabel(proxies, sample.ProxyID), localize.Code("probe.outcome", sample.Outcome), sample.LatencyMillis))
+		probes = append(probes, fmt.Sprintf(localize.T("%s %s %d ms"), core.ProxyLabel(proxies, sample.ProxyID), localize.Code("probe.outcome", sample.Outcome), sample.LatencyMillis))
 	}
+	downloads := make([]string, 0, len(event.StreamEvidence))
 	for _, sample := range event.StreamEvidence {
-		pieces = append(pieces, core.ProxyLabel(proxies, sample.ProxyID)+" "+sample.Label())
+		downloads = append(downloads, core.ProxyLabel(proxies, sample.ProxyID)+" "+sample.Label())
 	}
-	return strings.Join(pieces, "; ")
+	lines := make([]string, 0, 2)
+	for _, line := range []string{strings.Join(probes, "; "), strings.Join(downloads, "; ")} {
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func gigabytes(bytes uint64) string {
@@ -192,23 +209,24 @@ type overviewView struct {
 
 	profile, mode, policy, mihomo *widget.Label
 
-	node                           *fyne.Container
-	nodeBody                       *fyne.Container
-	nodeEmpty, nodeName, nodeGroup *widget.Label
-	nodeDetail                     *widget.Label
-	nodeLatency, nodeUnit          *canvas.Text
-	streamBody                     *fyne.Container
-	streamSummary, streamLabel     *widget.Label
-	streamKBps                     *canvas.Text
-	streamMeter                    *meter
-	switchTitle, switchTime        *widget.Label
-	switchEvidence                 *widget.Label
-	usage                          *fyne.Container
-	usageName, usageExpires        *widget.Label
-	usageUsed, usageTotal          *canvas.Text
-	usageMeter                     *meter
-	healthCounts, healthIssue      *widget.Label
-	healthDot                      *statusPill
+	node, switchCard           *fyne.Container
+	nodeCaption, streamCaption *canvas.Text
+	nodeBody                   *fyne.Container
+	nodeEmpty, nodeName        *widget.Label
+	nodeDetail                 *widget.Label
+	nodeLatency, nodeUnit      *canvas.Text
+	streamBody                 *fyne.Container
+	streamSummary, streamLabel *widget.Label
+	streamKBps                 *canvas.Text
+	streamMeter                *meter
+	switchTitle, switchTime    *widget.Label
+	switchEvidence             *widget.Label
+	usage                      *fyne.Container
+	usageName, usageExpires    *widget.Label
+	usageUsed, usageTotal      *canvas.Text
+	usageMeter                 *meter
+	healthCounts, healthIssue  *widget.Label
+	healthDot                  *dot
 }
 
 func newOverviewView(openActivity func()) *overviewView {
@@ -230,15 +248,15 @@ func newOverviewView(openActivity func()) *overviewView {
 	mihomoCard, mihomo := fact("Mihomo")
 	v.profile, v.mode, v.policy, v.mihomo = profile, mode, policy, mihomo
 
-	v.nodeName, v.nodeGroup = label(fyne.TextStyle{Bold: true}), label(fyne.TextStyle{})
+	v.nodeName = label(fyne.TextStyle{Bold: true})
 	v.nodeDetail = label(fyne.TextStyle{})
 	v.nodeEmpty = label(fyne.TextStyle{})
 	v.nodeEmpty.SetText(localize.T("No proxy group yet"))
 	latency, number, unit := newValue("-", "")
 	v.nodeLatency, v.nodeUnit = number, unit
-	v.nodeBody = container.New(layout.NewCustomPaddedVBoxLayout(0), v.nodeName, latency, v.nodeDetail, v.nodeGroup)
+	v.nodeBody = container.New(layout.NewCustomPaddedVBoxLayout(0), v.nodeName, latency, v.nodeDetail)
 	v.nodeBody.Hide()
-	v.node = newCard(localize.T("Current node"), v.nodeEmpty, v.nodeBody)
+	v.node, v.nodeCaption = newTitledCard(localize.T("Current node"), v.nodeEmpty, v.nodeBody)
 
 	v.streamSummary, v.streamLabel = label(fyne.TextStyle{}), label(fyne.TextStyle{})
 	kbps, kbpsNumber, _ := newValue("0", "KB/s")
@@ -246,12 +264,17 @@ func newOverviewView(openActivity func()) *overviewView {
 	v.streamMeter = newMeter()
 	v.streamBody = container.New(layout.NewCustomPaddedVBoxLayout(0), kbps, v.streamLabel, v.streamMeter.object)
 	v.streamBody.Hide()
-	stream := newCard(localize.T("Monitor"), v.streamSummary, v.streamBody)
+	stream, streamCaption := newTitledCard(localize.T("URL test"), v.streamSummary, v.streamBody)
+	v.streamCaption = streamCaption
 
 	v.switchTitle, v.switchTime = label(fyne.TextStyle{Bold: true}), label(fyne.TextStyle{})
+	// One line each for probes and downloads, truncated rather than wrapped:
+	// a wrapped label measures its height at a stale width.
 	v.switchEvidence = label(fyne.TextStyle{})
+	v.switchEvidence.Wrapping = fyne.TextWrapOff
+	v.switchEvidence.Truncation = fyne.TextTruncateEllipsis
 	v.switchTitle.SetText(localize.T("No switch yet"))
-	switchCard := newCard(localize.T("Last switch"), v.switchTitle, v.switchTime, v.switchEvidence)
+	v.switchCard = newCard(localize.T("Last switch"), v.switchTitle, v.switchTime, v.switchEvidence)
 
 	v.usageName, v.usageExpires = label(fyne.TextStyle{}), label(fyne.TextStyle{})
 	used, usedNumber, usedTotal := newValue("0", "")
@@ -261,13 +284,14 @@ func newOverviewView(openActivity func()) *overviewView {
 	v.usage.Hide()
 
 	v.healthCounts, v.healthIssue = label(fyne.TextStyle{}), label(fyne.TextStyle{})
-	v.healthDot = pill(localize.T("Status"))
+	v.healthDot = newDot()
 	activity := widget.NewButton(localize.T("View activity"), openActivity)
 	activity.Importance = widget.LowImportance
-	health := newTapArea(newCard(localize.T("Health"), v.healthCounts, container.NewHBox(v.healthDot.object), v.healthIssue, container.NewHBox(activity)), openActivity)
+	issue := container.NewBorder(nil, nil, container.New(layout.NewCustomPaddedLayout(0, 0, theme.InnerPadding(), 0), v.healthDot.object), nil, v.healthIssue)
+	health := newTapArea(newCard(localize.T("Health"), v.healthCounts, issue, container.NewHBox(activity)), openActivity)
 
 	facts := container.NewGridWithColumns(4, profileCard, modeCard, policyCard, mihomoCard)
-	content := container.NewVBox(facts, container.NewGridWithColumns(2, v.node, stream), switchCard, container.NewGridWithColumns(2, v.usage, health))
+	content := container.NewVBox(facts, container.NewGridWithColumns(2, v.node, stream), v.switchCard, container.NewGridWithColumns(2, v.usage, health))
 	v.object = container.NewVScroll(container.NewPadded(content))
 	v.update(buildOverview(core.Snapshot{}))
 	return v
@@ -306,11 +330,12 @@ func (v *overviewView) update(m overviewModel) {
 	setVisible(v.nodeEmpty, !m.Node.Visible)
 	setVisible(v.nodeBody, m.Node.Visible)
 	setLabel(v.nodeName, m.Node.Node)
-	setLabel(v.nodeGroup, m.Node.Group)
+	setCaption(v.nodeCaption, joinNonEmpty(localize.T("Current node"), m.Node.Group))
 	setLabel(v.nodeDetail, joinNonEmpty(m.Node.Detail, m.Node.Automation))
 	setText(v.nodeLatency, m.Node.Latency)
 	setText(v.nodeUnit, m.Node.Unit)
 
+	setCaption(v.streamCaption, m.Stream.Title)
 	setVisible(v.streamSummary, !m.Stream.Visible)
 	setVisible(v.streamBody, m.Stream.Visible)
 	setLabel(v.streamSummary, m.Stream.Summary)
@@ -338,7 +363,7 @@ func (v *overviewView) update(m overviewModel) {
 
 	setLabel(v.healthCounts, m.Health.Counts)
 	setLabel(v.healthIssue, m.Health.Issue)
-	v.healthDot.set(m.Health.State)
+	v.healthDot.set(m.Health.State.color())
 }
 
 // tapArea makes a whole card open something when tapped.

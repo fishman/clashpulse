@@ -22,12 +22,6 @@ other = "最快（始终使用延迟最低的节点）"
 ["Connecting to local service..."]
 other = "正在连接本地服务…"
 
-["Data resources"]
-other = "数据资源"
-
-["Filter lists"]
-other = "过滤列表"
-
 ["Sources"]
 other = "来源"
 
@@ -106,9 +100,6 @@ other = "活跃"
 
 ["No proxy groups are available"]
 other = "当前没有可用代理组"
-
-["Proxy groups and choices"]
-other = "代理组与节点"
 
 ["Manual selection and health probes are available"]
 other = "可手动选择节点并检测健康状态"
@@ -969,8 +960,11 @@ other = "URL 测试每 %d 秒一次，超时 %d 毫秒"
 ["of %s GB"]
 other = "共 %s GB"
 
-["%d subscriptions · %d resources · %d filters"]
-other = "%d 个订阅 · %d 个数据资源 · %d 个过滤列表"
+["Subscriptions %d · Data resources %d · Filter lists %d"]
+other = "订阅 %d · 数据资源 %d · 过滤列表 %d"
 
-["Status"]
-other = "状态"
+["Steady stream"]
+other = "稳定流"
+
+["URL test"]
+other = "URL 测试"

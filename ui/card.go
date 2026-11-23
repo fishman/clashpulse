@@ -46,6 +46,13 @@ func newSurface(colorName fyne.ThemeColorName) *canvas.Rectangle {
 // surface. The caption, values, and meters are inset by the inner padding so
 // they line up with label text.
 func newCard(caption string, body ...fyne.CanvasObject) *fyne.Container {
+	card, _ := newTitledCard(caption, body...)
+	return card
+}
+
+// newTitledCard is newCard that also returns the caption for later updates
+// through setCaption.
+func newTitledCard(caption string, body ...fyne.CanvasObject) (*fyne.Container, *canvas.Text) {
 	surface := newSurface(colorNameCard)
 	title := newMutedText(strings.ToUpper(caption), sizeNameCaption)
 	title.TextStyle.Bold = true
@@ -56,7 +63,14 @@ func newCard(caption string, body ...fyne.CanvasObject) *fyne.Container {
 		surface.FillColor = theme.Color(colorNameCard)
 		surface.StrokeColor = theme.Color(theme.ColorNameSeparator)
 		title.Color = theme.Color(theme.ColorNamePlaceHolder)
-	}}, surface, inset)
+	}}, surface, inset), title
+}
+
+func setCaption(title *canvas.Text, caption string) {
+	if caption = strings.ToUpper(caption); title.Text != caption {
+		title.Text = caption
+		title.Refresh()
+	}
 }
 
 // newValue shows a large number with a smaller muted unit on its baseline.

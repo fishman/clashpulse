@@ -91,7 +91,7 @@ func newProxyPage(send sendIntent) *proxyPage {
 			detail, text := mutedLine()
 			item.detail = text
 			lines := container.New(layout.NewCustomPaddedVBoxLayout(0), item.name, detail)
-			item.status = container.NewHBox(item.state, center(item.badge.object))
+			item.status = container.New(layout.NewCustomPaddedLayout(0, 0, 0, 2*theme.Padding()), container.NewHBox(item.state, center(item.badge.object)))
 			row := container.NewBorder(nil, nil, item.dot.object, item.status, lines)
 			p.items[row] = item
 			return row
@@ -146,7 +146,6 @@ func newProxyPage(send sendIntent) *proxyPage {
 	}
 	p.empty = widget.NewLabel(localize.T("No proxy groups are available"))
 	header := container.NewVBox(
-		widget.NewLabelWithStyle(localize.T("Proxy groups and choices"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		p.groupSelect,
 		p.groupMode,
 		container.NewHBox(p.automation, p.probe, p.streamProbe),
@@ -331,8 +330,7 @@ func newSubscriptionPage(send sendIntent, window fyne.Window) *subscriptionPage 
 	)
 	p.empty = widget.NewLabel(localize.T("No subscriptions are available"))
 	p.list.Hide()
-	title := widget.NewLabelWithStyle(localize.T("Subscriptions"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	p.view = container.NewBorder(container.NewVBox(title, p.add), nil, nil, nil, container.NewStack(p.empty, p.list))
+	p.view = container.NewBorder(toolbar(p.add), nil, nil, nil, container.NewStack(p.empty, p.list))
 	return p
 }
 
@@ -726,7 +724,7 @@ func newResourcePage(send sendIntent, window fyne.Window) *resourcePage {
 	)
 	p.empty = widget.NewLabel(localize.T("No data resources are available"))
 	p.list.Hide()
-	p.view = container.NewBorder(container.NewVBox(widget.NewLabelWithStyle(localize.T("Data resources"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), p.add), nil, nil, nil, container.NewStack(p.empty, p.list))
+	p.view = container.NewBorder(toolbar(p.add), nil, nil, nil, container.NewStack(p.empty, p.list))
 	return p
 }
 
@@ -835,8 +833,13 @@ func newFilterPage(send sendIntent, window fyne.Window) *filterPage {
 	)
 	p.empty = widget.NewLabel(localize.T("No filter lists are available"))
 	p.list.Hide()
-	p.view = container.NewBorder(container.NewVBox(widget.NewLabelWithStyle(localize.T("Filter lists"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), p.add), nil, nil, nil, container.NewStack(p.empty, p.list))
+	p.view = container.NewBorder(toolbar(p.add), nil, nil, nil, container.NewStack(p.empty, p.list))
 	return p
+}
+
+// toolbar right-aligns a page's primary action above its list.
+func toolbar(action *widget.Button) fyne.CanvasObject {
+	return container.New(layout.NewCustomPaddedLayout(0, theme.Padding(), 0, 2*theme.Padding()), container.NewHBox(layout.NewSpacer(), action))
 }
 
 func (p *filterPage) update(rows []core.FilterSnapshot) {
