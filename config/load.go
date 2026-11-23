@@ -142,6 +142,11 @@ func applyDefaults(s *Snapshot) {
 			s.Resources[i].Interval = 12 * time.Hour
 		}
 	}
+	for i := range s.Services {
+		if s.Services[i].CheckInterval == 0 {
+			s.Services[i].CheckInterval = DefaultServiceInterval
+		}
+	}
 }
 
 func validateSnapshot(s Snapshot) error {
@@ -158,6 +163,9 @@ func validateSnapshot(s Snapshot) error {
 		return err
 	}
 	if err := validateTun(s.Tun); err != nil {
+		return err
+	}
+	if err := validateServices(s); err != nil {
 		return err
 	}
 

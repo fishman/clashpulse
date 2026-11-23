@@ -123,5 +123,8 @@ func diffSections(old, next Snapshot) []string {
 	if !reflect.DeepEqual(old.Filters, next.Filters) {
 		changed = append(changed, "filters")
 	}
+	if !reflect.DeepEqual(old.Services, next.Services) {
+		changed = append(changed, "services")
+	}
 	return changed
 }

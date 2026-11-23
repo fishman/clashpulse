@@ -49,6 +49,17 @@ type configDoc struct {
 		Stack   *string `toml:"stack"`
 		DNSMode *string `toml:"dns_mode"`
 	} `toml:"tun"`
+	Services []serviceDoc `toml:"service"`
+}
+
+type serviceDoc struct {
+	ID              string   `toml:"id"`
+	Enabled         bool     `toml:"enabled"`
+	Regions         []string `toml:"regions,omitempty"`
+	CheckInterval   *string  `toml:"check_interval,omitempty"`
+	Failures        *int     `toml:"failures,omitempty"`
+	Automatic       bool     `toml:"automatic"`
+	DomainsResource string   `toml:"domains_resource,omitempty"`
 }
 
 type subscriptionDoc struct {
@@ -262,6 +273,10 @@ func loadConfig(path string) (Snapshot, error) {
 	if doc.Mihomo.MixedPort != nil {
 		mixedPort = *doc.Mihomo.MixedPort
 	}
+	services, err := decodeServices(path, doc.Services)
+	if err != nil {
+		return Snapshot{}, err
+	}
 	return Snapshot{
 		App: App{SystemProxy: SystemProxy{Enabled: doc.SystemProxy.Enabled}},
 		Mihomo: Mihomo{
@@ -291,9 +306,29 @@ func loadConfig(path string) (Snapshot, error) {
 			Jitter:                jitter,
 			AutomatedGroups:       append([]string(nil), doc.Monitor.AutomatedGroups...),
 		},
-		DNS: DNS{Listen: doc.DNS.Listen},
-		Tun: tun,
+		DNS:      DNS{Listen: doc.DNS.Listen},
+		Tun:      tun,
+		Services: services,
 	}, nil
+}
+
+// decodeServices keeps an explicit zero failures as zero so validation
+// rejects it; an absent value takes the default.
+func decodeServices(path string, docs []serviceDoc) ([]Service, error) {
+	var out []Service
+	for i, doc := range docs {
+		interval, err := durationValue(path, fmt.Sprintf("service[%d].check_interval", i), doc.CheckInterval)
+		if err != nil {
+			return nil, err
+		}
+		failures := DefaultServiceFailures
+		if doc.Failures != nil {
+			failures = *doc.Failures
+		}
+		out = append(out, Service{ID: doc.ID, Enabled: doc.Enabled, Regions: append([]string(nil), doc.Regions...),
+			CheckInterval: interval, Failures: failures, Automatic: doc.Automatic, DomainsResource: doc.DomainsResource})
+	}
+	return out, nil
 }
 
 func loadSubscriptions(path string) ([]Subscription, error) {

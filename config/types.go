@@ -11,6 +11,7 @@ type Snapshot struct {
 	Subscriptions []Subscription
 	Resources     []Resource
 	Filters       []Filter
+	Services      []Service
 }
 
 type App struct {
@@ -111,6 +112,25 @@ const (
 	RuleClassical RuleType = "classical"
 )
 
+// Service is user intent for one built-in service check; [[service]] in
+// config.toml. Regions are ISO 3166-1 alpha-2 codes.
+type Service struct {
+	ID              string
+	Enabled         bool
+	Regions         []string
+	CheckInterval   time.Duration
+	Failures        int
+	Automatic       bool
+	DomainsResource string
+}
+
+const (
+	DefaultServiceInterval = 30 * time.Minute
+	MinServiceInterval     = 5 * time.Minute
+	DefaultServiceFailures = 2
+	MaxServiceFailures     = 10
+)
+
 type Resource struct {
 	ID       string
 	Kind     ResourceKind
@@ -158,6 +178,7 @@ func cloneSnapshot(s Snapshot) Snapshot {
 	out.Monitor.AutomatedGroups = cloneStrings(s.Monitor.AutomatedGroups)
 	out.DNS.ResolverSets = cloneResolverSets(s.DNS.ResolverSets)
 	out.DNS.Routes = cloneDNSRoutes(s.DNS.Routes)
+	out.Services = cloneServices(s.Services)
 	return out
 }
 
@@ -215,5 +236,17 @@ func cloneStrings(in []string) []string {
 	}
 	out := make([]string, len(in))
 	copy(out, in)
+	return out
+}
+
+func cloneServices(in []Service) []Service {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]Service, len(in))
+	for i, service := range in {
+		out[i] = service
+		out[i].Regions = cloneStrings(service.Regions)
+	}
 	return out
 }
