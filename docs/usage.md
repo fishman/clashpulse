@@ -24,9 +24,11 @@ The interface is Simplified Chinese when the OS locale is `zh-CN` (also
 ![GUI Overview: sidebar, status pills, and cards for the current node, steady stream, last switch, usage, and health](assets/screenshots/gui-overview.png)
 
 The sidebar switches pages. The top bar shows whether traffic goes through
-Mihomo, with pills for Mihomo, the system proxy, and TUN. Its menu (the dots
-at the right) starts, stops, and restarts the service, reloads the config, and
-opens the activity view.
+Mihomo, with pills for Mihomo, the system proxy, and TUN. Clicking the Mihomo
+pill starts or stops the service, like the power button; clicking the system
+proxy or TUN pill turns that setting on or off. Its menu (the dots at the
+right) starts, stops, and restarts the service, reloads the config, and opens
+the activity view.
 
 Overview cards show the current node with its latency, the steady-stream
 download results, the last switch with its reason and evidence, subscription

@@ -160,6 +160,8 @@ func TestSidebarEntryKeyboard(t *testing.T) {
 	}
 }
 
+// The Mihomo pill is a second power control: it sends what the power button
+// sends and nothing while the service is unreachable.
 func TestPowerButtonTogglesService(t *testing.T) {
 	a := test.NewApp()
 	defer a.Quit()
@@ -168,19 +170,28 @@ func TestPowerButtonTogglesService(t *testing.T) {
 		t.Fatal("power button enabled before the service is reachable")
 	}
 	view.connected = true
-	for _, tc := range []struct {
-		running bool
-		want    ipc.CommandKind
-	}{{false, ipc.CommandStart}, {true, ipc.CommandStop}} {
-		view.topBar.update(core.Snapshot{ServiceRunning: tc.running})
-		test.Tap(view.topBar.power)
-		if got := <-view.actions; got.Kind != tc.want {
-			t.Fatalf("running=%t: power sent %q, want %q", tc.running, got.Kind, tc.want)
+	controls := map[string]fyne.Tappable{"power": view.topBar.power, "mihomo pill": view.topBar.mihomoToggle}
+	for name, control := range controls {
+		for _, tc := range []struct {
+			running bool
+			want    ipc.CommandKind
+		}{{false, ipc.CommandStart}, {true, ipc.CommandStop}} {
+			view.topBar.update(core.Snapshot{ServiceRunning: tc.running})
+			test.Tap(control)
+			if got := <-view.actions; got.Kind != tc.want {
+				t.Fatalf("%s, running=%t: sent %q, want %q", name, tc.running, got.Kind, tc.want)
+			}
 		}
 	}
 	view.topBar.disconnect()
 	if !view.topBar.power.Disabled() {
 		t.Fatal("power button enabled after disconnect")
+	}
+	test.Tap(view.topBar.mihomoToggle)
+	select {
+	case got := <-view.actions:
+		t.Fatalf("mihomo pill sent %q while disconnected", got.Kind)
+	default:
 	}
 }
 

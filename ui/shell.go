@@ -159,22 +159,24 @@ var (
 )
 
 // topBar shows the page title, the connection text, the service status
-// pills, the power toggle, and the service menu. The system proxy and TUN
-// pills toggle their settings.
+// pills, the power toggle, and the service menu. The Mihomo pill starts and
+// stops the service like the power button; the system proxy and TUN pills
+// toggle their settings.
 type topBar struct {
-	object      fyne.CanvasObject
-	title       *canvas.Text
-	mihomo      *statusPill
-	systemProxy *statusPill
-	tun         *statusPill
-	connection  *widget.Label
-	power       *widget.Button
-	running     bool
-	proxy       core.SystemProxySnapshot
-	proxyToggle *tapArea
-	tunState    core.TunSnapshot
-	tunToggle   *tapArea
-	menu        *widget.Button
+	object       fyne.CanvasObject
+	title        *canvas.Text
+	mihomo       *statusPill
+	systemProxy  *statusPill
+	tun          *statusPill
+	connection   *widget.Label
+	power        *widget.Button
+	mihomoToggle *tapArea
+	running      bool
+	proxy        core.SystemProxySnapshot
+	proxyToggle  *tapArea
+	tunState     core.TunSnapshot
+	tunToggle    *tapArea
+	menu         *widget.Button
 }
 
 // topBarActions send the change the power button or a setting pill asks for.
@@ -193,6 +195,11 @@ func newTopBar(w fyne.Window, connection *widget.Label, actions topBarActions, i
 	t.title.TextSize = 26
 	t.title.TextStyle.Bold = true
 	t.power = widget.NewButtonWithIcon("", powerOffIcon, func() { actions.setRunning(!t.running) })
+	t.mihomoToggle = newTapArea(t.mihomo.object, func() {
+		if !t.power.Disabled() {
+			t.power.OnTapped()
+		}
+	})
 	t.power.Importance = widget.LowImportance
 	t.power.Disable()
 	t.proxyToggle = newTapArea(t.systemProxy.object, func() { actions.setSystemProxy(systemProxyToggle(t.proxy)) })
@@ -212,7 +219,7 @@ func newTopBar(w fyne.Window, connection *widget.Label, actions topBarActions, i
 	// long status never widens the window.
 	connection.Truncation = fyne.TextTruncateEllipsis
 	connection.Alignment = fyne.TextAlignTrailing
-	status := container.NewHBox(center(t.mihomo.object), center(t.proxyToggle), center(t.tunToggle), t.power, t.menu)
+	status := container.NewHBox(center(t.mihomoToggle), center(t.proxyToggle), center(t.tunToggle), t.power, t.menu)
 	title := container.New(paintLayout{layout.NewVBoxLayout(), func() {
 		t.title.Color = theme.Color(theme.ColorNameForeground)
 	}}, t.title)
