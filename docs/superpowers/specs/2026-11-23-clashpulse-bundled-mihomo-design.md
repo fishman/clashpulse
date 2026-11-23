@@ -5,14 +5,18 @@ Date: 2026-11-23. Status: decisions made in chat; spec awaiting review.
 ## Goal
 
 macOS and Windows release packages ship a pinned official Mihomo build so
-ClashPulse works without a separate Mihomo install. Releases cover amd64 and
-arm64 on both platforms. macOS users can also install from a Homebrew tap.
+ClashPulse works without a separate Mihomo install. Releases cover macOS arm64
+and amd64 and Windows amd64. macOS users can also install from a Homebrew tap.
 
 User decisions: macOS and Windows packages default to `bundled`; Windows
 amd64 pins the `amd64-v1` build; Homebrew ships a source-built formula that
 depends on Homebrew's `mihomo`; the tap is a separate repository
-`fishman/homebrew-clashpulse`; release targets are amd64 and arm64 for macOS
-and Windows.
+`fishman/homebrew-clashpulse`; release targets are macOS arm64 and amd64 and
+Windows amd64. Windows arm64 is deferred: the `windows-11-arm` runner has
+only an x86_64 mingw gcc and an MSVC-target clang, so Fyne's cgo build fails
+(probe run 80); it needs an aarch64 mingw toolchain such as llvm-mingw, a new
+build dependency. The amd64 package runs on Windows on ARM under x64
+emulation.
 
 ## Facts this relies on
 
@@ -20,8 +24,12 @@ and Windows.
   official release assets include the gvisor TUN stack. Homebrew's `mihomo`
   formula also builds with `tags: "with_gvisor"`.
 - Mihomo v1.19.34 (2026-11-11) publishes `mihomo-darwin-arm64-v1.19.34.gz`,
-  `mihomo-darwin-amd64-v1-v1.19.34.gz`, `mihomo-windows-amd64-v1-v1.19.34.zip`,
-  and `mihomo-windows-arm64-v1.19.34.zip`, and no checksum file.
+  `mihomo-darwin-amd64-v1-v1.19.34.gz`, and
+  `mihomo-windows-amd64-v1-v1.19.34.zip`, and no checksum file.
+- Probe run 80 (`macos-26-intel`) built and tested ClashPulse natively as a
+  Mach-O x86_64 binary with Apple clang. Like every target, CI only runs
+  `clashpulse version`, which opens no window; GUI startup on Intel macOS is
+  unverified without real hardware.
 - `binary = "bundled"` is accepted by config but `app/lifecycle.go` always
   fails it with "bundled Mihomo is not installed". The default is hard-coded
   `system` at `config/load.go:71`.
@@ -37,7 +45,6 @@ version v1.19.34
 darwin-arm64  mihomo-darwin-arm64-v1.19.34.gz        <sha256>
 darwin-amd64  mihomo-darwin-amd64-v1-v1.19.34.gz     <sha256>
 windows-amd64 mihomo-windows-amd64-v1-v1.19.34.zip   <sha256>
-windows-arm64 mihomo-windows-arm64-v1.19.34.zip      <sha256>
 source        v1.19.34.tar.gz                        <sha256>
 ```
 
@@ -99,11 +106,9 @@ thread.
 ## Release workflow
 
 - Targets: linux-amd64 (unchanged, no bundle), darwin-arm64 (`macos-latest`),
-  darwin-amd64 (`macos-26-intel`), windows-amd64 (`windows-latest`),
-  windows-arm64 (`windows-11-arm`). Each desktop job builds natively so the
-  existing smoke run (`clashpulse version`, bundled `mihomo -v`) executes on
-  the target architecture. Both new labels are listed as GitHub-hosted
-  runners for public repositories.
+  darwin-amd64 (`macos-26-intel`), windows-amd64 (`windows-latest`). Each
+  desktop job builds natively so the existing smoke run (`clashpulse
+  version`, bundled `mihomo -v`) executes on the target architecture.
 - macOS and Windows jobs: read `packaging/mihomo.lock`, download the asset,
   verify its SHA-256, extract, hash the executable, place it in the package,
   pass `Version` and the executable hash via `-ldflags -X`, add
