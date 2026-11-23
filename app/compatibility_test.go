@@ -21,6 +21,9 @@ func TestCompatibilityFailureIdentifiesResourceWithoutSourceURL(t *testing.T) {
 	if got := compatibilityFailure(fmt.Errorf("clashpulse: bundled Mihomo is not installed")); got != "bundled Mihomo is not installed" {
 		t.Fatalf("bundle availability = %q", got)
 	}
+	if got := compatibilityFailure(fmt.Errorf("bundled Mihomo failed verification")); got != "bundled Mihomo failed verification" {
+		t.Fatalf("bundle verification = %q", got)
+	}
 }
 
 func TestActivationCapabilityNamesManagedResource(t *testing.T) {

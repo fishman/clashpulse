@@ -81,8 +81,11 @@ func compatibilityLabel(failure string) string {
 	if failure == "" {
 		return localize.T("No compatibility issue reported")
 	}
-	if failure == "bundled Mihomo is not installed" {
+	switch failure {
+	case "bundled Mihomo is not installed":
 		return localize.T("bundled Mihomo is not installed")
+	case "bundled Mihomo failed verification":
+		return localize.T("bundled Mihomo failed verification")
 	}
 	if strings.HasPrefix(failure, "resource ") {
 		id, capability, ok := strings.Cut(strings.TrimPrefix(failure, "resource "), " requires ")

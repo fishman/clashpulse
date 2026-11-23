@@ -126,6 +126,9 @@ func TestMonitorThresholdAndCompatibilityLabelsAreSafe(t *testing.T) {
 	if got := compatibilityLabel("resource monitor.switch_policy requires pinned-listener"); got != "resource monitor.switch_policy requires pinned-listener" {
 		t.Fatalf("pinned listener capability was hidden: %q", got)
 	}
+	if got := compatibilityLabel("bundled Mihomo failed verification"); got != "bundled Mihomo failed verification" {
+		t.Fatalf("bundle verification failure was hidden: %q", got)
+	}
 }
 
 func TestLastSwitchSummaryShowsDecisionEvidence(t *testing.T) {

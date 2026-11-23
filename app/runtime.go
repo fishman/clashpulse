@@ -567,8 +567,10 @@ func compatibilityFailure(err error) string {
 		return ""
 	}
 	message := err.Error()
-	if strings.Contains(message, "bundled Mihomo is not installed") {
-		return "bundled Mihomo is not installed"
+	for _, fixed := range [...]string{"bundled Mihomo is not installed", "bundled Mihomo failed verification"} {
+		if strings.Contains(message, fixed) {
+			return fixed
+		}
 	}
 	if index := strings.Index(message, `resource "`); index >= 0 {
 		resource, rest, ok := strings.Cut(message[index+len(`resource "`):], `" requires `)

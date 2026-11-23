@@ -451,6 +451,9 @@ other = "未报告兼容性问题"
 ["bundled Mihomo is not installed"]
 other = "内置 Mihomo 未安装"
 
+["bundled Mihomo failed verification"]
+other = "内置 Mihomo 校验失败"
+
 ["Compatibility issue reported"]
 other = "已报告兼容性问题"
 

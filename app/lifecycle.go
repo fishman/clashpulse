@@ -33,7 +33,15 @@ func (s *runtimeService) selectedCapability(ctx context.Context) (mihomo.Capabil
 		kind = selection
 	}
 	if kind == "bundled" {
-		return mihomo.Capability{}, fmt.Errorf("clashpulse: bundled Mihomo is not installed")
+		path, err := mihomo.InstallBundled(s.stateDir)
+		if err != nil {
+			return mihomo.Capability{}, fmt.Errorf("clashpulse: %w", err)
+		}
+		capability, err := mihomo.Inspect(ctx, mihomo.Selection{Kind: kind, Path: path})
+		if err == nil {
+			mihomo.PruneBundled(s.stateDir, path)
+		}
+		return capability, err
 	}
 	return mihomo.Inspect(ctx, mihomo.Selection{Kind: kind, Path: selection})
 }
