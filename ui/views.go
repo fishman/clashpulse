@@ -102,7 +102,7 @@ func newProxyPage(send sendIntent) *proxyPage {
 				setLabel(item.name, "")
 				setLabel(item.state, "")
 				setText(item.detail, "")
-				item.badge.set("", theme.ColorNameDisabled)
+				item.badge.set("", theme.ColorNamePlaceHolder)
 				item.dot.set(theme.ColorNameSeparator)
 				return
 			}

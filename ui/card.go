@@ -211,7 +211,7 @@ type badge struct {
 }
 
 func newBadge() *badge {
-	b := &badge{bg: canvas.NewRectangle(color.Transparent), text: canvas.NewText("", nil), color: theme.ColorNameDisabled}
+	b := &badge{bg: canvas.NewRectangle(color.Transparent), text: canvas.NewText("", nil), color: theme.ColorNamePlaceHolder}
 	b.bg.CornerRadius = 8
 	b.text.TextSize = theme.Size(sizeNameCaption) + 1
 	b.text.TextStyle.Bold = true
@@ -222,7 +222,13 @@ func newBadge() *badge {
 }
 
 func (b *badge) paint() {
-	b.bg.FillColor = tint(b.color, 0x2E)
+	// The muted color is close to the card, so its tint stays fainter to keep
+	// the text readable on it.
+	alpha := uint8(0x2E)
+	if b.color == theme.ColorNamePlaceHolder {
+		alpha = 0x1A
+	}
+	b.bg.FillColor = tint(b.color, alpha)
 	b.text.Color = theme.Color(b.color)
 }
 

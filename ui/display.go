@@ -206,9 +206,9 @@ func latencyBadge(p core.ProxySnapshot, m core.MonitorSnapshot) (string, fyne.Th
 		return localize.Code("probe.outcome", p.Outcome), theme.ColorNameError
 	case p.LatencyMillis <= 0:
 		if p.MihomoMillis > 0 {
-			return fmt.Sprintf(localize.T("%d ms (mihomo)"), p.MihomoMillis), theme.ColorNameDisabled
+			return fmt.Sprintf(localize.T("%d ms (mihomo)"), p.MihomoMillis), theme.ColorNamePlaceHolder
 		}
-		return "-", theme.ColorNameDisabled
+		return "-", theme.ColorNamePlaceHolder
 	}
 	text := fmt.Sprintf(localize.T("%d ms"), p.LatencyMillis)
 	switch {

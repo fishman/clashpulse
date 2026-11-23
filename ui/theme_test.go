@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image/color"
+	"math"
 	"testing"
 
 	"fyne.io/fyne/v2"
@@ -103,7 +104,7 @@ func TestHelpersFollowLiveVariantSwitch(t *testing.T) {
 	_, number, _ := newValue("12", "ms")
 	window := app.NewWindow("ClashPulse")
 	b := newBadge()
-	b.set("120 ms", theme.ColorNameDisabled)
+	b.set("120 ms", theme.ColorNamePlaceHolder)
 	window.SetContent(container.NewVBox(card, p.object, number, b.object))
 	window.Resize(fyne.NewSize(300, 300))
 	dark := newTheme()
@@ -114,7 +115,52 @@ func TestHelpersFollowLiveVariantSwitch(t *testing.T) {
 	if got, want := p.text.Color, dark.Color(theme.ColorNameForeground, theme.VariantDark); got != want {
 		t.Errorf("pill text = %v, want %v", got, want)
 	}
-	if got, want := b.text.Color, dark.Color(theme.ColorNameDisabled, theme.VariantDark); got != want {
+	if got, want := b.text.Color, dark.Color(theme.ColorNamePlaceHolder, theme.VariantDark); got != want {
 		t.Errorf("badge text = %v, want %v", got, want)
 	}
+}
+
+// TestMutedBadgeReadable checks that the default (unmeasured) badge text keeps
+// at least 3:1 contrast against its own tint over a card in both variants.
+func TestMutedBadgeReadable(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	for _, variant := range []fyne.ThemeVariant{theme.VariantLight, theme.VariantDark} {
+		th := variantTheme{newTheme(), variant}
+		app.Settings().SetTheme(th)
+		b := newBadge()
+		bg := over(b.bg.FillColor, th.Color(colorNameCard, variant))
+		if ratio := contrast(b.text.Color, bg); ratio < 3 {
+			t.Errorf("variant %d: muted badge contrast = %.2f, want >= 3", variant, ratio)
+		}
+	}
+}
+
+// over composites a translucent color onto an opaque base.
+func over(top, base color.Color) color.Color {
+	t := color.NRGBAModel.Convert(top).(color.NRGBA)
+	b := color.NRGBAModel.Convert(base).(color.NRGBA)
+	mix := func(x, y uint8) uint8 { return uint8((int(x)*int(t.A) + int(y)*(255-int(t.A))) / 255) }
+	return color.NRGBA{mix(t.R, b.R), mix(t.G, b.G), mix(t.B, b.B), 0xFF}
+}
+
+// contrast is the WCAG contrast ratio of two opaque colors.
+func contrast(a, b color.Color) float64 {
+	la, lb := luminance(a), luminance(b)
+	if la < lb {
+		la, lb = lb, la
+	}
+	return (la + 0.05) / (lb + 0.05)
+}
+
+func luminance(c color.Color) float64 {
+	n := color.NRGBAModel.Convert(c).(color.NRGBA)
+	channel := func(v uint8) float64 {
+		s := float64(v) / 255
+		if s <= 0.03928 {
+			return s / 12.92
+		}
+		return math.Pow((s+0.055)/1.055, 2.4)
+	}
+	return 0.2126*channel(n.R) + 0.7152*channel(n.G) + 0.0722*channel(n.B)
 }
