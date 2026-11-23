@@ -104,7 +104,8 @@ type desktopUI struct {
 	quit          func()
 
 	connection *widget.Label
-	viewSelect *widget.Select
+	sidebar    *sidebar
+	topBar     *topBar
 	viewStack  *fyne.Container
 	views      map[string]fyne.CanvasObject
 
@@ -136,10 +137,6 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 	}
 	d.overviewCountValues = make([]*widget.Label, 0, 6)
 	countCells := make([]fyne.CanvasObject, 0, 6)
-	viewNames := make([]string, len(viewIDs))
-	for i, name := range viewIDs {
-		viewNames[i] = localize.T(name)
-	}
 	for _, label := range []string{localize.T("Proxy groups"), localize.T("Subscriptions"), localize.T("Data resources"), localize.T("Filter lists"), localize.T("Jobs"), localize.T("Reported issues")} {
 		value := widget.NewLabel("0")
 		d.overviewCountValues = append(d.overviewCountValues, value)
@@ -176,20 +173,19 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 	d.views["Filter Lists"] = d.filterPage.view
 	d.views["Data Resources"] = d.resourcePage.view
 	d.views["Settings"] = d.settingsPage.view
-	d.viewSelect = widget.NewSelect(viewNames, func(label string) {
-		for i, name := range viewNames {
-			if label == name {
-				d.showView(viewIDs[i])
-				return
-			}
-		}
-	})
-	d.viewSelect.Selected = viewNames[0]
-	d.viewSelect.PlaceHolder = localize.T("Choose a view")
-	d.viewSelect.Refresh()
-	d.viewStack = container.NewStack(d.views[viewIDs[0]])
-	header := container.NewBorder(nil, nil, nil, d.connection, d.viewSelect)
-	w.SetContent(container.NewBorder(header, nil, nil, nil, d.viewStack))
+	d.sidebar = newSidebar(d.showView)
+	d.topBar = newTopBar(w, d.connection,
+		fyne.NewMenuItem(localize.T("Start service"), func() { d.enqueue(ipc.Command{Kind: ipc.CommandStart}) }),
+		fyne.NewMenuItem(localize.T("Stop service"), func() { d.enqueue(ipc.Command{Kind: ipc.CommandStop}) }),
+		fyne.NewMenuItem(localize.T("Restart service"), func() { d.enqueue(ipc.Command{Kind: ipc.CommandRestart}) }),
+		fyne.NewMenuItem(localize.T("Reload configuration"), func() { d.enqueue(ipc.Command{Kind: ipc.CommandReloadConfiguration}) }),
+		fyne.NewMenuItemSeparator(),
+		fyne.NewMenuItem(localize.T("View activity"), d.openActivity),
+	)
+	d.viewStack = container.NewStack()
+	d.showView(viewIDs[0])
+	page := container.NewBorder(d.topBar.object, nil, nil, nil, d.viewStack)
+	w.SetContent(container.NewBorder(nil, nil, d.sidebar.object, nil, page))
 	d.installKeys()
 	return d
 }
@@ -224,11 +220,8 @@ func (d *desktopUI) showView(name string) {
 	if !ok {
 		return
 	}
-	label := localize.T(name)
-	if d.viewSelect.Selected != label {
-		d.viewSelect.Selected = label
-		d.viewSelect.Refresh()
-	}
+	d.sidebar.setSelected(name)
+	d.topBar.setTitle(localize.T(name))
 	d.viewStack.Objects = []fyne.CanvasObject{view}
 	d.viewStack.Refresh()
 }
@@ -352,9 +345,7 @@ func (d *desktopUI) postSnapshot(snapshot core.Snapshot) {
 		previous := d.current
 		first := !d.hasSnapshot
 		d.connected = true
-		if status := proxyStatus(immutable); d.connection.Text != status {
-			d.connection.SetText(status)
-		}
+		d.topBar.update(immutable)
 		counts := []string{count(immutable.Groups), count(immutable.Subscriptions), count(immutable.Resources), count(immutable.Filters), count(immutable.Jobs), count(immutable.Errors)}
 		for i, value := range counts {
 			if d.overviewCountValues[i].Text != value {
@@ -415,7 +406,7 @@ func (d *desktopUI) postDisconnected() {
 		}
 		d.connected = false
 		d.proxyPage.setStreamProbe(false)
-		d.connection.SetText(localize.T("Disconnected"))
+		d.topBar.disconnect()
 		// The last snapshot keeps the tray sections populated; trayMenu disables
 		// what a disconnected UI cannot serve.
 		d.updateTray(d.current)
@@ -427,7 +418,7 @@ func (d *desktopUI) postStatus(status string) {
 		if d.stopped.Load() {
 			return
 		}
-		d.connection.SetText(status)
+		d.topBar.setConnection(status)
 	})
 }
 

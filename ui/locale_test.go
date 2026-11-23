@@ -23,12 +23,12 @@ func TestNavigationLabelsAcrossLocales(t *testing.T) {
 		localize.SetLanguage(tc.locale)
 		a := test.NewApp()
 		view := newDesktopUI(context.Background(), "", a.NewWindow("ClashPulse"))
-		if got := strings.Join(view.viewSelect.Options, "|"); got != tc.labels {
+		if got := strings.Join(view.sidebar.labels(), "|"); got != tc.labels {
 			t.Errorf("%s GUI views = %q, want %q", tc.locale, got, tc.labels)
 		}
 		view.showView("Settings")
-		if view.viewSelect.Selected != strings.Split(tc.labels, "|")[5] {
-			t.Errorf("%s GUI selection = %q", tc.locale, view.viewSelect.Selected)
+		if got := view.topBar.title.Text; got != strings.Split(tc.labels, "|")[5] {
+			t.Errorf("%s GUI selection = %q", tc.locale, got)
 		}
 		a.Quit()
 	}

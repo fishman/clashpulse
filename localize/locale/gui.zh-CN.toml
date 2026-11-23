@@ -43,8 +43,8 @@ other = "暂无自动切换记录"
 ["No service errors"]
 other = "当前没有服务错误"
 
-["Choose a view"]
-other = "选择视图"
+["Sources"]
+other = "来源"
 
 ["Service overview"]
 other = "服务概览"

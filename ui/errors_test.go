@@ -181,8 +181,8 @@ func TestMainlandDesktopOverviewAndSubscriptionControls(t *testing.T) {
 	if view.subPage.add.Text != "\u6dfb\u52a0\u8ba2\u9605" {
 		t.Fatalf("subscription action = %q", view.subPage.add.Text)
 	}
-	if len(view.viewSelect.Options) == 0 || view.viewSelect.Options[0] != "\u6982\u89c8" {
-		t.Fatalf("view options = %v", view.viewSelect.Options)
+	if labels := view.sidebar.labels(); len(labels) == 0 || labels[0] != "\u6982\u89c8" {
+		t.Fatalf("view options = %v", labels)
 	}
 }
 
