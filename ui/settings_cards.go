@@ -66,11 +66,14 @@ func settingRow(name string, value *widget.Label, controls []fyne.CanvasObject, 
 	if len(controls) > 0 {
 		right = container.NewCenter(container.NewHBox(controls...))
 	}
-	row := container.NewBorder(nil, nil, widget.NewLabel(name), right, center)
-	if len(below) == 0 {
-		return row
+	var content fyne.CanvasObject = container.NewBorder(nil, nil, widget.NewLabel(name), right, center)
+	if len(below) > 0 {
+		content = container.New(layout.NewCustomPaddedVBoxLayout(0), append([]fyne.CanvasObject{content}, below...)...)
 	}
-	return container.New(layout.NewCustomPaddedVBoxLayout(0), append([]fyne.CanvasObject{row}, below...)...)
+	// Inset every row, text-only or not, so controls clear the separators
+	// and the card's right edge and the card rhythm stays even.
+	pad := theme.Padding()
+	return container.New(layout.NewCustomPaddedLayout(pad, pad, 0, pad), content)
 }
 
 // newHelpText is wrapped, muted, caption-size text that explains the row
