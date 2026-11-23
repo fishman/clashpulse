@@ -38,9 +38,8 @@ func Run(ctx context.Context, endpoint string) error {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Fyne's default theme follows the operating system, including live desktop
-	// appearance changes. Do not set a fixed light or dark variant here.
 	a := app.NewWithID(applicationID)
+	a.Settings().SetTheme(newTheme())
 	metadata := a.Metadata()
 	if metadata.Migrations == nil {
 		metadata.Migrations = make(map[string]bool)

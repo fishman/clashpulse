@@ -4,7 +4,6 @@ package ui
 
 import (
 	"image"
-	"image/color"
 	"image/draw"
 	"image/png"
 	"os"
@@ -16,14 +15,6 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"github.com/fishman/clashpulse/internal/docsfixture"
 )
-
-// lightTheme pins the default theme to its light variant; the test app has
-// no desktop appearance to follow.
-type lightTheme struct{ fyne.Theme }
-
-func (l lightTheme) Color(name fyne.ThemeColorName, _ fyne.ThemeVariant) color.Color {
-	return l.Theme.Color(name, theme.VariantLight)
-}
 
 // TestDocsScreenshots builds the real window over the docs fixture and
 // captures one PNG per page. DOCS_SCREENSHOTS overrides the output directory;
@@ -41,7 +32,7 @@ func TestDocsScreenshots(t *testing.T) {
 	}
 	app := test.NewApp()
 	defer app.Quit()
-	app.Settings().SetTheme(lightTheme{theme.DefaultTheme()})
+	app.Settings().SetTheme(variantTheme{newTheme(), theme.VariantLight})
 	window := app.NewWindow("ClashPulse")
 	view := newDesktopUI(t.Context(), "", window)
 	window.Resize(fyne.NewSize(1100, 720))
