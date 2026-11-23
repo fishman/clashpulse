@@ -256,9 +256,7 @@ func newSubscriptionPage(send sendIntent, window fyne.Window) *subscriptionPage 
 	p.list = widget.NewList(
 		func() int { return len(p.rows) },
 		func() fyne.CanvasObject {
-			item := &subscriptionItem{name: widget.NewLabel(""), source: widget.NewLabel(""), status: widget.NewLabel(""), dot: newDot(), usage: newMeter()}
-			detail, detailText := mutedLine()
-			item.detail = detailText
+			item := &subscriptionItem{name: widget.NewLabel(""), source: widget.NewLabel(""), status: widget.NewLabel(""), dot: newDot(), usage: newMeter(), detail: newDetailText()}
 			item.refresh = widget.NewButton(localize.T("Refresh"), func() {
 				if item.id != "" {
 					p.send(ipc.Command{Kind: ipc.CommandRefreshSubscription, SubscriptionID: item.id})
@@ -289,7 +287,7 @@ func newSubscriptionPage(send sendIntent, window fyne.Window) *subscriptionPage 
 					}
 				}
 			})
-			row := sourceRow(item.dot, container.NewGridWithColumns(3, item.name, item.source, item.status), detail, item.usage.object, container.NewHBox(item.refresh, item.activate, item.edit, item.delete, item.details))
+			row := sourceRow(item.dot, []*widget.Label{item.name, item.source, item.status}, item.detail, []fyne.CanvasObject{item.refresh, item.activate, item.edit, item.delete, item.details}, item.usage.object)
 			return newListRow(row, item)
 		},
 		func(id widget.ListItemID, object fyne.CanvasObject) {
@@ -299,7 +297,7 @@ func newSubscriptionPage(send sendIntent, window fyne.Window) *subscriptionPage 
 				setLabel(item.name, "")
 				setLabel(item.source, "")
 				setLabel(item.status, "")
-				setText(item.detail, "")
+				setDetailText(item.detail, "")
 				item.dot.set(pillOff.color())
 				setVisible(item.usage.object, false)
 				return
@@ -310,7 +308,7 @@ func newSubscriptionPage(send sendIntent, window fyne.Window) *subscriptionPage 
 			setLabel(item.source, sourceHostLabel(subscription.SourceHost))
 			setLabel(item.status, subscriptionStatus(subscription))
 			item.dot.set(rowState(subscription.Enabled, subscription.LastSuccess > 0, subscription.LastFailure).color())
-			setText(item.detail, joinNonEmpty(fmt.Sprintf(localize.T("Last check: %s"), detailTime(subscription.LastCheck)), fmt.Sprintf(localize.T("Next refresh: %s"), detailTime(subscription.NextDue))))
+			setDetailText(item.detail, joinNonEmpty(fmt.Sprintf(localize.T("Last check: %s"), detailTime(subscription.LastCheck)), fmt.Sprintf(localize.T("Next refresh: %s"), detailTime(subscription.NextDue))))
 			if usage := subscription.Usage; usage != nil && usage.TotalBytes > 0 {
 				item.usage.set(float64(usage.UploadedBytes+usage.DownloadedBytes)/float64(usage.TotalBytes), theme.ColorNamePrimary)
 				setVisible(item.usage.object, true)
@@ -646,7 +644,7 @@ type subscriptionItem struct {
 	delete   *widget.Button
 	details  *widget.Button
 	dot      *dot
-	detail   *canvas.Text
+	detail   *widget.RichText
 	usage    *meter
 }
 
@@ -668,9 +666,7 @@ func newResourcePage(send sendIntent, window fyne.Window) *resourcePage {
 	p.list = widget.NewList(
 		func() int { return len(p.rows) },
 		func() fyne.CanvasObject {
-			item := &resourceItem{name: widget.NewLabel(""), source: widget.NewLabel(""), status: widget.NewLabel(""), dot: newDot()}
-			detail, detailText := mutedLine()
-			item.detail = detailText
+			item := &resourceItem{name: widget.NewLabel(""), source: widget.NewLabel(""), status: widget.NewLabel(""), dot: newDot(), detail: newDetailText()}
 			item.refresh = widget.NewButton(localize.T("Refresh"), func() {
 				if item.id != "" {
 					p.send(ipc.Command{Kind: ipc.CommandRefreshResource, ResourceID: item.id})
@@ -685,7 +681,7 @@ func newResourcePage(send sendIntent, window fyne.Window) *resourcePage {
 				}
 			})
 			item.edit = widget.NewButton(localize.T("Edit"), func() { p.editResource(item.id) })
-			row := sourceRow(item.dot, container.NewGridWithColumns(3, item.name, item.source, item.status), detail, container.NewHBox(item.refresh, item.edit, item.details))
+			row := sourceRow(item.dot, []*widget.Label{item.name, item.source, item.status}, item.detail, []fyne.CanvasObject{item.refresh, item.edit, item.details})
 			return newListRow(row, item)
 		},
 		func(id widget.ListItemID, object fyne.CanvasObject) {
@@ -695,7 +691,7 @@ func newResourcePage(send sendIntent, window fyne.Window) *resourcePage {
 				setLabel(item.name, "")
 				setLabel(item.source, "")
 				setLabel(item.status, "")
-				setText(item.detail, "")
+				setDetailText(item.detail, "")
 				item.dot.set(pillOff.color())
 				item.refresh.Disable()
 				item.edit.Disable()
@@ -707,7 +703,7 @@ func newResourcePage(send sendIntent, window fyne.Window) *resourcePage {
 			setLabel(item.source, sourceHostLabel(resource.SourceHost))
 			setLabel(item.status, resourceStatus(resource))
 			item.dot.set(rowState(resource.Enabled, resource.Validated, resource.LastResult).color())
-			setText(item.detail, joinNonEmpty(fmt.Sprintf(localize.T("Last check: %s"), detailTime(resource.LastCheck)), fmt.Sprintf(localize.T("Next update: %s"), detailTime(resource.NextDue))))
+			setDetailText(item.detail, joinNonEmpty(fmt.Sprintf(localize.T("Last check: %s"), detailTime(resource.LastCheck)), fmt.Sprintf(localize.T("Next update: %s"), detailTime(resource.NextDue))))
 			if resource.Enabled {
 				item.refresh.Enable()
 			} else {
@@ -754,7 +750,7 @@ type resourceItem struct {
 	edit    *widget.Button
 	details *widget.Button
 	dot     *dot
-	detail  *canvas.Text
+	detail  *widget.RichText
 }
 
 type filterPage struct {
@@ -775,9 +771,7 @@ func newFilterPage(send sendIntent, window fyne.Window) *filterPage {
 	p.list = widget.NewList(
 		func() int { return len(p.rows) },
 		func() fyne.CanvasObject {
-			item := &filterItem{name: widget.NewLabel(""), format: widget.NewLabel(""), status: widget.NewLabel(""), dot: newDot()}
-			detail, detailText := mutedLine()
-			item.detail = detailText
+			item := &filterItem{name: widget.NewLabel(""), format: widget.NewLabel(""), status: widget.NewLabel(""), dot: newDot(), detail: newDetailText()}
 			item.refresh = widget.NewButton(localize.T("Refresh"), func() {
 				if item.id != "" {
 					p.send(ipc.Command{Kind: ipc.CommandRefreshFilter, FilterID: item.id})
@@ -792,7 +786,7 @@ func newFilterPage(send sendIntent, window fyne.Window) *filterPage {
 				}
 			})
 			item.edit = widget.NewButton(localize.T("Edit"), func() { p.editFilter(item.id) })
-			row := sourceRow(item.dot, container.NewGridWithColumns(3, item.name, item.format, item.status), detail, container.NewHBox(item.refresh, item.edit, item.details))
+			row := sourceRow(item.dot, []*widget.Label{item.name, item.format, item.status}, item.detail, []fyne.CanvasObject{item.refresh, item.edit, item.details})
 			return newListRow(row, item)
 		},
 		func(id widget.ListItemID, object fyne.CanvasObject) {
@@ -802,7 +796,7 @@ func newFilterPage(send sendIntent, window fyne.Window) *filterPage {
 				setLabel(item.name, "")
 				setLabel(item.format, "")
 				setLabel(item.status, "")
-				setText(item.detail, "")
+				setDetailText(item.detail, "")
 				item.dot.set(pillOff.color())
 				item.refresh.Disable()
 				item.edit.Disable()
@@ -814,7 +808,7 @@ func newFilterPage(send sendIntent, window fyne.Window) *filterPage {
 			setLabel(item.format, filter.Format)
 			setLabel(item.status, filterStatus(filter))
 			item.dot.set(rowState(filter.Enabled, filter.Validated, filter.LastFailure).color())
-			setText(item.detail, joinNonEmpty(sourceHostLabel(filter.SourceHost), fmt.Sprintf(localize.T("Last success: %s"), detailTime(filter.LastSuccess)), fmt.Sprintf(localize.T("Next update: %s"), detailTime(filter.NextDue))))
+			setDetailText(item.detail, joinNonEmpty(sourceHostLabel(filter.SourceHost), fmt.Sprintf(localize.T("Last success: %s"), detailTime(filter.LastSuccess)), fmt.Sprintf(localize.T("Next update: %s"), detailTime(filter.NextDue))))
 			if filter.Enabled {
 				item.refresh.Enable()
 			} else {
@@ -884,14 +878,39 @@ type filterItem struct {
 	edit    *widget.Button
 	details *widget.Button
 	dot     *dot
-	detail  *canvas.Text
+	detail  *widget.RichText
 }
 
-// sourceRow lays out a subscription, resource, or filter row: status dot and
-// cells, a muted detail line, any extra lines, then a separator.
-func sourceRow(status *dot, cells fyne.CanvasObject, detail fyne.CanvasObject, extra ...fyne.CanvasObject) *fyne.Container {
-	lines := []fyne.CanvasObject{container.NewBorder(nil, nil, status.object, nil, cells), detail}
-	return container.NewVBox(append(append(lines, extra...), widget.NewSeparator())...)
+// sourceRow lays out a subscription, resource, or filter row: the status dot
+// on the left; the cells, a muted detail line, and any extra lines in the
+// middle; the actions right-aligned and vertically centered. The list draws
+// the separators. Cells and detail truncate, so a long name never pushes the
+// actions off the row.
+func sourceRow(status *dot, cells []*widget.Label, detail *widget.RichText, actions []fyne.CanvasObject, extra ...fyne.CanvasObject) fyne.CanvasObject {
+	grid := container.NewGridWithColumns(len(cells))
+	for _, cell := range cells {
+		cell.Truncation = fyne.TextTruncateEllipsis
+		grid.Add(cell)
+	}
+	text := container.New(layout.NewCustomPaddedVBoxLayout(0), append([]fyne.CanvasObject{grid, detail}, extra...)...)
+	buttons := container.New(layout.NewCustomPaddedLayout(0, 0, 2*theme.Padding(), 2*theme.Padding()), center(container.NewHBox(actions...)))
+	return container.NewBorder(nil, nil, status.object, buttons, text)
+}
+
+// newDetailText is the muted secondary line of a source row; unlike
+// mutedLine it truncates to the width it gets.
+func newDetailText() *widget.RichText {
+	detail := widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, SizeName: sizeNameCaption, Inline: true}})
+	detail.Truncation = fyne.TextTruncateEllipsis
+	return detail
+}
+
+func setDetailText(detail *widget.RichText, text string) {
+	segment := detail.Segments[0].(*widget.TextSegment)
+	if segment.Text != text {
+		segment.Text = text
+		detail.Refresh()
+	}
 }
 
 func (p *resourcePage) openDialog() dialog.Dialog {

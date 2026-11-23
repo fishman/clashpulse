@@ -53,6 +53,8 @@ func TestDocsScreenshots(t *testing.T) {
 		{"gui-overview.png", func() { view.showView("Overview") }, nil},
 		{"gui-proxies.png", func() { view.showView("Proxies") }, nil},
 		{"gui-subscriptions.png", func() { view.showView("Subscriptions") }, nil},
+		{"gui-filter-lists.png", func() { view.showView("Filter Lists") }, nil},
+		{"gui-data-resources.png", func() { view.showView("Data Resources") }, nil},
 		{"gui-settings-monitor.png", func() {
 			view.showView("Settings")
 			view.settingsPage.selectSection("Monitor")

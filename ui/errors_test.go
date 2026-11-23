@@ -163,6 +163,8 @@ func rowLabels(object fyne.CanvasObject) []string {
 		return []string{object.Text}
 	case *canvas.Text:
 		return []string{object.Text}
+	case *widget.RichText:
+		return []string{object.String()}
 	case *container.Scroll:
 		return rowLabels(object.Content)
 	case *widget.Form:
