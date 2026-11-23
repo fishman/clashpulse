@@ -36,6 +36,26 @@ of `key=value` lines including `loc=`. The reference client
 check URLs and blocked lists below; ClashPulse reuses the signals, not the
 code.
 
+## Compared with Clash Verge Rev
+
+Read from `src-tauri/src/cmd/media_unlock_checker/mod.rs`,
+`crates/clash-verge-media-unlock/src/lib.rs`, and `src/pages/unlock.tsx`.
+
+| | Clash Verge Rev | ClashPulse |
+|---|---|---|
+| When | on demand from the Unlock page; results cached in `localStorage` | every 30 min per enabled service, on node change, and on "Check now" |
+| Path | the user's mixed port, so the node the current rules pick | the private pinned probe listener, so a named node; candidates can be checked before a switch |
+| Effect | display only; no routing, no switching | per-service group, rules, and opt-in automatic switching |
+| Scope | 11 services, 4 concurrent checks | 6 services, one check at a time on the probe worker |
+| Bodies | read whole (Gemini about 0.9 MB, YouTube about 1 MB) | capped per definition; Gemini reuses the YouTube read |
+| TLS | `danger_accept_invalid_certs(true)` and invalid hostnames accepted | verified TLS 1.2+; a TLS failure is `error` |
+| Redirects and cookies | reqwest defaults (follows up to 10), cookie store on | bounded same-site redirects per definition, no cookies |
+| Timeout | 15 s per service | 10 s per service |
+| User-Agent | fixed desktop Chrome string | fixed desktop browser string (below) |
+
+Verge's invalid-certificate acceptance is not copied: an intercepted
+connection would read as a working service.
+
 ## Verified against Mihomo v1.19.31 (installed binary, `mihomo -t`)
 
 A configuration with a select group named `ClashPulse - ChatGPT` using
@@ -99,7 +119,10 @@ Outcome rules:
 - A blocked list match uses the detected region; an empty region with no
   marker is `error`, never `usable`.
 
-Every request: GET, HTTPS only, TLS 1.2+, no cookies, `DisableKeepAlives`,
+Every request: GET, HTTPS only, TLS 1.2+, no cookies, a fixed desktop
+browser `User-Agent` (services can serve a different page to Go's default
+agent; the measurements above used a browser-style agent),
+`DisableKeepAlives`,
 a 10 s total timeout across its redirects, the read cap above, and context
 cancellation. Redirects follow the definition: at most `Redirects` hops, each
 to an HTTPS URL whose host equals or ends in `.` + one of `Hosts`; any other
