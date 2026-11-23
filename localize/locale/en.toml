@@ -213,3 +213,12 @@ other = "Info"
 
 ["diagnostic.severity.ok"]
 other = "OK"
+
+["override.change.added"]
+other = "Added"
+
+["override.change.replaced"]
+other = "Replaced"
+
+["override.change.removed"]
+other = "Removed"

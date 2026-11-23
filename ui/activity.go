@@ -220,12 +220,55 @@ func (v *activityView) update(entries []core.DiagnosticSnapshot, proxies []core.
 	v.rebuild()
 }
 
-// openActivity shows the log panel: the diagnostics this service recorded,
-// with what it changed in the generated configuration folded below.
+// overrideRow shows one generated config change: the setting in a fixed
+// monospace column, the kind of change, then why ClashPulse made it.
+type overrideRow struct {
+	key, change, text *widget.Label
+	box               *fyne.Container
+}
+
+// overrideKeyWidth fits the longest key a change may name, so every reason
+// starts at the same x.
+func overrideKeyWidth() float32 {
+	var width float32
+	for _, key := range core.ConfigOverrideKeys {
+		width = max(width, monospaceLabel(key).MinSize().Width)
+	}
+	return width
+}
+
+var overrideChanges = []string{"added", "replaced", "removed"}
+
+func newOverrideRow(keyWidth float32) *overrideRow {
+	r := &overrideRow{key: monospaceLabel(""), change: levelLabel("info"), text: widget.NewLabel("")}
+	r.key.Importance = widget.MediumImportance
+	r.text.Wrapping = fyne.TextWrapWord
+	var changeWidth float32
+	for _, change := range overrideChanges {
+		changeWidth = max(changeWidth, widget.NewLabelWithStyle(localize.Code("override.change", change), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}).MinSize().Width)
+	}
+	columns := container.NewHBox(container.New(fixedWidth(keyWidth), r.key), container.New(fixedWidth(changeWidth), r.change))
+	r.box = container.NewBorder(nil, widget.NewSeparator(), container.NewVBox(columns), nil, r.text)
+	r.box.Hide()
+	return r
+}
+
+func (r *overrideRow) set(item core.ConfigOverrideSnapshot) {
+	r.key.SetText(item.Key)
+	r.change.SetText(localize.Code("override.change", item.Change))
+	r.text.SetText(item.Description())
+	r.box.Show()
+}
+
+// openActivity shows the log panel: one tab for the diagnostics this service
+// recorded, one for what it changed in the generated configuration.
 func (d *desktopUI) openActivity() {
 	if d.activity.dialog == nil {
-		body := container.NewBorder(d.activity.filter, d.overridesSection, nil, nil, d.activity.content)
-		d.activity.dialog = dialog.NewCustom(localize.T("Activity"), localize.T("Close"), body, d.window)
+		d.activityTabs = container.NewAppTabs(
+			container.NewTabItem(localize.T("Log"), container.NewBorder(d.activity.filter, nil, nil, nil, d.activity.content)),
+			container.NewTabItem(localize.T("Generated config changes"), d.overridesSection),
+		)
+		d.activity.dialog = dialog.NewCustom(localize.T("Activity"), localize.T("Close"), d.activityTabs, d.window)
 	}
 	showSized(d.activity.dialog, d.window, logDialogWidth, true)
 }

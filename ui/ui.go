@@ -111,15 +111,17 @@ type desktopUI struct {
 	overview         *overviewView
 	overridesRows    *fyne.Container
 	overridesSection *fyne.Container
-	// overridesFold starts collapsed so the activity log keeps the space.
-	overridesFold  *widget.Accordion
-	overrideLabels []*widget.Label
-	proxyPage      *proxyPage
-	subPage        *subscriptionPage
-	resourcePage   *resourcePage
-	filterPage     *filterPage
-	settingsPage   *settingsPage
-	activity       *activityView
+	overridesEmpty   *widget.Label
+	overrideRows     []*overrideRow
+	// activityTabs holds the log and the config changes, so neither shrinks
+	// the other inside the fixed-height activity dialog.
+	activityTabs *container.AppTabs
+	proxyPage    *proxyPage
+	subPage      *subscriptionPage
+	resourcePage *resourcePage
+	filterPage   *filterPage
+	settingsPage *settingsPage
+	activity     *activityView
 }
 
 func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopUI {
@@ -131,19 +133,17 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 		views:      make(map[string]fyne.CanvasObject),
 		connection: widget.NewLabel(localize.T("Connecting to local service...")),
 	}
-	d.overrideLabels = make([]*widget.Label, 14)
-	rows := make([]fyne.CanvasObject, len(d.overrideLabels))
-	for i := range d.overrideLabels {
-		d.overrideLabels[i] = widget.NewLabel("")
-		d.overrideLabels[i].Wrapping = fyne.TextWrapWord
-		d.overrideLabels[i].Hide()
-		rows[i] = d.overrideLabels[i]
+	d.overridesEmpty = widget.NewLabel(localize.T("No managed overrides"))
+	d.overridesEmpty.Importance = widget.LowImportance
+	rows := []fyne.CanvasObject{d.overridesEmpty}
+	keyWidth := overrideKeyWidth()
+	d.overrideRows = make([]*overrideRow, len(core.ConfigOverrideKeys))
+	for i := range d.overrideRows {
+		d.overrideRows[i] = newOverrideRow(keyWidth)
+		rows = append(rows, d.overrideRows[i].box)
 	}
-	d.overrideLabels[0].SetText(localize.T("No managed overrides"))
-	d.overrideLabels[0].Show()
 	d.overridesRows = container.NewVBox(rows...)
-	d.overridesFold = widget.NewAccordion(widget.NewAccordionItem(localize.T("Generated config changes"), d.overridesRows))
-	d.overridesSection = container.NewVBox(d.overridesFold)
+	d.overridesSection = container.NewStack(container.NewVScroll(d.overridesRows))
 	d.proxyPage = newProxyPage(d.enqueue)
 	d.subPage = newSubscriptionPage(d.enqueue, w)
 	d.resourcePage = newResourcePage(d.enqueue, w)
@@ -310,21 +310,19 @@ func (d *desktopUI) runIPCSession() {
 func (d *desktopUI) updateOverrides(changes []core.ConfigOverrideSnapshot) {
 	count := 0
 	for _, item := range changes {
-		if !item.Valid() || count == len(d.overrideLabels) {
+		if !item.Valid() || count == len(d.overrideRows) {
 			continue
 		}
-		label := d.overrideLabels[count]
-		label.SetText(item.Key + " (" + item.Change + "): " + item.Description())
-		label.Show()
+		d.overrideRows[count].set(item)
 		count++
 	}
 	if count == 0 {
-		d.overrideLabels[0].SetText(localize.T("No managed overrides"))
-		d.overrideLabels[0].Show()
-		count = 1
+		d.overridesEmpty.Show()
+	} else {
+		d.overridesEmpty.Hide()
 	}
-	for _, label := range d.overrideLabels[count:] {
-		label.Hide()
+	for _, row := range d.overrideRows[count:] {
+		row.box.Hide()
 	}
 	d.overridesRows.Refresh()
 }

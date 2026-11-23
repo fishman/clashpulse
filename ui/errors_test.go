@@ -201,13 +201,6 @@ func rowLabels(object fyne.CanvasObject) []string {
 		return []string{object.String()}
 	case *container.Scroll:
 		return rowLabels(object.Content)
-	case *widget.Accordion:
-		var labels []string
-		for _, item := range object.Items {
-			labels = append(labels, item.Title)
-			labels = append(labels, rowLabels(item.Detail)...)
-		}
-		return labels
 	case *widget.Form:
 		var labels []string
 		for _, field := range object.Items {

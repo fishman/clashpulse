@@ -420,3 +420,15 @@ other = "没有记录到问题"
 
 ["No activity yet"]
 other = "暂无活动记录"
+
+["Log"]
+other = "日志"
+
+["override.change.added"]
+other = "新增"
+
+["override.change.replaced"]
+other = "替换"
+
+["override.change.removed"]
+other = "移除"

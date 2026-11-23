@@ -202,7 +202,7 @@ func TestConfigOverrideLogPanelShowsFixedReasonsOnly(t *testing.T) {
 	}
 	view.postSnapshot(core.Snapshot{Groups: []core.GroupSnapshot{{ID: "other"}}, ConfigOverrides: []core.ConfigOverrideSnapshot{{Key: "dns.listen", Change: "replaced"}}})
 	fyne.DoAndWait(func() {})
-	if labels := rowLabels(view.overridesSection); !slices.Contains(labels, "dns.listen (replaced): loopback DNS listener") {
+	if labels := rowLabels(view.overridesSection); !slices.Contains(labels, "dns.listen") || !slices.Contains(labels, "Replaced") || !slices.Contains(labels, "loopback DNS listener") {
 		t.Fatalf("unrelated update changed override explanation: %v", labels)
 	}
 }
@@ -215,7 +215,7 @@ func TestConfigOverrideLogPanelRowsDoNotOverlap(t *testing.T) {
 	view := newDesktopUI(t.Context(), "", w)
 	view.postSnapshot(core.Snapshot{ConfigOverrides: []core.ConfigOverrideSnapshot{{Key: "mixed-port", Change: "replaced"}, {Key: "external-controller", Change: "replaced"}, {Key: "secret", Change: "added"}, {Key: "allow-lan", Change: "replaced"}, {Key: "dns.listen", Change: "replaced"}}})
 	view.openActivity()
-	view.overridesFold.Open(0)
+	view.activityTabs.SelectIndex(1)
 	fyne.DoAndWait(func() {})
 	_ = w.Canvas().Capture()
 	if view.overridesRows.Size().Height < view.overridesRows.MinSize().Height {
@@ -245,7 +245,7 @@ func TestConfigOverrideLogPanelFitsNarrowWindow(t *testing.T) {
 	view := newDesktopUI(t.Context(), "", w)
 	view.postSnapshot(core.Snapshot{ConfigOverrides: []core.ConfigOverrideSnapshot{{Key: "external-controller", Change: "replaced"}}})
 	view.openActivity()
-	view.overridesFold.Open(0)
+	view.activityTabs.SelectIndex(1)
 	fyne.DoAndWait(func() {})
 	_ = w.Canvas().Capture()
 	if view.overridesRows.Size().Width > w.Canvas().Size().Width {
