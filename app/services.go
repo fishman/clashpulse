@@ -160,8 +160,9 @@ func (s *runtimeService) observeServiceGroup(id string, group mihomo.Group) {
 }
 
 // persistServiceManual turns automatic off. The generated configuration does
-// not read it, so the store is reloaded without an apply; the applied
-// settings take the new service intent so a later re-enable is a change.
+// not read it, so the store is reloaded without an apply. Only this service's
+// Automatic is marked applied: a queued hand edit to other intent must still
+// diff, and a later re-enable must be a change.
 func (s *runtimeService) persistServiceManual(id string) error {
 	current := s.store.Snapshot()
 	service, ok := configuredService(current, id)
@@ -175,7 +176,11 @@ func (s *runtimeService) persistServiceManual(id string) error {
 	if _, err := s.reloadConfig(); err != nil {
 		return err
 	}
-	s.lastAppliedSettings.Services = s.store.Snapshot().Services
+	if index := slices.IndexFunc(s.lastAppliedSettings.Services, func(item config.Service) bool { return item.ID == id }); index >= 0 {
+		applied := slices.Clone(s.lastAppliedSettings.Services)
+		applied[index].Automatic = false
+		s.lastAppliedSettings.Services = applied
+	}
 	s.updateServicePlan()
 	return nil
 }

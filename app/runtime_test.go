@@ -5,10 +5,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/fishman/clashpulse/config"
+	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/internal/localtest"
 	"github.com/fishman/clashpulse/ipc"
 )
@@ -160,4 +162,48 @@ func waitConfigReloadIssue(t *testing.T, ctx context.Context, client *ipc.Client
 		time.Sleep(15 * time.Millisecond)
 	}
 	t.Fatalf("config reload issue presence = %t, want %t", !want, want)
+}
+
+// A hand edit that changes only [[service]] intent is applied and published
+// like any other watched section.
+func TestRunAtAppliesHandEditedService(t *testing.T) {
+	root := localtest.Dir(t)
+	configDir, stateDir := filepath.Join(root, "config"), filepath.Join(root, "state")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	configFile := filepath.Join(configDir, "config.toml")
+	if err := config.Write(configFile, []byte("[mihomo]\nbinary = \"system\"\n")); err != nil {
+		t.Fatal(err)
+	}
+	endpoint := localtest.Endpoint(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- RunAt(ctx, configDir, stateDir, endpoint) }()
+	client := dialAppClient(ctx, endpoint)
+	if client == nil {
+		cancel()
+		t.Fatalf("service did not start: %v", <-done)
+	}
+	defer client.Close()
+	defer func() {
+		cancel()
+		if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
+			t.Error(err)
+		}
+	}()
+	if err := config.Write(configFile, []byte("[mihomo]\nbinary = \"system\"\n\n[[service]]\nid = \"netflix\"\nenabled = true\n")); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		request, stop := context.WithTimeout(ctx, time.Second)
+		snapshot, err := client.Snapshot(request)
+		stop()
+		if err == nil && slices.ContainsFunc(snapshot.Services, func(item core.ServiceSnapshot) bool { return item.ID == "netflix" && item.Enabled }) {
+			return
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	t.Fatal("hand-edited service was not published")
 }
