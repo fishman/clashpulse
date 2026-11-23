@@ -324,7 +324,7 @@ func (d *desktopUI) postSnapshot(snapshot core.Snapshot) {
 				d.activity.dialog.Refresh()
 			}
 		}
-		if first || !reflect.DeepEqual(previous.Groups, immutable.Groups) || !reflect.DeepEqual(previous.Proxies, immutable.Proxies) {
+		if first || !reflect.DeepEqual(previous.Groups, immutable.Groups) || !reflect.DeepEqual(previous.Proxies, immutable.Proxies) || previous.Monitor != immutable.Monitor {
 			d.proxyPage.update(immutable)
 		}
 		d.proxyPage.setStreamProbe(immutable.Monitor.SwitchPolicy == monitor.SwitchSteadyStream && immutable.AnyGroupAutomated())

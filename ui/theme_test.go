@@ -73,12 +73,12 @@ func TestPillStateColor(t *testing.T) {
 	app.Settings().SetTheme(newTheme())
 	p := pill("TUN")
 	p.set(pillFailed)
-	if p.state != pillFailed || p.dot.FillColor != theme.Color(theme.ColorNameError) {
-		t.Fatalf("failed pill = %v %v", p.state, p.dot.FillColor)
+	if p.state != pillFailed || p.dot.circle.FillColor != theme.Color(theme.ColorNameError) {
+		t.Fatalf("failed pill = %v %v", p.state, p.dot.circle.FillColor)
 	}
 	p.set(pillOn)
-	if p.dot.FillColor != theme.Color(theme.ColorNameSuccess) {
-		t.Fatalf("on pill = %v", p.dot.FillColor)
+	if p.dot.circle.FillColor != theme.Color(theme.ColorNameSuccess) {
+		t.Fatalf("on pill = %v", p.dot.circle.FillColor)
 	}
 }
 
@@ -102,7 +102,9 @@ func TestHelpersFollowLiveVariantSwitch(t *testing.T) {
 	p := pill("TUN")
 	_, number, _ := newValue("12", "ms")
 	window := app.NewWindow("ClashPulse")
-	window.SetContent(container.NewVBox(card, p.object, number))
+	b := newBadge()
+	b.set("120 ms", theme.ColorNameDisabled)
+	window.SetContent(container.NewVBox(card, p.object, number, b.object))
 	window.Resize(fyne.NewSize(300, 300))
 	dark := newTheme()
 	app.Settings().SetTheme(variantTheme{dark, theme.VariantDark})
@@ -111,5 +113,8 @@ func TestHelpersFollowLiveVariantSwitch(t *testing.T) {
 	}
 	if got, want := p.text.Color, dark.Color(theme.ColorNameForeground, theme.VariantDark); got != want {
 		t.Errorf("pill text = %v, want %v", got, want)
+	}
+	if got, want := b.text.Color, dark.Color(theme.ColorNameDisabled, theme.VariantDark); got != want {
+		t.Errorf("badge text = %v, want %v", got, want)
 	}
 }

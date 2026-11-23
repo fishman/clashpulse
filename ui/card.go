@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image/color"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -153,22 +154,20 @@ func (s pillState) color() fyne.ThemeColorName {
 // statusPill is a dot and a label on a rounded surface.
 type statusPill struct {
 	object fyne.CanvasObject
-	dot    *canvas.Circle
+	dot    *dot
 	text   *canvas.Text
 	state  pillState
 }
 
 func pill(label string) *statusPill {
-	p := &statusPill{dot: canvas.NewCircle(theme.Color(pillOff.color())), text: canvas.NewText(label, theme.Color(theme.ColorNameForeground))}
+	p := &statusPill{dot: newDot(), text: canvas.NewText(label, theme.Color(theme.ColorNameForeground))}
 	p.text.TextSize = theme.Size(sizeNameCaption) + 1
 	surface := newSurface(colorNameCard)
 	surface.CornerRadius = 12
-	dot := container.New(layout.NewCenterLayout(), container.NewGridWrap(fyne.NewSize(8, 8), p.dot))
-	row := container.New(layout.NewCustomPaddedLayout(3, 3, 10, 10), container.NewHBox(dot, p.text))
+	row := container.New(layout.NewCustomPaddedLayout(3, 3, 10, 10), container.NewHBox(p.dot.object, p.text))
 	p.object = container.New(paintLayout{layout.NewStackLayout(), func() {
 		surface.FillColor = theme.Color(colorNameCard)
 		surface.StrokeColor = theme.Color(theme.ColorNameSeparator)
-		p.dot.FillColor = theme.Color(p.state.color())
 		p.text.Color = theme.Color(theme.ColorNameForeground)
 	}}, surface, row)
 	return p
@@ -179,6 +178,81 @@ func (p *statusPill) set(state pillState) {
 		return
 	}
 	p.state = state
-	p.dot.FillColor = theme.Color(state.color())
-	p.dot.Refresh()
+	p.dot.set(state.color())
+}
+
+// tint returns a theme color at the given alpha.
+func tint(name fyne.ThemeColorName, alpha uint8) color.Color {
+	c := color.NRGBAModel.Convert(theme.Color(name)).(color.NRGBA)
+	c.A = alpha
+	return c
+}
+
+// badge is short colored text on a tinted rounded rectangle.
+type badge struct {
+	object *fyne.Container
+	bg     *canvas.Rectangle
+	text   *canvas.Text
+	color  fyne.ThemeColorName
+}
+
+func newBadge() *badge {
+	b := &badge{bg: canvas.NewRectangle(color.Transparent), text: canvas.NewText("", nil), color: theme.ColorNameDisabled}
+	b.bg.CornerRadius = 8
+	b.text.TextSize = theme.Size(sizeNameCaption) + 1
+	b.text.TextStyle.Bold = true
+	b.text.Alignment = fyne.TextAlignCenter
+	b.paint()
+	b.object = container.New(paintLayout{layout.NewStackLayout(), b.paint}, b.bg, container.New(layout.NewCustomPaddedLayout(3, 3, 8, 8), b.text))
+	return b
+}
+
+func (b *badge) paint() {
+	b.bg.FillColor = tint(b.color, 0x2E)
+	b.text.Color = theme.Color(b.color)
+}
+
+func (b *badge) set(text string, color fyne.ThemeColorName) {
+	if b.text.Text == text && b.color == color {
+		return
+	}
+	b.text.Text, b.color = text, color
+	b.paint()
+	b.object.Refresh()
+}
+
+// dot is an 8 px status circle.
+type dot struct {
+	object *fyne.Container
+	circle *canvas.Circle
+	color  fyne.ThemeColorName
+}
+
+func newDot() *dot {
+	d := &dot{circle: canvas.NewCircle(color.Transparent), color: theme.ColorNamePlaceHolder}
+	d.paint()
+	d.object = container.New(paintLayout{layout.NewCenterLayout(), d.paint}, container.NewGridWrap(fyne.NewSize(8, 8), d.circle))
+	return d
+}
+
+func (d *dot) paint() {
+	d.circle.FillColor = theme.Color(d.color)
+}
+
+func (d *dot) set(color fyne.ThemeColorName) {
+	if d.color == color {
+		return
+	}
+	d.color = color
+	d.paint()
+	d.circle.Refresh()
+}
+
+// mutedLine is secondary row text in the muted color.
+func mutedLine() (*fyne.Container, *canvas.Text) {
+	text := newMutedText("", theme.SizeNameText)
+	text.TextSize = theme.Size(sizeNameCaption) + 1
+	return container.New(paintLayout{layout.NewCustomPaddedLayout(0, 0, theme.InnerPadding(), 0), func() {
+		text.Color = theme.Color(theme.ColorNamePlaceHolder)
+	}}, text), text
 }

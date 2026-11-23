@@ -10,8 +10,10 @@ import (
 	"strings"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -45,9 +47,12 @@ type proxyPage struct {
 }
 
 type proxyItem struct {
-	name    *widget.Label
-	state   *widget.Label
-	latency *widget.Label
+	dot    *dot
+	name   *widget.Label
+	state  *widget.Label
+	badge  *badge
+	detail *canvas.Text
+	status *fyne.Container
 }
 
 func newProxyPage(send sendIntent) *proxyPage {
@@ -80,44 +85,58 @@ func newProxyPage(send sendIntent) *proxyPage {
 	p.list = widget.NewList(
 		func() int { return len(p.choices) },
 		func() fyne.CanvasObject {
-			item := &proxyItem{name: widget.NewLabel(""), state: widget.NewLabel(""), latency: widget.NewLabel("")}
-			item.latency.Truncation = fyne.TextTruncateEllipsis
-			// Measurements get their own full-width line; a third of a narrow
-			// window clipped them.
-			row := container.NewVBox(container.NewGridWithColumns(2, item.name, item.state), item.latency)
+			item := &proxyItem{dot: newDot(), name: widget.NewLabel(""), state: widget.NewLabel(""), badge: newBadge()}
+			item.name.Truncation = fyne.TextTruncateEllipsis
+			item.state.Importance = widget.HighImportance
+			detail, text := mutedLine()
+			item.detail = text
+			lines := container.New(layout.NewCustomPaddedVBoxLayout(0), item.name, detail)
+			item.status = container.NewHBox(item.state, center(item.badge.object))
+			row := container.NewBorder(nil, nil, item.dot.object, item.status, lines)
 			p.items[row] = item
 			return row
 		},
 		func(id widget.ListItemID, object fyne.CanvasObject) {
 			item := p.items[object.(*fyne.Container)]
 			if id < 0 || id >= len(p.choices) {
-				item.name.SetText("")
-				item.state.SetText("")
-				item.latency.SetText("")
+				setLabel(item.name, "")
+				setLabel(item.state, "")
+				setText(item.detail, "")
+				item.badge.set("", theme.ColorNameDisabled)
+				item.dot.set(theme.ColorNameSeparator)
 				return
 			}
 			choice := p.choices[id]
 			selected := false
-			for _, group := range p.groups {
-				if group.ID == p.selectedGroupID {
-					selected = choice == group.Selected
+			if group := p.selectedGroup(); group != nil {
+				selected = choice == group.Selected
+			}
+			var proxy core.ProxySnapshot
+			for _, candidate := range p.snapshot.Proxies {
+				if candidate.GroupID == p.selectedGroupID && candidate.ID == choice {
+					proxy = candidate
 					break
 				}
 			}
 			name := choice
-			for _, proxy := range p.snapshot.Proxies {
-				if proxy.GroupID == p.selectedGroupID && proxy.ID == choice && proxy.Label != "" {
-					name = proxy.Label
-					break
-				}
+			if proxy.Label != "" {
+				name = proxy.Label
 			}
-			item.name.SetText(name)
+			setLabel(item.name, name)
 			if selected {
-				item.state.SetText(localize.T("Active"))
+				setLabel(item.state, localize.T("Active"))
+				item.dot.set(theme.ColorNamePrimary)
 			} else {
-				item.state.SetText("")
+				setLabel(item.state, "")
+				item.dot.set(theme.ColorNameSeparator)
 			}
-			item.latency.SetText(proxyLatency(p.snapshot, p.selectedGroupID, choice))
+			item.badge.set(latencyBadge(proxy, p.snapshot.Monitor))
+			setText(item.detail, joinNonEmpty(proxy.StabilityLabel(), proxy.StreamLabel()))
+			// Border sizes the status column once; relayout only when the
+			// badge or state text changed its width.
+			if item.status.MinSize().Width != item.status.Size().Width {
+				object.Refresh()
+			}
 		},
 	)
 	p.list.OnSelected = func(id widget.ListItemID) {
@@ -237,10 +256,13 @@ type subscriptionPage struct {
 func newSubscriptionPage(send sendIntent, window fyne.Window) *subscriptionPage {
 	p := &subscriptionPage{send: send, window: window, items: make(map[*fyne.Container]*subscriptionItem)}
 	p.add = widget.NewButton(localize.T("Add subscription"), func() { p.openSubscriptionEditor(nil) })
+	p.add.Importance = widget.HighImportance
 	p.list = widget.NewList(
 		func() int { return len(p.rows) },
 		func() fyne.CanvasObject {
-			item := &subscriptionItem{name: widget.NewLabel(""), source: widget.NewLabel(""), status: widget.NewLabel("")}
+			item := &subscriptionItem{name: widget.NewLabel(""), source: widget.NewLabel(""), status: widget.NewLabel(""), dot: newDot(), usage: newMeter()}
+			detail, detailText := mutedLine()
+			item.detail = detailText
 			item.refresh = widget.NewButton(localize.T("Refresh"), func() {
 				if item.id != "" {
 					p.send(ipc.Command{Kind: ipc.CommandRefreshSubscription, SubscriptionID: item.id})
@@ -271,7 +293,7 @@ func newSubscriptionPage(send sendIntent, window fyne.Window) *subscriptionPage 
 					}
 				}
 			})
-			row := container.NewVBox(container.NewGridWithColumns(3, item.name, item.source, item.status), container.NewHBox(item.refresh, item.activate, item.edit, item.delete, item.details), widget.NewSeparator())
+			row := sourceRow(item.dot, container.NewGridWithColumns(3, item.name, item.source, item.status), detail, item.usage.object, container.NewHBox(item.refresh, item.activate, item.edit, item.delete, item.details))
 			p.items[row] = item
 			return row
 		},
@@ -279,16 +301,27 @@ func newSubscriptionPage(send sendIntent, window fyne.Window) *subscriptionPage 
 			item := p.items[object.(*fyne.Container)]
 			if id < 0 || id >= len(p.rows) {
 				item.id = ""
-				item.name.SetText("")
-				item.source.SetText("")
-				item.status.SetText("")
+				setLabel(item.name, "")
+				setLabel(item.source, "")
+				setLabel(item.status, "")
+				setText(item.detail, "")
+				item.dot.set(pillOff.color())
+				setVisible(item.usage.object, false)
 				return
 			}
 			subscription := p.rows[id]
 			item.id = subscription.ID
-			item.name.SetText(subscription.Name)
-			item.source.SetText(sourceHostLabel(subscription.SourceHost))
-			item.status.SetText(subscriptionStatus(subscription))
+			setLabel(item.name, subscription.Name)
+			setLabel(item.source, sourceHostLabel(subscription.SourceHost))
+			setLabel(item.status, subscriptionStatus(subscription))
+			item.dot.set(rowState(subscription.Enabled, subscription.LastSuccess > 0, subscription.LastFailure).color())
+			setText(item.detail, joinNonEmpty(fmt.Sprintf(localize.T("Last check: %s"), detailTime(subscription.LastCheck)), fmt.Sprintf(localize.T("Next refresh: %s"), detailTime(subscription.NextDue))))
+			if usage := subscription.Usage; usage != nil && usage.TotalBytes > 0 {
+				item.usage.set(float64(usage.UploadedBytes+usage.DownloadedBytes)/float64(usage.TotalBytes), theme.ColorNamePrimary)
+				setVisible(item.usage.object, true)
+			} else {
+				setVisible(item.usage.object, false)
+			}
 			if subscription.Active {
 				item.delete.Disable()
 			} else {
@@ -618,6 +651,9 @@ type subscriptionItem struct {
 	edit     *widget.Button
 	delete   *widget.Button
 	details  *widget.Button
+	dot      *dot
+	detail   *canvas.Text
+	usage    *meter
 }
 
 type resourcePage struct {
@@ -635,10 +671,13 @@ type resourcePage struct {
 func newResourcePage(send sendIntent, window fyne.Window) *resourcePage {
 	p := &resourcePage{send: send, window: window, items: make(map[*fyne.Container]*resourceItem)}
 	p.add = widget.NewButton(localize.T("Add resource"), func() { p.openResourceEditor(nil) })
+	p.add.Importance = widget.HighImportance
 	p.list = widget.NewList(
 		func() int { return len(p.rows) },
 		func() fyne.CanvasObject {
-			item := &resourceItem{name: widget.NewLabel(""), source: widget.NewLabel(""), status: widget.NewLabel("")}
+			item := &resourceItem{name: widget.NewLabel(""), source: widget.NewLabel(""), status: widget.NewLabel(""), dot: newDot()}
+			detail, detailText := mutedLine()
+			item.detail = detailText
 			item.refresh = widget.NewButton(localize.T("Refresh"), func() {
 				if item.id != "" {
 					p.send(ipc.Command{Kind: ipc.CommandRefreshResource, ResourceID: item.id})
@@ -653,7 +692,7 @@ func newResourcePage(send sendIntent, window fyne.Window) *resourcePage {
 				}
 			})
 			item.edit = widget.NewButton(localize.T("Edit"), func() { p.editResource(item.id) })
-			row := container.NewVBox(container.NewGridWithColumns(3, item.name, item.source, item.status), container.NewHBox(item.refresh, item.edit, item.details), widget.NewSeparator())
+			row := sourceRow(item.dot, container.NewGridWithColumns(3, item.name, item.source, item.status), detail, container.NewHBox(item.refresh, item.edit, item.details))
 			p.items[row] = item
 			return row
 		},
@@ -661,18 +700,22 @@ func newResourcePage(send sendIntent, window fyne.Window) *resourcePage {
 			item := p.items[object.(*fyne.Container)]
 			if id < 0 || id >= len(p.rows) {
 				item.id = ""
-				item.name.SetText("")
-				item.source.SetText("")
-				item.status.SetText("")
+				setLabel(item.name, "")
+				setLabel(item.source, "")
+				setLabel(item.status, "")
+				setText(item.detail, "")
+				item.dot.set(pillOff.color())
 				item.refresh.Disable()
 				item.edit.Disable()
 				return
 			}
 			resource := p.rows[id]
 			item.id = resource.ID
-			item.name.SetText(resource.ID)
-			item.source.SetText(sourceHostLabel(resource.SourceHost))
-			item.status.SetText(resourceStatus(resource))
+			setLabel(item.name, resource.ID)
+			setLabel(item.source, sourceHostLabel(resource.SourceHost))
+			setLabel(item.status, resourceStatus(resource))
+			item.dot.set(rowState(resource.Enabled, resource.Validated, resource.LastResult).color())
+			setText(item.detail, joinNonEmpty(fmt.Sprintf(localize.T("Last check: %s"), detailTime(resource.LastCheck)), fmt.Sprintf(localize.T("Next update: %s"), detailTime(resource.NextDue))))
 			if resource.Enabled {
 				item.refresh.Enable()
 			} else {
@@ -718,6 +761,8 @@ type resourceItem struct {
 	refresh *widget.Button
 	edit    *widget.Button
 	details *widget.Button
+	dot     *dot
+	detail  *canvas.Text
 }
 
 type filterPage struct {
@@ -735,10 +780,13 @@ type filterPage struct {
 func newFilterPage(send sendIntent, window fyne.Window) *filterPage {
 	p := &filterPage{send: send, window: window, items: make(map[*fyne.Container]*filterItem)}
 	p.add = widget.NewButton(localize.T("Add filter"), func() { p.openFilterEditor(nil) })
+	p.add.Importance = widget.HighImportance
 	p.list = widget.NewList(
 		func() int { return len(p.rows) },
 		func() fyne.CanvasObject {
-			item := &filterItem{name: widget.NewLabel(""), format: widget.NewLabel(""), status: widget.NewLabel("")}
+			item := &filterItem{name: widget.NewLabel(""), format: widget.NewLabel(""), status: widget.NewLabel(""), dot: newDot()}
+			detail, detailText := mutedLine()
+			item.detail = detailText
 			item.refresh = widget.NewButton(localize.T("Refresh"), func() {
 				if item.id != "" {
 					p.send(ipc.Command{Kind: ipc.CommandRefreshFilter, FilterID: item.id})
@@ -753,7 +801,7 @@ func newFilterPage(send sendIntent, window fyne.Window) *filterPage {
 				}
 			})
 			item.edit = widget.NewButton(localize.T("Edit"), func() { p.editFilter(item.id) })
-			row := container.NewVBox(container.NewGridWithColumns(3, item.name, item.format, item.status), container.NewHBox(item.refresh, item.edit, item.details), widget.NewSeparator())
+			row := sourceRow(item.dot, container.NewGridWithColumns(3, item.name, item.format, item.status), detail, container.NewHBox(item.refresh, item.edit, item.details))
 			p.items[row] = item
 			return row
 		},
@@ -761,18 +809,22 @@ func newFilterPage(send sendIntent, window fyne.Window) *filterPage {
 			item := p.items[object.(*fyne.Container)]
 			if id < 0 || id >= len(p.rows) {
 				item.id = ""
-				item.name.SetText("")
-				item.format.SetText("")
-				item.status.SetText("")
+				setLabel(item.name, "")
+				setLabel(item.format, "")
+				setLabel(item.status, "")
+				setText(item.detail, "")
+				item.dot.set(pillOff.color())
 				item.refresh.Disable()
 				item.edit.Disable()
 				return
 			}
 			filter := p.rows[id]
 			item.id = filter.ID
-			item.name.SetText(filter.ID)
-			item.format.SetText(filter.Format)
-			item.status.SetText(filterStatus(filter))
+			setLabel(item.name, filter.ID)
+			setLabel(item.format, filter.Format)
+			setLabel(item.status, filterStatus(filter))
+			item.dot.set(rowState(filter.Enabled, filter.Validated, filter.LastFailure).color())
+			setText(item.detail, joinNonEmpty(sourceHostLabel(filter.SourceHost), fmt.Sprintf(localize.T("Last success: %s"), detailTime(filter.LastSuccess)), fmt.Sprintf(localize.T("Next update: %s"), detailTime(filter.NextDue))))
 			if filter.Enabled {
 				item.refresh.Enable()
 			} else {
@@ -817,6 +869,15 @@ type filterItem struct {
 	refresh *widget.Button
 	edit    *widget.Button
 	details *widget.Button
+	dot     *dot
+	detail  *canvas.Text
+}
+
+// sourceRow lays out a subscription, resource, or filter row: status dot and
+// cells, a muted detail line, any extra lines, then a separator.
+func sourceRow(status *dot, cells fyne.CanvasObject, detail fyne.CanvasObject, extra ...fyne.CanvasObject) *fyne.Container {
+	lines := []fyne.CanvasObject{container.NewBorder(nil, nil, status.object, nil, cells), detail}
+	return container.NewVBox(append(append(lines, extra...), widget.NewSeparator())...)
 }
 
 func (p *resourcePage) openDialog() dialog.Dialog {
@@ -1117,26 +1178,33 @@ func (e *filterEditor) command() (ipc.Command, bool, error) {
 	return ipc.Command{Kind: ipc.CommandPutFilter, FilterID: id, Filter: patch}, true, nil
 }
 
+// settingsLayout shows the section list on a card surface beside the content
+// when it fits, else a dropdown above the content. Objects: surface, list,
+// dropdown, content.
 type settingsLayout struct{}
 
 func (settingsLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
-	return fyne.NewSize(fyne.Max(280, objects[1].MinSize().Width), 240)
+	return fyne.NewSize(fyne.Max(280, objects[2].MinSize().Width), 240)
 }
 
 func (settingsLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
-	sidebar, dropdown, content := objects[0], objects[1], objects[2]
+	surface, sidebar, dropdown, content := objects[0], objects[1], objects[2], objects[3]
 	gap := theme.Padding()
-	sideWidth := sidebar.MinSize().Width
+	sideWidth := sidebar.MinSize().Width + 2*gap
 	if size.Width >= sideWidth+gap+content.MinSize().Width {
 		dropdown.Hide()
 		sidebar.Show()
-		sidebar.Move(fyne.NewPos(0, 0))
-		sidebar.Resize(fyne.NewSize(sideWidth, size.Height))
+		surface.Show()
+		surface.Move(fyne.NewPos(0, 0))
+		surface.Resize(fyne.NewSize(sideWidth, size.Height))
+		sidebar.Move(fyne.NewPos(gap, gap))
+		sidebar.Resize(fyne.NewSize(sideWidth-2*gap, size.Height-2*gap))
 		content.Move(fyne.NewPos(sideWidth+gap, 0))
 		content.Resize(fyne.NewSize(size.Width-sideWidth-gap, size.Height))
 		return
 	}
 	sidebar.Hide()
+	surface.Hide()
 	dropdown.Show()
 	dropdown.Move(fyne.NewPos(0, 0))
 	dropdown.Resize(fyne.NewSize(size.Width, dropdown.MinSize().Height))
@@ -1327,7 +1395,11 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 	p.sectionSelect = widget.NewSelect(sectionNames, selectSection)
 	p.sidebar.SetSelected(sectionNames[0])
 	p.sectionSelect.SetSelected(sectionNames[0])
-	p.view = container.New(settingsLayout{}, p.sidebar, p.sectionSelect, container.NewVScroll(p.sectionContent))
+	surface := newSurface(colorNameCard)
+	p.view = container.New(paintLayout{settingsLayout{}, func() {
+		surface.FillColor = theme.Color(colorNameCard)
+		surface.StrokeColor = theme.Color(theme.ColorNameSeparator)
+	}}, surface, p.sidebar, p.sectionSelect, container.NewVScroll(p.sectionContent))
 	return p
 }
 

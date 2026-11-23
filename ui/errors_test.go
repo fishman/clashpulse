@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
@@ -67,7 +68,7 @@ func TestGUIRowsAreAlignedWithoutPipes(t *testing.T) {
 	view := newDesktopUI(context.Background(), "", app.NewWindow("ClashPulse"))
 	view.postSnapshot(core.Snapshot{
 		Groups:        []core.GroupSnapshot{{ID: "g", Label: "Main", Type: "Selector", Selected: "node-a", Proxies: []string{"node-a"}}},
-		Proxies:       []core.ProxySnapshot{{ID: "node-a", Label: "node-a", GroupID: "g", LatencyMillis: 42}},
+		Proxies:       []core.ProxySnapshot{{ID: "node-a", Label: "node-a", GroupID: "g", LatencyMillis: 42, Outcome: "success"}},
 		Subscriptions: []core.SubscriptionSnapshot{{ID: "alpha", Name: "Alpha", SourceHost: "feed.example", Enabled: true, Active: true}},
 		Resources:     []core.ResourceSnapshot{{ID: "geo", SourceHost: "mirror.example", Enabled: true, Validated: true}},
 		Filters:       []core.FilterSnapshot{{ID: "ads", Format: "yaml", Enabled: true}},
@@ -159,6 +160,8 @@ func rowLabels(object fyne.CanvasObject) []string {
 	case *widget.Label:
 		return []string{object.Text}
 	case *widget.Button:
+		return []string{object.Text}
+	case *canvas.Text:
 		return []string{object.Text}
 	case *container.Scroll:
 		return rowLabels(object.Content)

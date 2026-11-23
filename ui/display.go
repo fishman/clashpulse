@@ -7,6 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/theme"
+
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/localize"
 )
@@ -61,28 +64,6 @@ func filterStatus(f core.FilterSnapshot) string {
 		return localize.T("Enabled")
 	}
 	return localize.T("Disabled")
-}
-
-func proxyLatency(snapshot core.Snapshot, groupID, proxyID string) string {
-	for _, proxy := range snapshot.Proxies {
-		if proxy.GroupID != groupID || proxy.ID != proxyID {
-			continue
-		}
-		var parts []string
-		if proxy.LatencyMillis > 0 {
-			parts = append(parts, fmt.Sprintf(localize.T("%d ms"), proxy.LatencyMillis))
-		} else if proxy.MihomoMillis > 0 {
-			parts = append(parts, fmt.Sprintf(localize.T("%d ms (mihomo)"), proxy.MihomoMillis))
-		}
-		if stability := proxy.StabilityLabel(); stability != "" {
-			parts = append(parts, stability)
-		}
-		if stream := proxy.StreamLabel(); stream != "" {
-			parts = append(parts, stream)
-		}
-		return strings.Join(parts, " \u00b7 ")
-	}
-	return ""
 }
 
 func monitorThresholdLabel(monitor core.MonitorSnapshot) string {
@@ -213,4 +194,42 @@ func proxyStatus(snapshot core.Snapshot) string {
 		status = fmt.Sprintf(localize.T("%s - local profile"), status)
 	}
 	return status
+}
+
+// latencyBadge colors a node's last probe against the monitor thresholds. An
+// alert threshold of zero or less is not configured; then only the switch
+// threshold separates good from bad. Unmeasured nodes stay muted, even when
+// Mihomo reported a delay.
+func latencyBadge(p core.ProxySnapshot, m core.MonitorSnapshot) (string, fyne.ThemeColorName) {
+	switch {
+	case p.Outcome == "timeout" || p.Outcome == "error":
+		return localize.Code("probe.outcome", p.Outcome), theme.ColorNameError
+	case p.LatencyMillis <= 0:
+		if p.MihomoMillis > 0 {
+			return fmt.Sprintf(localize.T("%d ms (mihomo)"), p.MihomoMillis), theme.ColorNameDisabled
+		}
+		return "-", theme.ColorNameDisabled
+	}
+	text := fmt.Sprintf(localize.T("%d ms"), p.LatencyMillis)
+	switch {
+	case m.AlertThresholdMillis > 0 && p.LatencyMillis <= m.AlertThresholdMillis:
+		return text, theme.ColorNameSuccess
+	case m.ThresholdMillis > 0 && p.LatencyMillis > m.ThresholdMillis:
+		return text, theme.ColorNameError
+	case m.AlertThresholdMillis > 0:
+		return text, theme.ColorNameWarning
+	}
+	return text, theme.ColorNameSuccess
+}
+
+// rowState maps a source row to its status dot: a failure wins, then enabled
+// and validated rows are on, everything else is off.
+func rowState(enabled, validated bool, failure string) pillState {
+	switch {
+	case failure != "":
+		return pillFailed
+	case enabled && validated:
+		return pillOn
+	}
+	return pillOff
 }

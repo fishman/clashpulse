@@ -63,7 +63,7 @@ func TestProxyRowShowsOnlySelectionAndLatency(t *testing.T) {
 	row := page.list.CreateItem()
 	page.list.UpdateItem(0, row)
 	labels := rowLabels(row)
-	if strings.Join(labels, ",") != "node-a,Active,42 ms" || strings.Contains(strings.Join(labels, " "), "private detail") {
+	if strings.Join(labels, ",") != "node-a,,Active,42 ms" || strings.Contains(strings.Join(labels, " "), "private detail") {
 		t.Fatalf("proxy row exposed outcome or lost separate cells: %v", labels)
 	}
 }
@@ -78,7 +78,7 @@ func TestProxyRowFallsBackToMihomoReportedLatency(t *testing.T) {
 	})
 	row := page.list.CreateItem()
 	page.list.UpdateItem(0, row)
-	if got, want := strings.Join(rowLabels(row), ","), "node-a,Active,123 ms (mihomo)"; got != want {
+	if got, want := strings.Join(rowLabels(row), ","), "node-a,,Active,123 ms (mihomo)"; got != want {
 		t.Fatalf("url-test row = %q, want %q", got, want)
 	}
 }
@@ -87,14 +87,14 @@ func TestProxyRowShowsStabilityOnlyAfterSamples(t *testing.T) {
 	app := test.NewApp()
 	defer app.Quit()
 	for _, tc := range []struct {
-		proxy core.ProxySnapshot
-		want  string
+		proxy         core.ProxySnapshot
+		detail, badge string
 	}{
-		{core.ProxySnapshot{LatencyMillis: 120, MedianMillis: 130, JitterMillis: 20, Samples: 5, Failures: 1}, "120 ms \u00b7 median 130 ms \u00b120 ms \u00b7 1/5 failed"},
-		{core.ProxySnapshot{Samples: 3, Failures: 3}, "3/3 failed"},
-		{core.ProxySnapshot{LatencyMillis: 120, MedianMillis: 130, JitterMillis: 20}, "120 ms"},
-		{core.ProxySnapshot{LatencyMillis: 120, MedianMillis: 130, JitterMillis: 20, Samples: 5, Failures: 1, StreamSamples: 5, StreamCompleted: 4, StreamKBps: 1800}, "120 ms \u00b7 median 130 ms \u00b120 ms \u00b7 1/5 failed \u00b7 4/5 downloads \u00b7 1800 KB/s"},
-		{core.ProxySnapshot{LatencyMillis: 120, StreamSamples: 2}, "120 ms \u00b7 0/2 downloads"},
+		{core.ProxySnapshot{LatencyMillis: 120, MedianMillis: 130, JitterMillis: 20, Samples: 5, Failures: 1}, "median 130 ms \u00b120 ms \u00b7 1/5 failed", "120 ms"},
+		{core.ProxySnapshot{Samples: 3, Failures: 3}, "3/3 failed", "-"},
+		{core.ProxySnapshot{LatencyMillis: 120, MedianMillis: 130, JitterMillis: 20}, "", "120 ms"},
+		{core.ProxySnapshot{LatencyMillis: 120, MedianMillis: 130, JitterMillis: 20, Samples: 5, Failures: 1, StreamSamples: 5, StreamCompleted: 4, StreamKBps: 1800}, "median 130 ms \u00b120 ms \u00b7 1/5 failed \u00b7 4/5 downloads \u00b7 1800 KB/s", "120 ms"},
+		{core.ProxySnapshot{LatencyMillis: 120, StreamSamples: 2}, "0/2 downloads", "120 ms"},
 	} {
 		tc.proxy.GroupID, tc.proxy.ID, tc.proxy.Label = "g1", "p1", "node-a"
 		page := newProxyPage(nil)
@@ -104,7 +104,7 @@ func TestProxyRowShowsStabilityOnlyAfterSamples(t *testing.T) {
 		})
 		row := page.list.CreateItem()
 		page.list.UpdateItem(0, row)
-		if got, want := strings.Join(rowLabels(row), ","), "node-a,Active,"+tc.want; got != want {
+		if got, want := strings.Join(rowLabels(row), ","), "node-a,"+tc.detail+",Active,"+tc.badge; got != want {
 			t.Fatalf("proxy row = %q, want %q", got, want)
 		}
 	}
