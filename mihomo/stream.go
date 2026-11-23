@@ -4,51 +4,22 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"sync/atomic"
 	"time"
 )
-
-// StreamProbeName names both the hidden probe group and its listener.
-const StreamProbeName = "clashpulse-stream-probe"
 
 const (
 	StreamStallTimeout = 5 * time.Second
 	StreamPullTimeout  = 30 * time.Second
 )
 
-// StreamListener is the per-start probe listener; its credential lives only
-// in memory and is never part of a result or error.
-type StreamListener struct {
-	Port               int
-	Username, Password string
-}
-
 type StreamResult struct {
 	Bytes               int64
 	FirstByte, Duration time.Duration
 	Outcome             string
-}
-
-// StreamPull points the probe group at proxy and pulls rawURL through the
-// pinned listener, so the measurement follows that node only.
-func (c *Controller) StreamPull(ctx context.Context, listener StreamListener, proxy, rawURL string) StreamResult {
-	if err := c.Select(ctx, StreamProbeName, proxy); err != nil {
-		return StreamResult{Outcome: "error"}
-	}
-	proxyURL := &url.URL{Scheme: "http", Host: fmt.Sprintf("127.0.0.1:%d", listener.Port), User: url.UserPassword(listener.Username, listener.Password)}
-	transport := &http.Transport{
-		Proxy:               http.ProxyURL(proxyURL),
-		TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
-		DisableKeepAlives:   true,
-		TLSHandshakeTimeout: StreamStallTimeout,
-	}
-	defer transport.CloseIdleConnections()
-	return pullThrough(ctx, transport, rawURL, StreamStallTimeout, StreamPullTimeout)
 }
 
 func pullThrough(ctx context.Context, transport http.RoundTripper, rawURL string, stall, total time.Duration) StreamResult {

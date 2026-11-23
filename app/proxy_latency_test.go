@@ -23,8 +23,9 @@ func TestRefreshGroupsKeepsMeasuredLatency(t *testing.T) {
 	controllerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"proxies":{` +
 			`"select-main":{"name":"select-main","type":"Selector","all":["node-a","node-b"],"now":"node-a"},` +
-			`"clashpulse-stream-probe":{"name":"clashpulse-stream-probe","type":"Selector","all":["node-a"],"now":"node-a"},` +
-			`"GLOBAL":{"name":"GLOBAL","type":"Selector","all":["clashpulse-stream-probe","select-main","user@node"],"now":"select-main"},` +
+			`"clashpulse-probe-1":{"name":"clashpulse-probe-1","type":"Selector","all":["node-a"],"now":"node-a"},` +
+			`"clashpulse-probe-2":{"name":"clashpulse-probe-2","type":"Selector","all":["node-a"],"now":"node-a"},` +
+			`"GLOBAL":{"name":"GLOBAL","type":"Selector","all":["clashpulse-probe-1","select-main","clashpulse-probe-2","user@node"],"now":"select-main"},` +
 			`"node-a":{"name":"node-a","type":"Direct","history":[{"delay":77}]},` +
 			`"node-b":{"name":"node-b","type":"Direct"}}}`))
 	}))
@@ -65,7 +66,10 @@ func TestRefreshGroupsKeepsMeasuredLatency(t *testing.T) {
 	if err := service.refreshGroups(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	hidden := opaqueID(mihomo.StreamProbeName)
+	hidden := opaqueID(mihomo.ProbeName(1))
+	if _, ok := service.groups[opaqueID(mihomo.ProbeName(2))]; ok {
+		t.Fatal("second probe group is visible")
+	}
 	for _, group := range service.snapshot.Groups {
 		if group.ID == hidden {
 			t.Fatalf("stream probe group is visible: %+v", service.snapshot.Groups)
@@ -90,7 +94,7 @@ func TestRefreshGroupsKeepsMeasuredLatency(t *testing.T) {
 		t.Fatalf("GLOBAL members = %v", global.Proxies)
 	}
 	for _, name := range service.monitor.ProbedGroups() {
-		if name == mihomo.StreamProbeName {
+		if mihomo.IsProbeName(name) {
 			t.Fatal("stream probe group is in the monitor roster")
 		}
 	}

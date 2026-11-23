@@ -593,10 +593,9 @@ func steadyIntent() config.Snapshot {
 	return intent
 }
 
-var probeListener = ControllerSettings{Address: "127.0.0.1:9090", Secret: "s", ProxyPort: 7899,
-	StreamProbe: StreamListener{Port: 17922, Username: "u", Password: "p"}}
+var probeListener = ControllerSettings{Address: "127.0.0.1:9090", Secret: "s", ProxyPort: 7899, Probes: testProbes()}
 
-func TestRenderAddsStreamProbeOnlyForSteadyStream(t *testing.T) {
+func TestRenderAddsProbePoolOnlyWhenNeeded(t *testing.T) {
 	profile := []byte("proxies:\n  - {name: node-a, type: socks5, server: 192.0.2.1, port: 1080}\nproxy-groups:\n  - {name: main, type: select, proxies: [node-a]}\n")
 	capability := Capability{SupportsPinnedListener: true}
 	out, err := Render(profile, steadyIntent(), nil, probeListener, capability)
@@ -610,47 +609,53 @@ func TestRenderAddsStreamProbeOnlyForSteadyStream(t *testing.T) {
 	if err := yaml.Unmarshal(out, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if len(doc.Groups) != 2 || doc.Groups[1]["name"] != StreamProbeName || doc.Groups[1]["include-all"] != true {
-		t.Fatalf("groups = %v", doc.Groups)
+	if len(doc.Groups) != 1+ProbeSlots || len(doc.Listeners) != ProbeSlots {
+		t.Fatalf("groups = %v, listeners = %v", doc.Groups, doc.Listeners)
 	}
-	if len(doc.Listeners) != 1 || doc.Listeners[0]["proxy"] != StreamProbeName || doc.Listeners[0]["listen"] != "127.0.0.1" || doc.Listeners[0]["port"] != 17922 {
-		t.Fatalf("listeners = %v", doc.Listeners)
+	for slot := 1; slot <= ProbeSlots; slot++ {
+		group, listener := doc.Groups[slot], doc.Listeners[slot-1]
+		if group["name"] != ProbeName(slot) || group["include-all"] != true {
+			t.Fatalf("slot %d group = %v", slot, group)
+		}
+		if listener["name"] != ProbeName(slot) || listener["proxy"] != ProbeName(slot) || listener["listen"] != "127.0.0.1" || listener["port"] != testProbes()[slot-1].Port {
+			t.Fatalf("slot %d listener = %v", slot, listener)
+		}
 	}
 	var intent config.Snapshot
 	intent.Monitor.SwitchPolicy = monitor.SwitchLowestLatency
 	out, err = Render(profile, intent, nil, probeListener, capability)
-	if err != nil || bytes.Contains(out, []byte(StreamProbeName)) {
-		t.Fatalf("lowest_latency rendered the probe: %v", err)
+	if err != nil || bytes.Contains(out, []byte("clashpulse-probe")) {
+		t.Fatalf("lowest_latency without services rendered the probes: %v", err)
 	}
 }
 
-func TestStreamProbeReadsGeneratedListener(t *testing.T) {
+func TestProbeListenersReadsGeneratedPool(t *testing.T) {
 	profile := []byte("proxies:\n  - {name: node-a, type: direct}\n")
 	out, err := Render(profile, steadyIntent(), nil, probeListener, Capability{SupportsPinnedListener: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if listener, err := StreamProbe(out); err != nil || listener != probeListener.StreamProbe {
-		t.Fatalf("StreamProbe = %+v, %v", listener, err)
+	if listeners, err := ProbeListeners(out); err != nil || !slices.Equal(listeners, probeListener.Probes) {
+		t.Fatalf("ProbeListeners = %+v, %v", listeners, err)
 	}
 	for _, generated := range []string{"mixed-port: 7899\n", "listeners:\n  - {name: other, type: mixed, port: 1}\n"} {
-		if listener, err := StreamProbe([]byte(generated)); err != nil || listener != (StreamListener{}) {
-			t.Errorf("StreamProbe(%q) = %+v, %v; want zero", generated, listener, err)
+		if listeners, err := ProbeListeners([]byte(generated)); err != nil || listeners != nil {
+			t.Errorf("ProbeListeners(%q) = %+v, %v; want none", generated, listeners, err)
 		}
 	}
-	for _, generated := range []string{": not yaml", "listeners:\n  - {name: clashpulse-stream-probe, port: 0}\n"} {
-		if _, err := StreamProbe([]byte(generated)); err == nil {
-			t.Errorf("StreamProbe(%q) accepted an unusable listener", generated)
+	for _, generated := range []string{": not yaml", "listeners:\n  - {name: clashpulse-probe-1, port: 0}\n", "listeners:\n  - {name: clashpulse-probe-1, port: 1, users: [{username: u, password: p}]}\n"} {
+		if _, err := ProbeListeners([]byte(generated)); err == nil {
+			t.Errorf("ProbeListeners(%q) accepted an unusable pool", generated)
 		}
 	}
 }
 
-func TestRenderRejectsReservedStreamProbeName(t *testing.T) {
+func TestRenderRejectsReservedProbeName(t *testing.T) {
 	for name, profile := range map[string]string{
-		"proxy": "proxies:\n  - {name: clashpulse-stream-probe, type: direct}\n",
-		"group": "proxies:\n  - {name: node-a, type: direct}\nproxy-groups:\n  - {name: clashpulse-stream-probe, type: select, proxies: [node-a]}\n",
+		"proxy": "proxies:\n  - {name: clashpulse-probe-3, type: direct}\n",
+		"group": "proxies:\n  - {name: node-a, type: direct}\nproxy-groups:\n  - {name: clashpulse-probe-1, type: select, proxies: [node-a]}\n",
 	} {
-		if _, err := Render([]byte(profile), steadyIntent(), nil, probeListener, Capability{SupportsPinnedListener: true}); err == nil || !strings.Contains(err.Error(), StreamProbeName) {
+		if _, err := Render([]byte(profile), steadyIntent(), nil, probeListener, Capability{SupportsPinnedListener: true}); err == nil || !strings.Contains(err.Error(), "clashpulse-probe-") {
 			t.Fatalf("%s: err = %v", name, err)
 		}
 	}
@@ -672,7 +677,7 @@ func TestRenderSteadyStreamRequiresPinnedListener(t *testing.T) {
 func TestRenderSteadyStreamRejectsNonListProxyGroups(t *testing.T) {
 	profile := []byte("proxies:\n  - {name: node-a, type: direct}\nproxy-groups: {a: b}\n")
 	out, err := Render(profile, steadyIntent(), nil, probeListener, Capability{SupportsPinnedListener: true})
-	if err == nil || !strings.Contains(err.Error(), "proxy-groups must be a list") || bytes.Contains(out, []byte(StreamProbeName)) {
+	if err == nil || !strings.Contains(err.Error(), "proxy-groups must be a list") || bytes.Contains(out, []byte("clashpulse-probe")) {
 		t.Fatalf("non-list proxy-groups: err = %v, out = %s", err, out)
 	}
 }

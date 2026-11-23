@@ -66,9 +66,11 @@ type runtimeService struct {
 	controllerAddress, controllerSocket, secret string
 	// mixedPort is the running Mihomo's mixed listener port.
 	mixedPort atomic.Int32
-	// streamProbe is the steady_stream probe listener of the last render; its
-	// credential stays in memory and never reaches a snapshot or log.
-	streamProbe mihomo.StreamListener
+	// probes is the probe pool listener set of the last render; credentials
+	// stay in memory and never reach a snapshot or log. probePool leases them
+	// on the running controller and is nil while Mihomo is stopped.
+	probes    []mihomo.ProbeListener
+	probePool *mihomo.ProbePool
 	// autoProxy serves the auto route while Mihomo is stopped; nil connects
 	// directly. Terminal commands set it so they honor http_proxy.
 	autoProxy                func(*http.Request) (*url.URL, error)

@@ -84,20 +84,3 @@ func TestPullThroughTotalTimeout(t *testing.T) {
 		t.Fatalf("outcome %q, want timeout", result.Outcome)
 	}
 }
-
-func TestStreamPullErrorsOmitCredentials(t *testing.T) {
-	controller := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
-	defer controller.Close()
-	c, err := NewController(controller.URL, "controller-secret", &http.Client{Timeout: time.Second})
-	if err != nil {
-		t.Fatal(err)
-	}
-	listener := StreamListener{Port: 1, Username: "probe-user", Password: "probe-password"}
-	result := c.StreamPull(context.Background(), listener, "node-a", "https://speed.example.com/file")
-	if result.Outcome == "success" {
-		t.Fatal("pull through a closed port succeeded")
-	}
-	if strings.Contains(result.Outcome, "probe-password") || strings.Contains(result.Outcome, "probe-user") {
-		t.Fatal("result leaks listener credentials")
-	}
-}

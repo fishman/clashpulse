@@ -38,12 +38,12 @@ func (e *CapabilityError) Error() string {
 // ControllerSettings places the controller on Socket (a Unix socket) when set,
 // otherwise on the loopback TCP Address.
 type ControllerSettings struct {
-	Address     string
-	Socket      string
-	Secret      string
-	HomeDir     string
-	ProxyPort   int
-	StreamProbe StreamListener
+	Address   string
+	Socket    string
+	Secret    string
+	HomeDir   string
+	ProxyPort int
+	Probes    []ProbeListener
 }
 
 // TunDevice is fixed so a user can match it in a NetworkManager
@@ -99,11 +99,15 @@ func Render(profile []byte, intent config.Snapshot, paths ManagedPaths, controll
 			}
 		}
 	}
-	if intent.Monitor.SwitchPolicy == monitor.SwitchSteadyStream {
+	if NeedsProbes(intent) {
 		if !capability.SupportsPinnedListener {
-			return nil, &CapabilityError{ResourceID: "monitor.switch_policy", Kind: "pinned-listener"}
+			resource := "services"
+			if intent.Monitor.SwitchPolicy == monitor.SwitchSteadyStream {
+				resource = "monitor.switch_policy"
+			}
+			return nil, &CapabilityError{ResourceID: resource, Kind: "pinned-listener"}
 		}
-		if err := renderStreamProbe(document, controller.StreamProbe); err != nil {
+		if err := renderProbes(document, controller.Probes); err != nil {
 			return nil, err
 		}
 	}
@@ -206,11 +210,16 @@ func Render(profile []byte, intent config.Snapshot, paths ManagedPaths, controll
 	return encoded, nil
 }
 
-// renderStreamProbe adds the hidden probe group and its authenticated
-// listener. include-all lets Mihomo resolve provider nodes the render cannot see.
-func renderStreamProbe(document map[string]any, listener StreamListener) error {
-	if listener.Port <= 0 || listener.Username == "" || listener.Password == "" {
-		return errors.New("mihomo: stream probe listener is not configured")
+// renderProbes adds the hidden probe groups and their authenticated
+// listeners. include-all lets Mihomo resolve provider nodes the render cannot see.
+func renderProbes(document map[string]any, listeners []ProbeListener) error {
+	if len(listeners) != ProbeSlots {
+		return errors.New("mihomo: probe listeners are not configured")
+	}
+	for _, listener := range listeners {
+		if listener.Port <= 0 || listener.Username == "" || listener.Password == "" {
+			return errors.New("mihomo: probe listeners are not configured")
+		}
 	}
 	groups, ok := document["proxy-groups"].([]any)
 	if !ok && document["proxy-groups"] != nil {
@@ -219,16 +228,24 @@ func renderStreamProbe(document map[string]any, listener StreamListener) error {
 	for _, section := range []string{"proxies", "proxy-groups"} {
 		items, _ := document[section].([]any)
 		for _, item := range items {
-			if entry, ok := item.(map[string]any); ok && entry["name"] == StreamProbeName {
-				return fmt.Errorf("mihomo: source profile already defines %q", StreamProbeName)
+			if entry, ok := item.(map[string]any); ok {
+				if name, _ := entry["name"].(string); IsProbeName(name) {
+					return fmt.Errorf("mihomo: source profile already defines %q", name)
+				}
 			}
 		}
 	}
-	document["proxy-groups"] = append(groups, map[string]any{"name": StreamProbeName, "type": "select", "include-all": true})
-	document["listeners"] = []any{map[string]any{
-		"name": StreamProbeName, "type": "mixed", "listen": "127.0.0.1", "port": listener.Port, "proxy": StreamProbeName,
-		"users": []any{map[string]any{"username": listener.Username, "password": listener.Password}},
-	}}
+	rendered := make([]any, 0, ProbeSlots)
+	for i, listener := range listeners {
+		name := ProbeName(i + 1)
+		groups = append(groups, map[string]any{"name": name, "type": "select", "include-all": true})
+		rendered = append(rendered, map[string]any{
+			"name": name, "type": "mixed", "listen": "127.0.0.1", "port": listener.Port, "proxy": name,
+			"users": []any{map[string]any{"username": listener.Username, "password": listener.Password}},
+		})
+	}
+	document["proxy-groups"] = groups
+	document["listeners"] = rendered
 	return nil
 }
 
@@ -592,9 +609,9 @@ func MixedPort(generated []byte) (int, error) {
 	return document.MixedPort, nil
 }
 
-// StreamProbe reads the probe listener from a generated configuration; a
-// configuration rendered without steady_stream yields the zero listener.
-func StreamProbe(generated []byte) (StreamListener, error) {
+// ProbeListeners reads the probe pool from a generated configuration in slot
+// order; a configuration rendered without probes yields none.
+func ProbeListeners(generated []byte) ([]ProbeListener, error) {
 	var document struct {
 		Listeners []struct {
 			Name  string `yaml:"name"`
@@ -606,18 +623,22 @@ func StreamProbe(generated []byte) (StreamListener, error) {
 		} `yaml:"listeners"`
 	}
 	if err := yaml.Unmarshal(generated, &document); err != nil {
-		return StreamListener{}, fmt.Errorf("mihomo: invalid generated configuration: %w", err)
+		return nil, fmt.Errorf("mihomo: invalid generated configuration: %w", err)
 	}
+	var out []ProbeListener
 	for _, listener := range document.Listeners {
-		if listener.Name != StreamProbeName {
+		if !IsProbeName(listener.Name) {
 			continue
 		}
-		if listener.Port <= 0 || listener.Port > 65535 || len(listener.Users) != 1 || listener.Users[0].Username == "" || listener.Users[0].Password == "" {
-			return StreamListener{}, errors.New("mihomo: generated stream probe listener is unusable")
+		if listener.Name != ProbeName(len(out)+1) || listener.Port <= 0 || listener.Port > 65535 || len(listener.Users) != 1 || listener.Users[0].Username == "" || listener.Users[0].Password == "" {
+			return nil, errors.New("mihomo: generated probe listener is unusable")
 		}
-		return StreamListener{Port: listener.Port, Username: listener.Users[0].Username, Password: listener.Users[0].Password}, nil
+		out = append(out, ProbeListener{Port: listener.Port, Username: listener.Users[0].Username, Password: listener.Users[0].Password})
 	}
-	return StreamListener{}, nil
+	if out != nil && len(out) != ProbeSlots {
+		return nil, errors.New("mihomo: generated probe pool is incomplete")
+	}
+	return out, nil
 }
 
 // ModeChange reports whether two generated configurations differ only in their

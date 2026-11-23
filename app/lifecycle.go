@@ -98,20 +98,20 @@ func (s *runtimeService) renderWithHome(ctx context.Context, profile []byte, int
 	if err := dns.Validate(ctx, intent, paths); err != nil {
 		return nil, core.WrapActivation(core.ActivationConfigValidation, err)
 	}
-	// The listener is reused across renders so an unchanged intent renders the
+	// The listeners are reused across renders so an unchanged intent renders the
 	// same bytes and a reload does not restart Mihomo.
-	var listener mihomo.StreamListener
-	if intent.Monitor.SwitchPolicy == monitor.SwitchSteadyStream {
-		listener = s.streamProbe
-		if listener.Port <= 0 {
+	var listeners []mihomo.ProbeListener
+	if mihomo.NeedsProbes(intent) {
+		listeners = s.probes
+		if len(listeners) == 0 {
 			var err error
-			if listener, err = newStreamListener(); err != nil {
+			if listeners, err = newProbeListeners(); err != nil {
 				return nil, core.WrapActivation(core.ActivationConfigValidation, err)
 			}
 		}
 	}
 	candidate, err := mihomo.Render(profile, intent, mihomo.ManagedPaths(paths), mihomo.ControllerSettings{
-		Address: s.controllerAddress, Socket: s.controllerSocket, Secret: s.secret, HomeDir: home, ProxyPort: intent.Mihomo.MixedPort, StreamProbe: listener,
+		Address: s.controllerAddress, Socket: s.controllerSocket, Secret: s.secret, HomeDir: home, ProxyPort: intent.Mihomo.MixedPort, Probes: listeners,
 	}, capability)
 	if err != nil {
 		var missing *mihomo.CapabilityError
@@ -120,7 +120,7 @@ func (s *runtimeService) renderWithHome(ctx context.Context, profile []byte, int
 		}
 		return nil, core.WrapActivation(core.ActivationConfigValidation, err)
 	}
-	s.streamProbe = listener
+	s.probes = listeners
 	return candidate, nil
 }
 
@@ -769,9 +769,9 @@ func (s *runtimeService) startProcess(ctx context.Context, capability mihomo.Cap
 	if err != nil {
 		return core.WrapActivation(core.ActivationProcessStart, err)
 	}
-	// A rollback restarts an older file, so the running listener is the one in
-	// the file started, not the one of the last render.
-	listener, err := mihomo.StreamProbe(generated)
+	// A rollback restarts an older file, so the running listeners are the ones
+	// in the file started, not the ones of the last render.
+	listeners, err := mihomo.ProbeListeners(generated)
 	if err != nil {
 		return core.WrapActivation(core.ActivationProcessStart, err)
 	}
@@ -784,15 +784,15 @@ func (s *runtimeService) startProcess(ctx context.Context, capability mihomo.Cap
 	if err := probe.Close(); err != nil {
 		return core.WrapActivation(core.ActivationMixedPort, err)
 	}
-	s.streamProbe = listener
-	if listener.Port > 0 {
+	s.probes = listeners
+	for _, listener := range listeners {
 		probe, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", listener.Port))
 		if err == nil {
 			err = probe.Close()
 		}
 		if err != nil {
-			// The next render picks a new port.
-			s.streamProbe = mihomo.StreamListener{}
+			// The next render picks new ports.
+			s.probes = nil
 			return core.WrapActivation(core.ActivationStreamProbePort, err)
 		}
 	}
@@ -823,11 +823,15 @@ func (s *runtimeService) startProcess(ctx context.Context, capability mihomo.Cap
 		}
 	}
 	s.controller = controller
+	s.probePool = nil
+	if len(s.probes) > 0 {
+		s.probePool = mihomo.NewProbePool(controller, s.probes)
+	}
 	s.mixedPort.Store(int32(port))
 	s.running.Store(true)
 	if err := s.refreshGroups(ctx); err != nil {
 		s.running.Store(false)
-		s.controller = nil
+		s.controller, s.probePool = nil, nil
 		return s.stopStartedProcess(ctx, core.WrapActivation(core.ActivationControllerReadiness, err))
 	}
 	s.exited = s.process.Exited()
@@ -885,7 +889,7 @@ func (s *runtimeService) stopMonitorAndProcess(ctx context.Context) error {
 	s.running.Store(false)
 	s.tunActive = false
 	s.exited = nil
-	s.controller = nil
+	s.controller, s.probePool = nil, nil
 	if err := s.process.Stop(ctx); err != nil {
 		return err
 	}
@@ -1013,15 +1017,18 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 	}
 	var streamMembers []string
 	for groupIndex, group := range groups {
-		if group.Name == mihomo.StreamProbeName {
-			streamMembers = group.Proxies
+		// Slot 1 is pinned by stream rounds; every slot lists the same members.
+		if mihomo.IsProbeName(group.Name) {
+			if group.Name == mihomo.ProbeName(1) {
+				streamMembers = group.Proxies
+			}
 			continue
 		}
 		if group.Type != "Selector" && group.Type != "select" && group.Type != "url-test" && group.Type != "URLTest" {
 			continue
 		}
-		// Mihomo's GLOBAL lists every group, the probe group included.
-		group.Proxies = slices.DeleteFunc(group.Proxies, func(name string) bool { return name == mihomo.StreamProbeName })
+		// Mihomo's GLOBAL lists every group, the probe groups included.
+		group.Proxies = slices.DeleteFunc(group.Proxies, mihomo.IsProbeName)
 		id := opaqueID(group.Name)
 		managedSelector := selectorType(group.Type)
 		if s.automation[id] && !managedSelector {
@@ -1046,8 +1053,8 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 			s.snapshot.Proxies = append(s.snapshot.Proxies, view)
 		}
 		s.snapshot.Groups = append(s.snapshot.Groups, view)
-		// A selection of the hidden probe group cannot be monitored.
-		if (managedSelector || group.Selected != "") && group.Selected != mihomo.StreamProbeName {
+		// A selection of a hidden probe group cannot be monitored.
+		if (managedSelector || group.Selected != "") && !mihomo.IsProbeName(group.Selected) {
 			monitorGroups = append(monitorGroups, monitor.GroupState{Group: group.Name, Selected: group.Selected, Proxies: append([]string(nil), group.Proxies...), ProbeEnabled: measured, AutomationEnabled: automatic, ManualOverride: s.manualOverride[id], LastSwitchAt: s.lastSwitch[id]})
 		}
 	}
@@ -1068,8 +1075,8 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 	if s.monitor == nil {
 		policy := monitorPolicy(settings)
 		var streamer monitor.StreamProber
-		if policy.SwitchPolicy == monitor.SwitchSteadyStream {
-			streamer = streamProber{controller: s.controller, listener: s.streamProbe}
+		if policy.SwitchPolicy == monitor.SwitchSteadyStream && s.probePool != nil {
+			streamer = streamProber{pool: s.probePool}
 		}
 		s.monitor, err = monitor.NewScheduler(policy, s.controller, streamer, s.offerBatch)
 		if err != nil {

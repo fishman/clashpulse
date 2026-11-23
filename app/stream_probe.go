@@ -11,31 +11,42 @@ import (
 	"github.com/fishman/clashpulse/monitor"
 )
 
-// newStreamListener picks a free loopback port and a random credential for
-// the probe listener. The port is re-checked before Mihomo starts.
-func newStreamListener() (mihomo.StreamListener, error) {
-	probe, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return mihomo.StreamListener{}, err
+// newProbeListeners picks distinct free loopback ports and random credentials
+// for the probe pool. Every socket stays open until all ports are chosen so no
+// two slots share one; ports are re-checked before Mihomo starts.
+func newProbeListeners() ([]mihomo.ProbeListener, error) {
+	listeners := make([]mihomo.ProbeListener, mihomo.ProbeSlots)
+	held := make([]net.Listener, 0, mihomo.ProbeSlots)
+	defer func() {
+		for _, socket := range held {
+			_ = socket.Close()
+		}
+	}()
+	for i := range listeners {
+		socket, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			return nil, err
+		}
+		held = append(held, socket)
+		secret := make([]byte, 24)
+		if _, err := rand.Read(secret); err != nil {
+			return nil, err
+		}
+		listeners[i] = mihomo.ProbeListener{Port: socket.Addr().(*net.TCPAddr).Port, Username: hex.EncodeToString(secret[:8]), Password: hex.EncodeToString(secret[8:])}
 	}
-	port := probe.Addr().(*net.TCPAddr).Port
-	if err := probe.Close(); err != nil {
-		return mihomo.StreamListener{}, err
-	}
-	secret := make([]byte, 24)
-	if _, err := rand.Read(secret); err != nil {
-		return mihomo.StreamListener{}, err
-	}
-	return mihomo.StreamListener{Port: port, Username: hex.EncodeToString(secret[:8]), Password: hex.EncodeToString(secret[8:])}, nil
+	return listeners, nil
 }
 
-type streamProber struct {
-	controller *mihomo.Controller
-	listener   mihomo.StreamListener
-}
+// streamProber measures a steady stream on a leased probe slot.
+type streamProber struct{ pool *mihomo.ProbePool }
 
 func (p streamProber) StreamPull(ctx context.Context, proxy, url string) monitor.StreamSample {
-	result := p.controller.StreamPull(ctx, p.listener, proxy, url)
+	lease, err := p.pool.Acquire(ctx, proxy)
+	if err != nil {
+		return monitor.StreamSample{Proxy: proxy, URL: url, FinishedAt: time.Now(), Outcome: monitor.StreamOutcome("error")}
+	}
+	defer lease.Release()
+	result := lease.StreamPull(ctx, url)
 	return monitor.StreamSample{Proxy: proxy, URL: url, FinishedAt: time.Now(), Bytes: result.Bytes,
 		FirstByte: result.FirstByte, Duration: result.Duration, Outcome: monitor.StreamOutcome(result.Outcome)}
 }
