@@ -54,14 +54,9 @@ func (s *runtimeService) execute(ctx context.Context, cmd ipc.Command) error {
 		}
 		return s.start(ctx)
 	case ipc.CommandStop:
-		if err := s.stop(ctx); err != nil {
-			return err
-		}
-		if !s.store.Snapshot().App.SystemProxy.Enabled {
-			return nil
-		}
-		enabled := false
-		return s.patchSettings(ctx, &ipc.ConfigPatch{SystemProxyEnabled: &enabled})
+		// stop clears the desktop proxy it applied; the user's setting stays,
+		// so the next start points the desktop at Mihomo again.
+		return s.stop(ctx)
 	case ipc.CommandRestart:
 		s.forceRestart = true
 		defer func() { s.forceRestart = false }()

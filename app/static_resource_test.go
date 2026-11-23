@@ -405,30 +405,33 @@ func TestStaticResourceFailureRestoresRuntime(t *testing.T) {
 	}
 }
 
-func TestExplicitStopDisablesSystemProxyForNextStart(t *testing.T) {
+func TestStopKeepsSystemProxySettingForNextStart(t *testing.T) {
 	h := newStaticRuntime(t)
 	h.activate(t)
+	if !h.service.snapshot.SystemProxy.Active {
+		t.Fatal("fixture did not apply the system proxy")
+	}
 	if err := h.service.execute(h.ctx, ipc.Command{Kind: ipc.CommandStop}); err != nil {
 		t.Fatal(err)
 	}
 	if state := readJSONFile(t, h.proxyState); len(state) != 0 {
 		t.Fatalf("stopped service left OS proxy settings: %v", state)
 	}
-	if h.service.snapshot.ServiceRunning || h.service.snapshot.SystemProxy.Enabled || h.service.snapshot.SystemProxy.Active {
-		t.Fatalf("stopped service still requests proxy: %+v", h.service.snapshot.SystemProxy)
+	if h.service.snapshot.ServiceRunning || h.service.snapshot.SystemProxy.Active || !h.service.snapshot.SystemProxy.Enabled {
+		t.Fatalf("stopped service proxy state = %+v, want enabled and inactive", h.service.snapshot.SystemProxy)
 	}
 	settings, err := config.Load(h.configDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if settings.App.SystemProxy.Enabled {
-		t.Fatal("stop left the persisted system proxy enabled")
+	if !settings.App.SystemProxy.Enabled {
+		t.Fatal("stop turned off the persisted system proxy setting")
 	}
 	if err := h.service.execute(h.ctx, ipc.Command{Kind: ipc.CommandStart}); err != nil {
 		t.Fatal(err)
 	}
-	if !h.service.snapshot.ServiceRunning || h.service.snapshot.SystemProxy.Active || len(readJSONFile(t, h.proxyState)) != 0 {
-		t.Fatal("starting service again re-enabled the system proxy")
+	if !h.service.snapshot.ServiceRunning || !h.service.snapshot.SystemProxy.Active || len(readJSONFile(t, h.proxyState)) == 0 {
+		t.Fatal("starting the service again did not reapply the system proxy")
 	}
 }
 
