@@ -117,3 +117,6 @@ other = "Maximum failures must be between %d and %d."
 
 ["tui.monitor.range.stream_interval"]
 other = "Stream interval must be between %d and %d seconds."
+
+["tui.modal.title.service"]
+other = "Service check"

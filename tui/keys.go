@@ -100,6 +100,7 @@ func knownAction(action string) bool {
 		"edit_monitor_window", "edit_monitor_candidates", "edit_monitor_max_failures", "cycle_switch_policy", "edit_stream_url", "edit_stream_interval",
 		"edit_dns_listen", "new_dns_resolver", "new_dns_route", "edit_dns_entry", "delete_dns_entry",
 		"tun_enable", "tun_disable", "tun_authorize", "edit_tun_stack", "edit_tun_dns_mode",
+		"service_toggle", "service_automatic", "service_check",
 		"form_up", "form_down", "form_toggle", "form_edit", "form_left", "form_right", "form_backspace", "form_save", "form_cancel":
 		return true
 	default:

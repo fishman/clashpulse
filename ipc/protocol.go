@@ -214,6 +214,24 @@ type ServiceEdit struct {
 	DomainsResource string   `json:"domains_resource,omitempty"`
 }
 
+// NewServiceEdit copies a published service's settings into an edit.
+func NewServiceEdit(item core.ServiceSnapshot) *ServiceEdit {
+	return &ServiceEdit{ID: item.ID, Enabled: item.Enabled, Automatic: item.Automatic, Regions: slices.Clone(item.Regions),
+		IntervalSeconds: item.IntervalSeconds, Failures: item.Failures, DomainsResource: item.DomainsResource}
+}
+
+// ParseRegions upper-cases comma- or space-separated region codes and drops
+// duplicates; Command validation rejects malformed codes.
+func ParseRegions(text string) []string {
+	var out []string
+	for _, field := range strings.FieldsFunc(text, func(r rune) bool { return r == ',' || r == ' ' }) {
+		if code := strings.ToUpper(field); !slices.Contains(out, code) {
+			out = append(out, code)
+		}
+	}
+	return out
+}
+
 // minServiceIntervalSeconds mirrors config.MinServiceInterval.
 const minServiceIntervalSeconds = 300
 

@@ -426,3 +426,9 @@ func TestServiceSnapshotValidates(t *testing.T) {
 		t.Fatal("URL in a service label accepted")
 	}
 }
+
+func TestParseRegionsUpperCasesAndDeduplicates(t *testing.T) {
+	if got := strings.Join(ParseRegions(" us, jp us,,de "), ","); got != "US,JP,DE" {
+		t.Fatalf("regions = %q", got)
+	}
+}

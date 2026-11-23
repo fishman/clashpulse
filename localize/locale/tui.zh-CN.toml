@@ -1047,3 +1047,42 @@ other = "设置流测试 URL"
 
 ["set stream interval in seconds"]
 other = "设置流探测间隔（秒）"
+
+["tui.modal.title.service"]
+other = "服务检测"
+
+["Select a service whose settings the application has published."]
+other = "请选择应用已发布设置的服务。"
+
+["Enable the service check before checking it."]
+other = "请先启用该服务检测再执行检测。"
+
+["Domains resource ID"]
+other = "域名资源 ID"
+
+["Service settings form unavailable."]
+other = "服务设置表单不可用。"
+
+["Regions: comma-separated country codes; an empty domains resource uses the built-in domains."]
+other = "地区为逗号分隔的国家代码；域名资源留空则使用内置域名。"
+
+["Switch after failures"]
+other = "失败几次后切换"
+
+["Regions must be two-letter country codes."]
+other = "地区必须是两位字母国家代码。"
+
+["Interval must be 300 to 2592000 seconds."]
+other = "间隔必须为 300 到 2592000 秒。"
+
+["Failures before switching must be 1 to 10."]
+other = "切换前失败次数必须为 1 到 10。"
+
+["enable or disable selected service check"]
+other = "启用或停用所选服务检测"
+
+["toggle automatic switching for selected service"]
+other = "切换所选服务的自动切换"
+
+["check selected service now"]
+other = "立即检测所选服务"

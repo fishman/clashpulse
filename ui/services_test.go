@@ -37,9 +37,3 @@ func TestServicesSectionRowsAndCommands(t *testing.T) {
 		t.Fatal("automatic or check is enabled for a disabled service")
 	}
 }
-
-func TestParseRegionsUpperCasesAndDeduplicates(t *testing.T) {
-	if got := strings.Join(parseRegions(" us, jp us,,de "), ","); got != "US,JP,DE" {
-		t.Fatalf("regions = %q", got)
-	}
-}

@@ -164,17 +164,12 @@ func serviceTiming(item core.ServiceSnapshot) string {
 	return strings.Join(parts, " - ")
 }
 
-func serviceEdit(item core.ServiceSnapshot) *ipc.ServiceEdit {
-	return &ipc.ServiceEdit{ID: item.ID, Enabled: item.Enabled, Automatic: item.Automatic, Regions: slices.Clone(item.Regions),
-		IntervalSeconds: item.IntervalSeconds, Failures: item.Failures, DomainsResource: item.DomainsResource}
-}
-
 // sendEdit sends the row's current settings with one field changed.
 func (s *servicesSection) sendEdit(id string, change func(*ipc.ServiceEdit)) {
 	if s.refreshing {
 		return
 	}
-	edit := serviceEdit(s.snapshots[id])
+	edit := ipc.NewServiceEdit(s.snapshots[id])
 	change(edit)
 	s.send(ipc.Command{Kind: ipc.CommandSetService, Service: edit})
 }
@@ -211,8 +206,8 @@ func (s *servicesSection) openEditor(id string) {
 		if !confirmed {
 			return
 		}
-		edit := serviceEdit(s.snapshots[id])
-		edit.Regions = parseRegions(regions.Text)
+		edit := ipc.NewServiceEdit(s.snapshots[id])
+		edit.Regions = ipc.ParseRegions(regions.Text)
 		edit.IntervalSeconds = uint32(serviceIntervals[max(0, interval.SelectedIndex())] / time.Second)
 		edit.Failures = failures.SelectedIndex() + 1
 		edit.DomainsResource = ""
@@ -222,16 +217,4 @@ func (s *servicesSection) openEditor(id string) {
 		s.send(ipc.Command{Kind: ipc.CommandSetService, Service: edit})
 	}, s.window)
 	showSized(form, s.window, formDialogWidth, false)
-}
-
-// parseRegions upper-cases comma- or space-separated codes; the server
-// validates them.
-func parseRegions(text string) []string {
-	var out []string
-	for _, field := range strings.FieldsFunc(text, func(r rune) bool { return r == ',' || r == ' ' }) {
-		if code := strings.ToUpper(field); !slices.Contains(out, code) {
-			out = append(out, code)
-		}
-	}
-	return out
 }

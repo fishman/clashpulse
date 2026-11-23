@@ -56,6 +56,7 @@ const (
 	ModalTunStack           ModalKind = "tun_stack"
 	ModalTunDNSMode         ModalKind = "tun_dns_mode"
 	ModalMixedPort          ModalKind = "mixed_port"
+	ModalService            ModalKind = "service"
 )
 
 type monitorField string
@@ -111,6 +112,7 @@ type Row struct {
 	dnsID          string
 	monitor        monitorField
 	action         string
+	serviceID      string
 }
 
 type rowKind uint8
@@ -129,6 +131,7 @@ const (
 	rowDNSResolver
 	rowDNSRoute
 	rowSettingTunManual
+	rowService
 )
 
 // Model is local view state for the remote IPC client. IPC snapshots are
@@ -226,7 +229,7 @@ func tabRowsChanged(before, after ipc.Event, tab Tab) bool {
 	case TabResources:
 		return !reflect.DeepEqual(old.Resources, next.Resources)
 	case TabSettings:
-		return !reflect.DeepEqual(old.Binary, next.Binary) || old.Monitor != next.Monitor || old.SystemProxy != next.SystemProxy || old.MixedPort != next.MixedPort || old.Tun != next.Tun || !reflect.DeepEqual(old.DNS, next.DNS)
+		return !reflect.DeepEqual(old.Binary, next.Binary) || old.Monitor != next.Monitor || old.SystemProxy != next.SystemProxy || old.MixedPort != next.MixedPort || old.Tun != next.Tun || !reflect.DeepEqual(old.DNS, next.DNS) || !reflect.DeepEqual(old.Services, next.Services)
 	default:
 		return true
 	}
@@ -510,6 +513,8 @@ func (m Model) HandleKey(key string) (Model, *ipc.Command, bool) {
 		return m.editSelectedDNS(), nil, false
 	case "delete_dns_entry":
 		return m.deleteSelectedDNS(), nil, false
+	case "service_toggle", "service_automatic", "service_check":
+		return m.serviceAction(action)
 	case "edit_binary":
 		return m.openModal(ModalBinary), nil, false
 	case "tun_enable", "tun_disable", "tun_authorize", "edit_tun_stack", "edit_tun_dns_mode":
@@ -1390,6 +1395,8 @@ func (m Model) handleFormKey(key string) (Model, *ipc.Command, bool) {
 			command, notice = managedFormIntent(m.Modal)
 		case ModalMonitorSetting:
 			command, notice = monitorFormIntent(m.Modal)
+		case ModalService:
+			command, notice = m.serviceFormIntent(m.Modal)
 		case ModalDNSResolver, ModalDNSRoute:
 			command, notice = m.dnsFormIntent(m.Modal)
 		default:
@@ -1615,6 +1622,8 @@ func (m Model) activate() (Model, *ipc.Command, bool) {
 		return m.openDNSRouteModal(true, row.dnsID), nil, false
 	case rowSettingBinary:
 		return m.openModal(ModalBinary), nil, false
+	case rowService:
+		return m.openServiceModal(row.serviceID), nil, false
 	case rowSettingTunManual:
 		m.Notice = row.Detail
 	}
@@ -1938,7 +1947,7 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 			rows = append(rows, Row{ID: id, Title: name, Detail: resolver,
 				Cells: []string{name, resolver, ""}, kind: rowDNSRoute, dnsID: id, action: "edit_dns_entry"})
 		}
-		return rows
+		return append(rows, serviceRows(snapshot.Services)...)
 	default:
 		return nil
 	}

@@ -1008,9 +1008,6 @@ other = "不可用"
 ["Check failed"]
 other = "检测失败"
 
-["Last check"]
-other = "上次检测"
-
 ["next"]
 other = "下次"
 

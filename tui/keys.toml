@@ -84,6 +84,9 @@
 "A" = { fun = "tun_authorize", desc = "authorize TUN privilege", show = true }
 "S" = { fun = "edit_tun_stack", desc = "set TUN stack", show = true }
 "M" = { fun = "edit_tun_dns_mode", desc = "set TUN DNS mode", show = true }
+"E" = { fun = "service_toggle", desc = "enable or disable selected service check", show = true }
+"G" = { fun = "service_automatic", desc = "toggle automatic switching for selected service", show = true }
+"K" = { fun = "service_check", desc = "check selected service now", show = true }
 
 [schemes.default.form]
 "up" = { fun = "form_up", desc = "previous field" }
