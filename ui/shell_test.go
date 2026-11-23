@@ -26,7 +26,7 @@ func TestPillStates(t *testing.T) {
 		{"running", core.Snapshot{ServiceRunning: true, SystemProxy: core.SystemProxySnapshot{Enabled: true, Active: true}, Tun: core.TunSnapshot{Active: true}}, pillOn, pillOn, pillOn},
 		{"compatibility failure", core.Snapshot{ServiceRunning: true, Binary: core.BinarySnapshot{LastCompatibilityFailure: "version_mismatch"}}, pillFailed, pillOff, pillOff},
 		{"system proxy requested not applied", core.Snapshot{ServiceRunning: true, SystemProxy: core.SystemProxySnapshot{Enabled: true}}, pillOn, pillFailed, pillOff},
-		{"system proxy requested while stopped", core.Snapshot{SystemProxy: core.SystemProxySnapshot{Enabled: true}}, pillOff, pillOff, pillOff},
+		{"system proxy requested while stopped", core.Snapshot{SystemProxy: core.SystemProxySnapshot{Enabled: true}}, pillOff, pillArmed, pillOff},
 		{"tun failure", core.Snapshot{ServiceRunning: true, Tun: core.TunSnapshot{Enabled: true, LastFailure: "permission denied"}}, pillOn, pillOff, pillFailed},
 	} {
 		mihomo, systemProxy, tun := pillStates(tc.snapshot)
@@ -179,5 +179,29 @@ func TestPowerButtonTogglesService(t *testing.T) {
 	view.topBar.disconnect()
 	if !view.topBar.power.Disabled() {
 		t.Fatal("power button enabled after disconnect")
+	}
+}
+
+func TestSystemProxyPillTogglesSetting(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	view := newDesktopUI(context.Background(), "", a.NewWindow("ClashPulse"))
+	view.connected = true
+	for _, tc := range []struct {
+		name  string
+		proxy core.SystemProxySnapshot
+		want  bool
+	}{
+		{"off", core.SystemProxySnapshot{}, true},
+		{"on", core.SystemProxySnapshot{Enabled: true, Active: true}, false},
+		{"on while stopped", core.SystemProxySnapshot{Enabled: true}, false},
+		{"leftover desktop proxy", core.SystemProxySnapshot{Active: true}, false},
+	} {
+		view.topBar.update(core.Snapshot{SystemProxy: tc.proxy})
+		test.Tap(view.topBar.proxyToggle)
+		got := <-view.actions
+		if got.Kind != ipc.CommandUpdateConfiguration || got.Config == nil || got.Config.SystemProxyEnabled == nil || *got.Config.SystemProxyEnabled != tc.want {
+			t.Fatalf("%s: pill sent %#v, want system proxy %t", tc.name, got, tc.want)
+		}
 	}
 }

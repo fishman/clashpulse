@@ -159,7 +159,8 @@ var (
 )
 
 // topBar shows the page title, the connection text, the service status
-// pills, the power toggle, and the service menu.
+// pills, the power toggle, and the service menu. The system proxy pill
+// toggles the system proxy setting.
 type topBar struct {
 	object      fyne.CanvasObject
 	title       *canvas.Text
@@ -169,12 +170,14 @@ type topBar struct {
 	connection  *widget.Label
 	power       *widget.Button
 	running     bool
+	proxy       core.SystemProxySnapshot
+	proxyToggle *tapTarget
 	menu        *widget.Button
 }
 
-// newTopBar builds the bar; setRunning sends the start or stop the power
-// button asks for.
-func newTopBar(w fyne.Window, connection *widget.Label, setRunning func(bool), items ...*fyne.MenuItem) *topBar {
+// newTopBar builds the bar; setRunning and setSystemProxy send the change the
+// power button or the system proxy pill asks for.
+func newTopBar(w fyne.Window, connection *widget.Label, setRunning, setSystemProxy func(bool), items ...*fyne.MenuItem) *topBar {
 	t := &topBar{
 		title:       canvas.NewText("", theme.Color(theme.ColorNameForeground)),
 		mihomo:      pill("Mihomo"),
@@ -187,6 +190,7 @@ func newTopBar(w fyne.Window, connection *widget.Label, setRunning func(bool), i
 	t.power = widget.NewButtonWithIcon("", powerOffIcon, func() { setRunning(!t.running) })
 	t.power.Importance = widget.LowImportance
 	t.power.Disable()
+	t.proxyToggle = newTapTarget(t.systemProxy.object, func() { setSystemProxy(systemProxyToggle(t.proxy)) })
 	menu := fyne.NewMenu("", items...)
 	t.menu = widget.NewButtonWithIcon("", theme.MoreVerticalIcon(), nil)
 	t.menu.Importance = widget.LowImportance
@@ -198,7 +202,7 @@ func newTopBar(w fyne.Window, connection *widget.Label, setRunning func(bool), i
 	// long status never widens the window.
 	connection.Truncation = fyne.TextTruncateEllipsis
 	connection.Alignment = fyne.TextAlignTrailing
-	status := container.NewHBox(center(t.mihomo.object), center(t.systemProxy.object), center(t.tun.object), t.power, t.menu)
+	status := container.NewHBox(center(t.mihomo.object), center(t.proxyToggle), center(t.tun.object), t.power, t.menu)
 	title := container.New(paintLayout{layout.NewVBoxLayout(), func() {
 		t.title.Color = theme.Color(theme.ColorNameForeground)
 	}}, t.title)
@@ -245,6 +249,7 @@ func (t *topBar) update(s core.Snapshot) {
 	t.tun.set(tun)
 	t.setConnection(proxyStatus(s))
 	t.setRunning(s.ServiceRunning)
+	t.proxy = s.SystemProxy
 	t.power.Enable()
 }
 
@@ -270,6 +275,8 @@ func pillStates(s core.Snapshot) (mihomo, systemProxy, tun pillState) {
 		systemProxy = pillOn
 	case s.SystemProxy.Enabled && s.ServiceRunning:
 		systemProxy = pillFailed
+	case s.SystemProxy.Enabled:
+		systemProxy = pillArmed
 	}
 	switch {
 	case s.Tun.LastFailure != "":
@@ -278,4 +285,10 @@ func pillStates(s core.Snapshot) (mihomo, systemProxy, tun pillState) {
 		tun = pillOn
 	}
 	return mihomo, systemProxy, tun
+}
+
+// systemProxyToggle is the setting a toggle asks for: on only when the setting
+// is off and no desktop proxy is left applied; a leftover is switched off.
+func systemProxyToggle(p core.SystemProxySnapshot) bool {
+	return !p.Enabled && !p.Active
 }

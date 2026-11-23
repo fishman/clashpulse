@@ -240,10 +240,7 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 	})
 	service.Checked = snapshot.ServiceRunning
 	systemProxy := fyne.NewMenuItem(localize.T("System Proxy"), func() {
-		enabled := !snapshot.SystemProxy.Enabled
-		if snapshot.SystemProxy.Active && !snapshot.SystemProxy.Enabled {
-			enabled = false
-		}
+		enabled := systemProxyToggle(snapshot.SystemProxy)
 		d.enqueue(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{SystemProxyEnabled: &enabled}})
 	})
 	systemProxy.Checked = snapshot.SystemProxy.Enabled

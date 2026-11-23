@@ -164,6 +164,9 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 			}
 			d.enqueue(ipc.Command{Kind: kind})
 		},
+		func(enabled bool) {
+			d.enqueue(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{SystemProxyEnabled: &enabled}})
+		},
 		fyne.NewMenuItem(localize.T("Restart service"), func() { d.enqueue(ipc.Command{Kind: ipc.CommandRestart}) }),
 		fyne.NewMenuItem(localize.T("Reload configuration"), func() { d.enqueue(ipc.Command{Kind: ipc.CommandReloadConfiguration}) }),
 		fyne.NewMenuItemSeparator(),

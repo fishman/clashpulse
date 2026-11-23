@@ -7,8 +7,10 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
+	"fyne.io/fyne/v2/widget"
 )
 
 // paintLayout wraps a layout and re-applies theme colors whenever Fyne lays
@@ -153,6 +155,8 @@ const (
 	pillOff pillState = iota
 	pillOn
 	pillFailed
+	// pillArmed is a setting that is on but waits for the service to start.
+	pillArmed
 )
 
 func (s pillState) color() fyne.ThemeColorName {
@@ -161,9 +165,33 @@ func (s pillState) color() fyne.ThemeColorName {
 		return theme.ColorNameSuccess
 	case pillFailed:
 		return theme.ColorNameError
+	case pillArmed:
+		return theme.ColorNamePrimary
 	}
 	return theme.ColorNamePlaceHolder
 }
+
+// tapTarget makes content clickable with a pointer cursor, without the
+// button chrome a status pill should not have.
+type tapTarget struct {
+	widget.BaseWidget
+	content fyne.CanvasObject
+	onTap   func()
+}
+
+func newTapTarget(content fyne.CanvasObject, onTap func()) *tapTarget {
+	t := &tapTarget{content: content, onTap: onTap}
+	t.ExtendBaseWidget(t)
+	return t
+}
+
+func (t *tapTarget) CreateRenderer() fyne.WidgetRenderer {
+	return widget.NewSimpleRenderer(t.content)
+}
+
+func (t *tapTarget) Tapped(*fyne.PointEvent) { t.onTap() }
+
+func (t *tapTarget) Cursor() desktop.Cursor { return desktop.PointerCursor }
 
 // statusPill is a dot and a label on a rounded surface.
 type statusPill struct {
