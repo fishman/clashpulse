@@ -19,6 +19,15 @@ other = "所选节点失效后切换一次"
 ["gui.monitor.switch-policy.lowest_latency"]
 other = "最快（始终使用延迟最低的节点）"
 
+["gui.monitor.switch-policy-help.failover"]
+other = "所选节点失效后切换一次。"
+
+["gui.monitor.switch-policy-help.lowest_latency"]
+other = "始终使用延迟最低的节点。"
+
+["gui.monitor.switch-policy-help.steady_stream"]
+other = "离开下载会中断的节点。"
+
 ["Connecting to local service..."]
 other = "正在连接本地服务…"
 

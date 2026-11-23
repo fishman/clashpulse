@@ -43,6 +43,11 @@ func switchPolicyLabel(value string) string {
 	return localize.T("gui.monitor.switch-policy." + switchPolicyID(value))
 }
 
+// switchPolicyHelp explains the policy without repeating its short name.
+func switchPolicyHelp(value string) string {
+	return localize.T("gui.monitor.switch-policy-help." + switchPolicyID(value))
+}
+
 // switchPolicyName is the policy's short name.
 func switchPolicyName(value string) string {
 	return localize.Code("monitor.policy", switchPolicyID(value))

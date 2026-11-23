@@ -191,7 +191,7 @@ func TestMonitorSectionShowsSwitchPolicy(t *testing.T) {
 		if want := localize.Code("monitor.policy", policy); page.switchPolicy.Text != want {
 			t.Fatalf("Monitor section shows %q for %s, want %q", page.switchPolicy.Text, policy, want)
 		}
-		if want := localize.T("gui.monitor.switch-policy." + policy); page.switchPolicyHelp.String() != want {
+		if want := localize.T("gui.monitor.switch-policy-help." + policy); page.switchPolicyHelp.String() != want || strings.Contains(want, page.switchPolicy.Text) {
 			t.Fatalf("Monitor section explains %s as %q, want %q", policy, page.switchPolicyHelp.String(), want)
 		}
 	}

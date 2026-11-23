@@ -1597,7 +1597,7 @@ func (p *settingsPage) update(binary core.BinarySnapshot, monitor core.MonitorSn
 		p.urlTestDelay.SetText(urlTestDelayLabel(monitor))
 		p.stability.SetText(monitorStabilityLabel(monitor))
 		p.switchPolicy.SetText(switchPolicyName(monitor.SwitchPolicy))
-		setDetailText(p.switchPolicyHelp, switchPolicyLabel(monitor.SwitchPolicy))
+		setDetailText(p.switchPolicyHelp, switchPolicyHelp(monitor.SwitchPolicy))
 	}
 	if monitorChanged || proxyChanged {
 		p.refreshing = true

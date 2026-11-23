@@ -21,3 +21,12 @@ other = "Fastest (always keep the lowest-latency node)"
 
 ["gui.monitor.switch-policy.steady_stream"]
 other = "Steady stream (leave nodes whose downloads break)"
+
+["gui.monitor.switch-policy-help.failover"]
+other = "Switch once the selected node fails."
+
+["gui.monitor.switch-policy-help.lowest_latency"]
+other = "Always keep the lowest-latency node."
+
+["gui.monitor.switch-policy-help.steady_stream"]
+other = "Leave nodes whose downloads break."
