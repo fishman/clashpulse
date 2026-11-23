@@ -160,7 +160,8 @@ func (s *runtimeService) observeServiceGroup(id string, group mihomo.Group) {
 }
 
 // persistServiceManual turns automatic off. The generated configuration does
-// not read it, so the store is reloaded without an apply.
+// not read it, so the store is reloaded without an apply; the applied
+// settings take the new service intent so a later re-enable is a change.
 func (s *runtimeService) persistServiceManual(id string) error {
 	current := s.store.Snapshot()
 	service, ok := configuredService(current, id)
@@ -171,8 +172,12 @@ func (s *runtimeService) persistServiceManual(id string) error {
 	if err := config.PutService(filepath.Join(s.configDir, "config.toml"), current, service); err != nil {
 		return err
 	}
-	_, err := s.reloadConfig()
-	return err
+	if _, err := s.reloadConfig(); err != nil {
+		return err
+	}
+	s.lastAppliedSettings.Services = s.store.Snapshot().Services
+	s.updateServicePlan()
+	return nil
 }
 
 func (s *runtimeService) setService(ctx context.Context, edit *ipc.ServiceEdit) error {
@@ -219,6 +224,9 @@ func (s *runtimeService) applyServiceBatch(ctx context.Context, batch monitor.Se
 		}
 		status := s.serviceStatus[check.Service]
 		status.proxy, status.outcome, status.region, status.lastCheck = check.Proxy, string(check.Result.Outcome), check.Result.Region, check.At.Unix()
+		if check.Result.Outcome == services.Usable && status.lastSwitch == "exhausted" {
+			status.lastSwitch = ""
+		}
 		s.serviceStatus[check.Service] = status
 	}
 	for id, next := range batch.Next {
@@ -247,6 +255,9 @@ func (s *runtimeService) applyServiceBatch(ctx context.Context, batch monitor.Se
 	}
 	for _, id := range batch.Exhausted {
 		status := s.serviceStatus[id]
+		if status.lastSwitch == "exhausted" {
+			continue
+		}
 		status.lastSwitch = "exhausted"
 		s.serviceStatus[id] = status
 		s.appendDiagnostic(diagnosticEvent{Severity: "warning", Kind: "service_switch", SourceID: id, Message: "service.exhausted", At: time.Now()})

@@ -1,11 +1,14 @@
 package config
 
 import (
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fishman/clashpulse/services"
 )
 
 func TestServicesDecodeWithDefaults(t *testing.T) {
@@ -39,6 +42,25 @@ func TestServicesRejectInvalidIntent(t *testing.T) {
 		writeFile(t, dir, "config.toml", body)
 		if _, err := Load(dir); err == nil {
 			t.Fatalf("%s: accepted", name)
+		}
+	}
+}
+
+// IPC refuses a snapshot past these bounds, so config must refuse them first
+// and name the key; otherwise every client goes dark without a config error.
+func TestServicesRejectWhatIPCCannotCarry(t *testing.T) {
+	regions := make([]string, services.MaxRegions+1)
+	for i := range regions {
+		regions[i] = fmt.Sprintf("%q", string(rune('A'+i/26))+string(rune('A'+i%26)))
+	}
+	for key, body := range map[string]string{
+		"regions":        "[[service]]\nid = \"claude\"\nregions = [" + strings.Join(regions, ", ") + "]\n",
+		"check_interval": "[[service]]\nid = \"claude\"\ncheck_interval = \"721h\"\n",
+	} {
+		dir := t.TempDir()
+		writeFile(t, dir, "config.toml", body)
+		if _, err := Load(dir); err == nil || !strings.Contains(err.Error(), "service[0]."+key) {
+			t.Fatalf("%s: err = %v", key, err)
 		}
 	}
 }

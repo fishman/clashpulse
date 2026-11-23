@@ -86,6 +86,35 @@ func TestCheckBodyMarkerWithTraceRegion(t *testing.T) {
 	}
 }
 
+// A refusal often arrives as 403 with the marker in its body; a bare 403 or
+// 451 is a refusal too, while another non-2xx says nothing about the region.
+func TestCheckBodyMarkerRefusalStatus(t *testing.T) {
+	def := Definition{ID: "marker", Name: "Marker", Rule: RuleBodyMarker, Markers: []string{"unsupported_country"}, Hosts: []string{"example.com"},
+		Requests: []Request{{URL: "https://example.com/cdn-cgi/trace", MaxBytes: 4096, Redirects: 10}, {URL: "https://example.com/compliance", MaxBytes: 4096, Redirects: 10}}}
+	for _, tc := range []struct {
+		status int
+		body   string
+		want   Outcome
+	}{
+		{http.StatusForbidden, `{"error":"unsupported_country"}`, Blocked},
+		{http.StatusForbidden, "", Blocked},
+		{http.StatusUnavailableForLegalReasons, "", Blocked},
+		{http.StatusInternalServerError, "", Failed},
+	} {
+		transport := serve(t, func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasSuffix(r.URL.Path, "/trace") {
+				_, _ = w.Write([]byte("loc=JP\n"))
+				return
+			}
+			w.WriteHeader(tc.status)
+			_, _ = w.Write([]byte(tc.body))
+		})
+		if got := one(t, transport, def); got.Outcome != tc.want {
+			t.Fatalf("status %d body %q: %+v, want %s", tc.status, tc.body, got, tc.want)
+		}
+	}
+}
+
 func youtubeDefs() []Definition {
 	youtube := Definition{ID: "youtube", Name: "YouTube", Rule: RuleBodyMarker, Markers: []string{"premium is not available in your region"}, Hosts: []string{"example.com"},
 		Requests: []Request{{URL: "https://example.com/premium", MaxBytes: 96 << 10, Redirects: 10}}}

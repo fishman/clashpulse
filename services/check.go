@@ -184,9 +184,9 @@ func evaluate(def Definition, responses []response) Result {
 			result.Region = quotedField(last.body, `"GL":"`)
 		}
 		switch {
-		case last.status/100 != 2:
-		case hasMarker(last.body, def.Markers):
+		case refused(last, def.Markers):
 			result.Outcome = Blocked
+		case last.status/100 != 2:
 		case len(responses) > 1 || result.Region != "":
 			result.Outcome = Usable
 		}
@@ -211,11 +211,9 @@ func evaluate(def Definition, responses []response) Result {
 			result.Region = localePath(last.final.String())
 		}
 		switch {
-		case last.status == http.StatusForbidden || last.status == http.StatusUnavailableForLegalReasons:
+		case refused(last, def.Markers):
 			result.Outcome = Blocked
 		case last.status/100 != 2:
-		case hasMarker(last.body, def.Markers):
-			result.Outcome = Blocked
 		default:
 			result.Outcome = Usable
 		}
@@ -224,6 +222,12 @@ func evaluate(def Definition, responses []response) Result {
 		result.Region = ""
 	}
 	return result
+}
+
+// refused reports a refusal: a marker in the body, whatever the status, or a
+// 403 or 451.
+func refused(last response, markers []string) bool {
+	return last.status == http.StatusForbidden || last.status == http.StatusUnavailableForLegalReasons || hasMarker(last.body, markers)
 }
 
 func available(status int) bool {

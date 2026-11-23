@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -179,21 +180,41 @@ func (s *servicesSection) openEditor(id string) {
 	regions := widget.NewEntry()
 	regions.SetText(strings.Join(item.Regions, ", "))
 	regions.SetPlaceHolder("US, JP")
-	intervalLabels := make([]string, len(serviceIntervals))
-	for i, interval := range serviceIntervals {
+	regions.Validator = func(text string) error {
+		codes := ipc.ParseRegions(text)
+		if len(codes) > services.MaxRegions || slices.ContainsFunc(codes, func(code string) bool { return !services.ValidRegion(code) }) {
+			return fmt.Errorf(localize.T("Regions must be at most %d two-letter country codes."), services.MaxRegions)
+		}
+		return nil
+	}
+	// A hand-edited interval outside the presets stays selectable, so saving
+	// another field never rewrites it.
+	intervals := slices.Clone(serviceIntervals)
+	current := time.Duration(item.IntervalSeconds) * time.Second
+	if current == 0 {
+		current = 30 * time.Minute
+	}
+	if !slices.Contains(intervals, current) {
+		intervals = append(intervals, current)
+		slices.Sort(intervals)
+	}
+	intervalLabels := make([]string, len(intervals))
+	for i, interval := range intervals {
 		intervalLabels[i] = intervalText(interval)
 	}
 	interval := widget.NewSelect(intervalLabels, nil)
-	if index := slices.Index(serviceIntervals, time.Duration(item.IntervalSeconds)*time.Second); index >= 0 {
-		interval.SetSelectedIndex(index)
-	} else {
-		interval.SetSelectedIndex(1)
+	interval.SetSelectedIndex(slices.Index(intervals, current))
+	failureLabels := make([]string, services.MaxFailures)
+	for i := range failureLabels {
+		failureLabels[i] = strconv.Itoa(i + 1)
 	}
-	failures := widget.NewSelect([]string{"1", "2", "3", "4", "5"}, nil)
-	failures.SetSelectedIndex(max(0, min(4, item.Failures-1)))
-	domains := widget.NewSelect(append([]string{localize.T(builtInDomains)}, s.resources...), nil)
+	failures := widget.NewSelect(failureLabels, nil)
+	failures.SetSelectedIndex(max(0, min(services.MaxFailures, item.Failures)-1))
+	// Snapshot updates rewrite s.resources while the dialog is open.
+	resources := slices.Clone(s.resources)
+	domains := widget.NewSelect(append([]string{localize.T(builtInDomains)}, resources...), nil)
 	domains.SetSelectedIndex(0)
-	if index := slices.Index(s.resources, item.DomainsResource); index >= 0 {
+	if index := slices.Index(resources, item.DomainsResource); index >= 0 {
 		domains.SetSelectedIndex(index + 1)
 	}
 	items := []*widget.FormItem{
@@ -208,11 +229,11 @@ func (s *servicesSection) openEditor(id string) {
 		}
 		edit := ipc.NewServiceEdit(s.snapshots[id])
 		edit.Regions = ipc.ParseRegions(regions.Text)
-		edit.IntervalSeconds = uint32(serviceIntervals[max(0, interval.SelectedIndex())] / time.Second)
+		edit.IntervalSeconds = uint32(intervals[max(0, interval.SelectedIndex())] / time.Second)
 		edit.Failures = failures.SelectedIndex() + 1
 		edit.DomainsResource = ""
 		if index := domains.SelectedIndex(); index > 0 {
-			edit.DomainsResource = s.resources[index-1]
+			edit.DomainsResource = resources[index-1]
 		}
 		s.send(ipc.Command{Kind: ipc.CommandSetService, Service: edit})
 	}, s.window)

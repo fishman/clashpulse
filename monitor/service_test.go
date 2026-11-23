@@ -163,6 +163,21 @@ func TestServiceSchedulerSearchesAndSwitches(t *testing.T) {
 	}
 }
 
+// An unchecked node's region is unknown until its search check; a usable
+// node outside the preferred regions must not win.
+func TestServiceSearchHonorsRegions(t *testing.T) {
+	checker := &fakeChecker{results: map[string]services.Outcome{"cur": services.Blocked}, regions: map[string]string{"fast": "DE", "slow": "US"}}
+	tg := target("netflix", "cur", "cur", "slow", "fast")
+	tg.Regions = []string{"US"}
+	s, batches := runServiceScheduler(t, checker, ServicePlan{Slots: 4, Cooldown: time.Hour,
+		Latency: map[string]time.Duration{"slow": 300 * time.Millisecond, "fast": 50 * time.Millisecond}, Targets: []ServiceTarget{tg}})
+	nextServiceBatch(t, batches)
+	s.Request("netflix")
+	if sw := nextServiceBatch(t, batches).Switches; len(sw) != 1 || sw[0].New != "slow" {
+		t.Fatalf("switch = %+v, want the US node", sw)
+	}
+}
+
 func TestServiceSchedulerManualModeNeverSwitches(t *testing.T) {
 	checker := &fakeChecker{results: map[string]services.Outcome{"cur": services.Blocked}}
 	tg := target("netflix", "cur", "cur", "other")

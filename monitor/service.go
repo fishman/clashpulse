@@ -352,7 +352,8 @@ func (s *ServiceScheduler) search(ctx context.Context, plan ServicePlan, rt *ser
 			for _, result := range results[i] {
 				batch.Checks = append(batch.Checks, ServiceCheck{Service: rt.target.ID, Proxy: job.proxy, Result: result, At: now})
 				rt.last[job.proxy] = result
-				if result.Outcome != services.Usable || best != "" && !lowerLatency(plan.Latency, job.proxy, best) {
+				outside := len(rt.target.Regions) > 0 && !slices.Contains(rt.target.Regions, result.Region)
+				if result.Outcome != services.Usable || outside || best != "" && !lowerLatency(plan.Latency, job.proxy, best) {
 					continue
 				}
 				best, bestResult = job.proxy, result

@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"fmt"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
@@ -90,11 +93,11 @@ func (m Model) serviceAction(action string) (Model, *ipc.Command, bool) {
 		m.Notice = localize.T("Select a service whose settings the application has published.")
 		return m, nil, false
 	}
+	if !item.Enabled && action != "service_toggle" {
+		m.Notice = localize.T("Enable the service check first.")
+		return m, nil, false
+	}
 	if action == "service_check" {
-		if !item.Enabled {
-			m.Notice = localize.T("Enable the service check before checking it.")
-			return m, nil, false
-		}
 		return m, &ipc.Command{Kind: ipc.CommandCheckService, ServiceID: item.ID}, false
 	}
 	edit := ipc.NewServiceEdit(item)
@@ -138,21 +141,20 @@ func (m Model) serviceFormIntent(modal *Modal) (*ipc.Command, string) {
 		switch change.ID {
 		case "regions":
 			edit.Regions = ipc.ParseRegions(change.Value)
-			for _, region := range edit.Regions {
-				if len(region) != 2 || strings.Trim(region, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") != "" {
-					return nil, localize.T("Regions must be two-letter country codes.")
-				}
+			if len(edit.Regions) > services.MaxRegions || slices.ContainsFunc(edit.Regions, func(code string) bool { return !services.ValidRegion(code) }) {
+				return nil, fmt.Sprintf(localize.T("Regions must be at most %d two-letter country codes."), services.MaxRegions)
 			}
 		case "interval":
+			minimum, maximum := uint64(services.MinInterval/time.Second), uint64(services.MaxInterval/time.Second)
 			value, err := strconv.ParseUint(change.Value, 10, 32)
-			if err != nil || value < 300 || value > 30*86400 {
-				return nil, localize.T("Interval must be 300 to 2592000 seconds.")
+			if err != nil || value < minimum || value > maximum {
+				return nil, fmt.Sprintf(localize.T("Interval must be %d to %d seconds."), minimum, maximum)
 			}
 			edit.IntervalSeconds = uint32(value)
 		case "failures":
 			value, err := strconv.Atoi(change.Value)
-			if err != nil || value < 1 || value > 10 {
-				return nil, localize.T("Failures before switching must be 1 to 10.")
+			if err != nil || value < 1 || value > services.MaxFailures {
+				return nil, fmt.Sprintf(localize.T("Failures before switching must be 1 to %d."), services.MaxFailures)
 			}
 			edit.Failures = value
 		case "domains":

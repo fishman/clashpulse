@@ -41,6 +41,36 @@ func TestServiceRowsSendCommands(t *testing.T) {
 	}
 }
 
+func TestServiceActionsNeedAnEnabledCheck(t *testing.T) {
+	model := NewModel().Apply(ipc.Event{Snapshot: core.Snapshot{Services: []core.ServiceSnapshot{{ID: "claude", Name: "Claude", IntervalSeconds: 1800, Failures: 2}}}}).selectTab(TabSettings)
+	model.Selection[TabSettings] = "service:claude"
+	for _, action := range []string{"service_automatic", "service_check"} {
+		if next, command, _ := model.HandleKey(tunKey(t, model, action)); command != nil || next.Notice == "" {
+			t.Fatalf("%s on a disabled service sent %+v (notice %q)", action, command, next.Notice)
+		}
+	}
+	if _, command, _ := model.HandleKey(tunKey(t, model, "service_toggle")); command == nil || !command.Service.Enabled {
+		t.Fatalf("enable on a disabled service sent %+v", command)
+	}
+}
+
+func TestServiceModalKeepsInvalidInputOpen(t *testing.T) {
+	for field, input := range map[int]string{0: "USA", 1: "299", 2: "11"} {
+		model, _, _ := serviceModel(t).HandleKey("enter")
+		for range field {
+			model, _, _ = model.HandleKey("down")
+		}
+		model, _, _ = model.HandleKey("enter")
+		for _, key := range input {
+			model, _, _ = model.HandleKey(string(key))
+		}
+		model, command, _ := model.HandleKey("ctrl+s")
+		if command != nil || model.Modal == nil || model.Notice == "" {
+			t.Fatalf("field %d input %q sent %+v (modal %v, notice %q)", field, input, command, model.Modal != nil, model.Notice)
+		}
+	}
+}
+
 func TestServiceModalSavesOneEdit(t *testing.T) {
 	model, command, _ := serviceModel(t).HandleKey("enter")
 	if command != nil || model.Modal == nil || model.Modal.Kind != ModalService {

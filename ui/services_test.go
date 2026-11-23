@@ -4,9 +4,12 @@ import (
 	"strings"
 	"testing"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/widget"
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
+	"github.com/fishman/clashpulse/localize"
 )
 
 func TestServicesSectionRowsAndCommands(t *testing.T) {
@@ -35,5 +38,33 @@ func TestServicesSectionRowsAndCommands(t *testing.T) {
 	}
 	if !section.rows["claude"].automatic.Disabled() || !section.rows["claude"].check.Disabled() {
 		t.Fatal("automatic or check is enabled for a disabled service")
+	}
+}
+
+// Saving the editor keeps hand-edited values the presets lack, and a resource
+// list refreshed while the dialog is open does not change the saved choice.
+func TestServiceEditorKeepsUnlistedValues(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	window := app.NewWindow("x")
+	window.Resize(fyne.NewSize(900, 700))
+	var sent []ipc.Command
+	section := newServicesSection(func(c ipc.Command) { sent = append(sent, c) }, window)
+	section.setResources([]core.ResourceSnapshot{{ID: "media", Kind: "rule-set", RuleType: "domain", Enabled: true}})
+	section.update([]core.ServiceSnapshot{{ID: "netflix", Name: "Netflix", Enabled: true, IntervalSeconds: 2700, Failures: 8, DomainsResource: "media"}})
+	section.openEditor("netflix")
+	section.setResources(nil)
+	var save *widget.Button
+	for _, object := range test.LaidOutObjects(window.Canvas().Overlays().Top()) {
+		if button, ok := object.(*widget.Button); ok && button.Text == localize.T("Save") {
+			save = button
+		}
+	}
+	if save == nil {
+		t.Fatal("editor has no Save button")
+	}
+	test.Tap(save)
+	if len(sent) != 1 || sent[0].Service.IntervalSeconds != 2700 || sent[0].Service.Failures != 8 || sent[0].Service.DomainsResource != "media" {
+		t.Fatalf("save sent %+v", sent)
 	}
 }

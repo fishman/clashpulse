@@ -749,6 +749,8 @@ func (s *runtimeService) restoreSelections(ctx context.Context, selected map[str
 		if err := s.controller.Select(ctx, name, selected[name]); err != nil {
 			return err
 		}
+		// Recorded so the closing refresh does not judge it a manual pick.
+		s.serviceObserved[name] = selected[name]
 		changed = true
 	}
 	if changed {

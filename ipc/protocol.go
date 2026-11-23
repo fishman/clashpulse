@@ -232,14 +232,6 @@ func ParseRegions(text string) []string {
 	return out
 }
 
-// minServiceIntervalSeconds mirrors config.MinServiceInterval.
-const minServiceIntervalSeconds = 300
-
-// validRegion accepts an ISO 3166-1 alpha-2 code.
-func validRegion(region string) bool {
-	return len(region) == 2 && region[0] >= 'A' && region[0] <= 'Z' && region[1] >= 'A' && region[1] <= 'Z'
-}
-
 func (c Command) validate() error {
 	if c.Kind != CommandPutSubscription && c.Subscription != nil {
 		return errors.New("unexpected subscription edit fields")
@@ -416,11 +408,12 @@ func (c Command) validate() error {
 		if _, ok := services.Lookup(edit.ID); !ok {
 			return errors.New("unknown service")
 		}
-		if edit.IntervalSeconds < minServiceIntervalSeconds || edit.IntervalSeconds > 86400*30 || edit.Failures < 1 || edit.Failures > 10 || len(edit.Regions) > 32 {
+		if edit.IntervalSeconds < uint32(services.MinInterval/time.Second) || edit.IntervalSeconds > uint32(services.MaxInterval/time.Second) ||
+			edit.Failures < 1 || edit.Failures > services.MaxFailures || len(edit.Regions) > services.MaxRegions {
 			return errors.New("invalid service settings")
 		}
 		for _, region := range edit.Regions {
-			if !validRegion(region) {
+			if !services.ValidRegion(region) {
 				return errors.New("invalid service region")
 			}
 		}
@@ -576,11 +569,11 @@ func validateSnapshot(snapshot core.Snapshot) error {
 	for _, service := range snapshot.Services {
 		if _, ok := services.Lookup(service.ID); !ok || !slices.Contains([]string{"", "usable", "blocked", "error"}, service.Outcome) ||
 			!slices.Contains([]string{"", "blocked", "failing", "exhausted"}, service.LastSwitch) ||
-			service.Region != "" && !validRegion(service.Region) || len(service.Regions) > 32 || strings.Contains(service.Selected, "://") {
+			service.Region != "" && !services.ValidRegion(service.Region) || len(service.Regions) > services.MaxRegions || strings.Contains(service.Selected, "://") {
 			return errors.New("ipc: invalid service snapshot")
 		}
 		for _, region := range service.Regions {
-			if !validRegion(region) {
+			if !services.ValidRegion(region) {
 				return errors.New("ipc: invalid service snapshot")
 			}
 		}

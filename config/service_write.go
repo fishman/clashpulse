@@ -18,16 +18,19 @@ func validateServices(s Snapshot) error {
 			return fmt.Errorf("%s.id: duplicate service %q", key, service.ID)
 		}
 		seen[service.ID] = true
+		if len(service.Regions) > services.MaxRegions {
+			return fmt.Errorf("%s.regions: at most %d codes", key, services.MaxRegions)
+		}
 		for _, region := range service.Regions {
-			if !ValidRegion(region) {
+			if !services.ValidRegion(region) {
 				return fmt.Errorf("%s.regions: %q is not an upper-case two-letter country code", key, region)
 			}
 		}
-		if service.CheckInterval < MinServiceInterval {
-			return fmt.Errorf("%s.check_interval: must be at least %s", key, MinServiceInterval)
+		if service.CheckInterval < services.MinInterval || service.CheckInterval > services.MaxInterval {
+			return fmt.Errorf("%s.check_interval: must be between %s and %s", key, services.MinInterval, services.MaxInterval)
 		}
-		if service.Failures < 1 || service.Failures > MaxServiceFailures {
-			return fmt.Errorf("%s.failures: must be between 1 and %d", key, MaxServiceFailures)
+		if service.Failures < 1 || service.Failures > services.MaxFailures {
+			return fmt.Errorf("%s.failures: must be between 1 and %d", key, services.MaxFailures)
 		}
 		if service.DomainsResource != "" {
 			index := slices.IndexFunc(s.Resources, func(r Resource) bool { return r.ID == service.DomainsResource })
@@ -41,11 +44,6 @@ func validateServices(s Snapshot) error {
 		}
 	}
 	return nil
-}
-
-// ValidRegion reports whether code is an upper-case ISO 3166-1 alpha-2 code.
-func ValidRegion(code string) bool {
-	return len(code) == 2 && code[0] >= 'A' && code[0] <= 'Z' && code[1] >= 'A' && code[1] <= 'Z'
 }
 
 // PutService adds or replaces one [[service]] entry in config.toml, leaving

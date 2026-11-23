@@ -11,6 +11,20 @@ const UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 
 // CheckTimeout bounds one service check across all its requests and redirects.
 const CheckTimeout = 15 * time.Second
 
+// Bounds on a service's user settings. Config and IPC both enforce them, so a
+// loaded configuration can always cross IPC.
+const (
+	MinInterval = 5 * time.Minute
+	MaxInterval = 30 * 24 * time.Hour
+	MaxFailures = 10
+	MaxRegions  = 32
+)
+
+// ValidRegion reports whether code is an upper-case ISO 3166-1 alpha-2 code.
+func ValidRegion(code string) bool {
+	return len(code) == 2 && code[0] >= 'A' && code[0] <= 'Z' && code[1] >= 'A' && code[1] <= 'Z'
+}
+
 const maxRedirects = 10
 
 var definitions = []Definition{

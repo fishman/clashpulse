@@ -19,6 +19,7 @@ import (
 	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/mihomo"
 	"github.com/fishman/clashpulse/monitor"
+	"github.com/fishman/clashpulse/services"
 )
 
 // fakeServiceController serves a profile group, two service groups, and
@@ -217,6 +218,38 @@ func TestServiceDiagnosticsCarryNoNodeNames(t *testing.T) {
 	}
 }
 
+// A service stuck on a blocked node searches again every interval; only the
+// first fruitless search warns, so the diagnostics ring is not flooded.
+func TestServiceExhaustedWarnsOncePerEpisode(t *testing.T) {
+	service, _ := newServiceTestRuntime(t, serviceProfile("Proxy A", "Proxy B"), automaticService("netflix"))
+	exhausted := func() int {
+		count := 0
+		for _, entry := range service.snapshot.Diagnostics {
+			if entry.Message == "service.exhausted" {
+				count++
+			}
+		}
+		return count
+	}
+	for range 3 {
+		service.applyServiceBatch(context.Background(), monitor.ServiceBatch{Exhausted: []string{"netflix"}})
+	}
+	if got := exhausted(); got != 1 {
+		t.Fatalf("exhausted warnings after three searches = %d, want 1", got)
+	}
+	service.applyServiceBatch(context.Background(), monitor.ServiceBatch{Switches: []monitor.ServiceSwitch{{Service: "netflix", Group: "ClashPulse - Netflix", Old: "Proxy A", New: "Proxy B", Reason: "blocked"}}})
+	service.applyServiceBatch(context.Background(), monitor.ServiceBatch{Exhausted: []string{"netflix"}})
+	if got := exhausted(); got != 2 {
+		t.Fatalf("exhausted warnings after a switch and a new episode = %d, want 2", got)
+	}
+	// A usable check of the kept node also ends the episode.
+	service.applyServiceBatch(context.Background(), monitor.ServiceBatch{Checks: []monitor.ServiceCheck{{Service: "netflix", Proxy: "Proxy B", Result: services.Result{Outcome: services.Usable}, At: time.Now()}}})
+	service.applyServiceBatch(context.Background(), monitor.ServiceBatch{Exhausted: []string{"netflix"}})
+	if got := exhausted(); got != 3 {
+		t.Fatalf("exhausted warnings after a usable check and a new episode = %d, want 3", got)
+	}
+}
+
 func TestServiceGroupsOutsideLatencyAutomation(t *testing.T) {
 	service, _ := newServiceTestRuntime(t, serviceProfile("Proxy A", "Proxy B"), config.Service{ID: "netflix", Enabled: true, CheckInterval: 30 * time.Minute, Failures: 2})
 	if err := service.execute(context.Background(), ipc.Command{Kind: ipc.CommandSetAutoFastest, Automation: &ipc.AutomationSetting{Enabled: true}}); err != nil {
@@ -265,5 +298,39 @@ func TestServiceAutomaticSurvivesRestartWithRemovedNode(t *testing.T) {
 	}
 	if !service.store.Snapshot().Services[0].Automatic {
 		t.Fatal("a fallback from a removed node turned automatic off")
+	}
+}
+
+// Re-enabling automatic after a manual pick must reach the scheduler, though
+// the pick itself was persisted outside the apply path.
+func TestServiceAutomaticReenableReachesPlan(t *testing.T) {
+	service, controller := newServiceTestRuntime(t, serviceProfile("Proxy A", "Proxy B"), automaticService("netflix"))
+	// The plan lists targets only with a probe pool; an idle scheduler records
+	// the plan without running checks.
+	service.probePool = mihomo.NewProbePool(service.controller, []mihomo.ProbeListener{{Port: 1}})
+	service.serviceScheduler = monitor.NewServiceScheduler(serviceChecker{pool: service.probePool}, func(monitor.ServiceBatch) {})
+	controller.setSelected("ClashPulse - Netflix", "Proxy B")
+	if err := service.refreshGroups(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(service.servicePlan.Targets) != 1 || service.servicePlan.Targets[0].Automatic {
+		t.Fatalf("plan after a manual pick = %+v", service.servicePlan.Targets)
+	}
+	if err := service.setService(context.Background(), &ipc.ServiceEdit{ID: "netflix", Enabled: true, Automatic: true, IntervalSeconds: 1800, Failures: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if len(service.servicePlan.Targets) != 1 || !service.servicePlan.Targets[0].Automatic {
+		t.Fatalf("plan after re-enabling automatic = %+v", service.servicePlan.Targets)
+	}
+}
+
+// Restoring the pre-restart selection is ClashPulse's own change, not a pick.
+func TestServiceRestoreSelectionIsNotAManualPick(t *testing.T) {
+	service, _ := newServiceTestRuntime(t, serviceProfile("Proxy A", "Proxy B"), automaticService("netflix"))
+	if err := service.restoreSelections(context.Background(), map[string]string{"ClashPulse - Netflix": "Proxy B"}); err != nil {
+		t.Fatal(err)
+	}
+	if !service.store.Snapshot().Services[0].Automatic {
+		t.Fatal("restoring the selection turned automatic off")
 	}
 }

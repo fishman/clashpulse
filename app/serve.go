@@ -241,7 +241,7 @@ func (s *runtimeService) run(ctx context.Context, startup func(context.Context) 
 		s.offerChange(change)
 	})
 	defer unsubscribe()
-	for _, section := range []string{"app", "mihomo", "monitor", "dns", "tun", "resources", "filters"} {
+	for _, section := range []string{"app", "mihomo", "monitor", "dns", "tun", "resources", "filters", "services"} {
 		unsubscribeSection := s.store.Subscribe(section, s.offerChange)
 		defer unsubscribeSection()
 	}
