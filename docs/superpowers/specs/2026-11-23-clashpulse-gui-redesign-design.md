@@ -167,3 +167,34 @@ update compares the new text/color with the current one before calling
   dark pass. Regenerate GUI screenshots (`make screenshots`), visually check
   light and dark Overview and Proxies, and update docs images (light images
   stay the docs default).
+
+## Settings panes (approved 2026-11-23)
+
+- Each pane is one or more grouped cards with an uppercase muted caption
+  above the card. Inside a card: one setting per row, name left,
+  value/control right-aligned, a separator between rows, optional help text
+  (caption size, muted) under the row it explains. No bold pane heading.
+  Buttons are normal width, right-aligned. Checkboxes sit at the right of
+  their row. The section list has a fixed width.
+- Mihomo binary: card Version (Desired, Observed, Capabilities,
+  Compatibility). Card Binary: row Use with a Select (System, Bundled) that
+  sends the existing binary command only on user change, and shows a custom
+  path when Desired is a path; row Executable path with "Choose path...".
+- System Proxy: Enable system proxy, Mixed port (value + Change), Proxy mode
+  (Select); status and port explanation as help text.
+- TUN: Enable TUN, Stack, DNS mode; status/privilege text as help under
+  Enable.
+- Monitor: card Latency monitor (Enable, Monitor interval, Alert threshold +
+  Change, Probe policy Edit...). Card Switching (Switch policy short name with
+  its description as help, Switch stability, Mihomo url-test delay + Change).
+  Card Notifications (Send test).
+- DNS: card Listener (value + Change). Cards Resolver sets and DNS routes,
+  each with Add right-aligned in its caption row and one row per entry with
+  Edit and Remove on the right (resolver: id, endpoints muted, DNSCrypt
+  marker; route: matcher -> resolver set). Empty rows: "No resolver sets",
+  "No DNS routes". Replaces the Select plus disabled buttons.
+- Sidebar entries (main and Settings) are focusable: Tab moves focus, Space
+  and Return select, focus is drawn.
+- Tests: binary Select sends only on user change; DNS Edit/Remove act on
+  their own row's entry (two entries, act on the second); entry keyboard
+  selection; panes expose their rows and actions.
