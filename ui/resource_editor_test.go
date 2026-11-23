@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
@@ -46,9 +45,9 @@ func TestResourceAddSendsTypedIntentAndClearsPrivateSource(t *testing.T) {
 	}
 
 	page.update([]core.ResourceSnapshot{{ID: "nightly", Kind: "rule-provider", Format: "yaml", RuleType: "domain", SourceHost: "example.test", Enabled: true}})
-	row := page.list.CreateItem().(*fyne.Container)
+	row := page.list.CreateItem()
 	page.list.UpdateItem(0, row)
-	item := page.items[row]
+	item := listItem[resourceItem](row)
 	if strings.Contains(item.name.Text+item.source.Text+item.status.Text, sourceURL) {
 		t.Fatal("resource row exposed the private source URL")
 	}
@@ -62,9 +61,9 @@ func TestResourceEditOmitsPrivateSourceAndWaitsForSnapshot(t *testing.T) {
 	page := newResourcePage(func(command ipc.Command) { sent = append(sent, command) }, window)
 	window.SetContent(page.view)
 	page.update([]core.ResourceSnapshot{{ID: "managed", Kind: "rule-provider", Format: "yaml", RuleType: "domain", SourceHost: "feed.example", Enabled: true}})
-	row := page.list.CreateItem().(*fyne.Container)
+	row := page.list.CreateItem()
 	page.list.UpdateItem(0, row)
-	item := page.items[row]
+	item := listItem[resourceItem](row)
 	before := item.source.Text + item.status.Text
 
 	item.edit.OnTapped()
@@ -117,9 +116,9 @@ func TestFilterAddAndDisableSendTypedIntents(t *testing.T) {
 	}
 
 	page.update([]core.FilterSnapshot{{ID: "ads", ResourceID: "managed-rules", Format: "yaml", Target: "REJECT", Enabled: true}})
-	row := page.list.CreateItem().(*fyne.Container)
+	row := page.list.CreateItem()
 	page.list.UpdateItem(0, row)
-	item := page.items[row]
+	item := listItem[filterItem](row)
 	item.edit.OnTapped()
 	update := page.editor
 	if update.format.Selected != "yaml" {

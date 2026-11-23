@@ -3,7 +3,6 @@ package ui
 import (
 	"testing"
 
-	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
@@ -18,9 +17,9 @@ func TestDetailDialogsShowOnSoftwareDriver(t *testing.T) {
 	resource := newResourcePage(send, window)
 	window.SetContent(resource.view)
 	resource.update([]core.ResourceSnapshot{{ID: "cn", SourceHost: "provider.example", Enabled: false}})
-	resourceRow := resource.list.CreateItem().(*fyne.Container)
+	resourceRow := resource.list.CreateItem()
 	resource.list.UpdateItem(0, resourceRow)
-	resourceItem := resource.items[resourceRow]
+	resourceItem := listItem[resourceItem](resourceRow)
 	if !resourceItem.refresh.Disabled() {
 		t.Fatal("disabled resource has live refresh action")
 	}
@@ -33,9 +32,9 @@ func TestDetailDialogsShowOnSoftwareDriver(t *testing.T) {
 	subscription := newSubscriptionPage(send, window)
 	window.SetContent(subscription.view)
 	subscription.update([]core.SubscriptionSnapshot{{ID: "active", Enabled: true, Active: true}})
-	subscriptionRow := subscription.list.CreateItem().(*fyne.Container)
+	subscriptionRow := subscription.list.CreateItem()
 	subscription.list.UpdateItem(0, subscriptionRow)
-	subItem := subscription.items[subscriptionRow]
+	subItem := listItem[subscriptionItem](subscriptionRow)
 	if !subItem.delete.Disabled() {
 		t.Fatal("active subscription can be deleted")
 	}
@@ -48,9 +47,9 @@ func TestDetailDialogsShowOnSoftwareDriver(t *testing.T) {
 	filter := newFilterPage(send, window)
 	window.SetContent(filter.view)
 	filter.update([]core.FilterSnapshot{{ID: "ads", Enabled: false}})
-	filterRow := filter.list.CreateItem().(*fyne.Container)
+	filterRow := filter.list.CreateItem()
 	filter.list.UpdateItem(0, filterRow)
-	filterItem := filter.items[filterRow]
+	filterItem := listItem[filterItem](filterRow)
 	if !filterItem.refresh.Disabled() {
 		t.Fatal("disabled filter has live refresh action")
 	}

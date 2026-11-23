@@ -178,6 +178,14 @@ func rowLabels(object fyne.CanvasObject) []string {
 			labels = append(labels, rowLabels(child)...)
 		}
 		return labels
+	case *listRow[proxyItem]:
+		return rowLabels(object.content)
+	case *listRow[subscriptionItem]:
+		return rowLabels(object.content)
+	case *listRow[resourceItem]:
+		return rowLabels(object.content)
+	case *listRow[filterItem]:
+		return rowLabels(object.content)
 	default:
 		return nil
 	}

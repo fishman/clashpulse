@@ -43,7 +43,6 @@ type proxyPage struct {
 	list        *widget.List
 	empty       *widget.Label
 	send        sendIntent
-	items       map[*fyne.Container]*proxyItem
 }
 
 type proxyItem struct {
@@ -56,7 +55,7 @@ type proxyItem struct {
 }
 
 func newProxyPage(send sendIntent) *proxyPage {
-	p := &proxyPage{send: send, groupOptions: make(map[string]string), items: make(map[*fyne.Container]*proxyItem)}
+	p := &proxyPage{send: send, groupOptions: make(map[string]string)}
 	p.groupSelect = widget.NewSelect(nil, func(label string) {
 		if p.refreshing {
 			return
@@ -93,11 +92,10 @@ func newProxyPage(send sendIntent) *proxyPage {
 			lines := container.New(layout.NewCustomPaddedVBoxLayout(0), item.name, detail)
 			item.status = container.New(layout.NewCustomPaddedLayout(0, 0, 0, 2*theme.Padding()), container.NewHBox(item.state, center(item.badge.object)))
 			row := container.NewBorder(nil, nil, item.dot.object, item.status, lines)
-			p.items[row] = item
-			return row
+			return newListRow(row, item)
 		},
 		func(id widget.ListItemID, object fyne.CanvasObject) {
-			item := p.items[object.(*fyne.Container)]
+			item := object.(*listRow[proxyItem]).item
 			if id < 0 || id >= len(p.choices) {
 				setLabel(item.name, "")
 				setLabel(item.state, "")
@@ -246,14 +244,13 @@ type subscriptionPage struct {
 	list   *widget.List
 	add    *widget.Button
 	empty  *widget.Label
-	items  map[*fyne.Container]*subscriptionItem
 	window fyne.Window
 	send   sendIntent
 	editor *subscriptionEditor
 }
 
 func newSubscriptionPage(send sendIntent, window fyne.Window) *subscriptionPage {
-	p := &subscriptionPage{send: send, window: window, items: make(map[*fyne.Container]*subscriptionItem)}
+	p := &subscriptionPage{send: send, window: window}
 	p.add = widget.NewButton(localize.T("Add subscription"), func() { p.openSubscriptionEditor(nil) })
 	p.add.Importance = widget.HighImportance
 	p.list = widget.NewList(
@@ -293,11 +290,10 @@ func newSubscriptionPage(send sendIntent, window fyne.Window) *subscriptionPage 
 				}
 			})
 			row := sourceRow(item.dot, container.NewGridWithColumns(3, item.name, item.source, item.status), detail, item.usage.object, container.NewHBox(item.refresh, item.activate, item.edit, item.delete, item.details))
-			p.items[row] = item
-			return row
+			return newListRow(row, item)
 		},
 		func(id widget.ListItemID, object fyne.CanvasObject) {
-			item := p.items[object.(*fyne.Container)]
+			item := object.(*listRow[subscriptionItem]).item
 			if id < 0 || id >= len(p.rows) {
 				item.id = ""
 				setLabel(item.name, "")
@@ -660,14 +656,13 @@ type resourcePage struct {
 	list   *widget.List
 	add    *widget.Button
 	empty  *widget.Label
-	items  map[*fyne.Container]*resourceItem
 	window fyne.Window
 	send   sendIntent
 	editor *resourceEditor
 }
 
 func newResourcePage(send sendIntent, window fyne.Window) *resourcePage {
-	p := &resourcePage{send: send, window: window, items: make(map[*fyne.Container]*resourceItem)}
+	p := &resourcePage{send: send, window: window}
 	p.add = widget.NewButton(localize.T("Add resource"), func() { p.openResourceEditor(nil) })
 	p.add.Importance = widget.HighImportance
 	p.list = widget.NewList(
@@ -691,11 +686,10 @@ func newResourcePage(send sendIntent, window fyne.Window) *resourcePage {
 			})
 			item.edit = widget.NewButton(localize.T("Edit"), func() { p.editResource(item.id) })
 			row := sourceRow(item.dot, container.NewGridWithColumns(3, item.name, item.source, item.status), detail, container.NewHBox(item.refresh, item.edit, item.details))
-			p.items[row] = item
-			return row
+			return newListRow(row, item)
 		},
 		func(id widget.ListItemID, object fyne.CanvasObject) {
-			item := p.items[object.(*fyne.Container)]
+			item := object.(*listRow[resourceItem]).item
 			if id < 0 || id >= len(p.rows) {
 				item.id = ""
 				setLabel(item.name, "")
@@ -769,14 +763,13 @@ type filterPage struct {
 	list   *widget.List
 	add    *widget.Button
 	empty  *widget.Label
-	items  map[*fyne.Container]*filterItem
 	window fyne.Window
 	send   sendIntent
 	editor *filterEditor
 }
 
 func newFilterPage(send sendIntent, window fyne.Window) *filterPage {
-	p := &filterPage{send: send, window: window, items: make(map[*fyne.Container]*filterItem)}
+	p := &filterPage{send: send, window: window}
 	p.add = widget.NewButton(localize.T("Add filter"), func() { p.openFilterEditor(nil) })
 	p.add.Importance = widget.HighImportance
 	p.list = widget.NewList(
@@ -800,11 +793,10 @@ func newFilterPage(send sendIntent, window fyne.Window) *filterPage {
 			})
 			item.edit = widget.NewButton(localize.T("Edit"), func() { p.editFilter(item.id) })
 			row := sourceRow(item.dot, container.NewGridWithColumns(3, item.name, item.format, item.status), detail, container.NewHBox(item.refresh, item.edit, item.details))
-			p.items[row] = item
-			return row
+			return newListRow(row, item)
 		},
 		func(id widget.ListItemID, object fyne.CanvasObject) {
-			item := p.items[object.(*fyne.Container)]
+			item := object.(*listRow[filterItem]).item
 			if id < 0 || id >= len(p.rows) {
 				item.id = ""
 				setLabel(item.name, "")
@@ -840,6 +832,25 @@ func newFilterPage(send sendIntent, window fyne.Window) *filterPage {
 // toolbar right-aligns a page's primary action above its list.
 func toolbar(action *widget.Button) fyne.CanvasObject {
 	return container.New(layout.NewCustomPaddedLayout(0, theme.Padding(), 0, 2*theme.Padding()), container.NewHBox(layout.NewSpacer(), action))
+}
+
+// listRow is a list row that carries its item, so UpdateItem finds the
+// widgets to fill without a page-level lookup table. Fyne builds a throwaway
+// row to measure the list on every refresh; a table would keep each one.
+type listRow[T any] struct {
+	widget.BaseWidget
+	content fyne.CanvasObject
+	item    *T
+}
+
+func newListRow[T any](content fyne.CanvasObject, item *T) *listRow[T] {
+	r := &listRow[T]{content: content, item: item}
+	r.ExtendBaseWidget(r)
+	return r
+}
+
+func (r *listRow[T]) CreateRenderer() fyne.WidgetRenderer {
+	return widget.NewSimpleRenderer(r.content)
 }
 
 func (p *filterPage) update(rows []core.FilterSnapshot) {

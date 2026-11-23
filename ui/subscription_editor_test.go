@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
@@ -44,9 +43,9 @@ func TestSubscriptionAddSendsTypedIntentAndClearsSourceAfterSubmit(t *testing.T)
 		t.Fatal("submitted source URL remains in the editor")
 	}
 	page.update([]core.SubscriptionSnapshot{{ID: "nightly", Name: "Nightly", SourceHost: "example.test", Enabled: true}})
-	row := page.list.CreateItem().(*fyne.Container)
+	row := page.list.CreateItem()
 	page.list.UpdateItem(0, row)
-	item := page.items[row]
+	item := listItem[subscriptionItem](row)
 	if item.name.Text != "Nightly" || item.source.Text == "" || item.status.Text == "" || strings.Contains(item.name.Text+item.source.Text+item.status.Text, sourceURL) {
 		t.Fatal("snapshot-rendered subscription controls are unsafe")
 	}
@@ -81,9 +80,9 @@ func TestSubscriptionRenameRetainsPrivateSourceAndWaitsForSnapshot(t *testing.T)
 	page := newSubscriptionPage(func(command ipc.Command) { sent = append(sent, command) }, window)
 	window.SetContent(page.view)
 	page.update([]core.SubscriptionSnapshot{{ID: "managed-feed", Name: "Before", SourceHost: "feed.example", Enabled: true}})
-	row := page.list.CreateItem().(*fyne.Container)
+	row := page.list.CreateItem()
 	page.list.UpdateItem(0, row)
-	item := page.items[row]
+	item := listItem[subscriptionItem](row)
 
 	item.edit.OnTapped()
 	editor := page.editor
@@ -165,9 +164,9 @@ func TestSubscriptionDeleteRequiresConfirmation(t *testing.T) {
 	page := newSubscriptionPage(func(command ipc.Command) { sent = append(sent, command) }, window)
 	window.SetContent(page.view)
 	page.update([]core.SubscriptionSnapshot{{ID: "daily", Name: "Daily"}})
-	row := page.list.CreateItem().(*fyne.Container)
+	row := page.list.CreateItem()
 	page.list.UpdateItem(0, row)
-	page.items[row].delete.OnTapped()
+	listItem[subscriptionItem](row).delete.OnTapped()
 	if len(sent) != 0 {
 		t.Fatal("delete intent was sent before confirmation")
 	}

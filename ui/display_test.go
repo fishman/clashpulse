@@ -62,7 +62,7 @@ func TestProxyRowShowsOnlySelectionAndLatency(t *testing.T) {
 	})
 	row := page.list.CreateItem()
 	page.list.UpdateItem(0, row)
-	if got := proxyRowCells(page, row); got != (proxyRowText{"node-a", "", localize.T("Active"), "42 ms"}) || strings.Contains(strings.Join(rowLabels(row), " "), "private detail") {
+	if got := proxyRowCells(row); got != (proxyRowText{"node-a", "", localize.T("Active"), "42 ms"}) || strings.Contains(strings.Join(rowLabels(row), " "), "private detail") {
 		t.Fatalf("proxy row exposed outcome or lost separate cells: %+v", got)
 	}
 }
@@ -77,7 +77,7 @@ func TestProxyRowFallsBackToMihomoReportedLatency(t *testing.T) {
 	})
 	row := page.list.CreateItem()
 	page.list.UpdateItem(0, row)
-	if got, want := proxyRowCells(page, row), (proxyRowText{"node-a", "", localize.T("Active"), "123 ms (mihomo)"}); got != want {
+	if got, want := proxyRowCells(row), (proxyRowText{"node-a", "", localize.T("Active"), "123 ms (mihomo)"}); got != want {
 		t.Fatalf("url-test row = %+v, want %+v", got, want)
 	}
 }
@@ -103,7 +103,7 @@ func TestProxyRowShowsStabilityOnlyAfterSamples(t *testing.T) {
 		})
 		row := page.list.CreateItem()
 		page.list.UpdateItem(0, row)
-		if got, want := proxyRowCells(page, row), (proxyRowText{"node-a", tc.detail, localize.T("Active"), tc.badge}); got != want {
+		if got, want := proxyRowCells(row), (proxyRowText{"node-a", tc.detail, localize.T("Active"), tc.badge}); got != want {
 			t.Fatalf("proxy row = %+v, want %+v", got, want)
 		}
 	}
@@ -301,7 +301,7 @@ func overviewSwitchText(snapshot core.Snapshot) string {
 // proxyRowText is what one proxy row shows, cell by cell.
 type proxyRowText struct{ name, detail, state, badge string }
 
-func proxyRowCells(page *proxyPage, row fyne.CanvasObject) proxyRowText {
-	item := page.items[row.(*fyne.Container)]
+func proxyRowCells(row fyne.CanvasObject) proxyRowText {
+	item := listItem[proxyItem](row)
 	return proxyRowText{item.name.Text, item.detail.Text, item.state.Text, item.badge.text.Text}
 }
