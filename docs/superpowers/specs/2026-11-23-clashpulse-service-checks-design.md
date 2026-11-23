@@ -256,9 +256,15 @@ Node names are masked through the existing label path before display.
 A service with `automatic = false` (the default) is checked and reported but
 its group is never switched; this is the explicit opt-in AGENTS.md requires
 for controller-driven selection of a managed select group. A manual node
-pick in a service group (GUI, TUI, or Mihomo dashboard observed through the
-controller) sets `automatic = false` for that service until the user
-re-enables it, matching existing group automation.
+pick in a service group sets `automatic = false` for that service until the
+user re-enables it, matching existing group automation. A pick through
+ClashPulse (GUI, TUI) is always manual. A pick made elsewhere (Mihomo
+dashboard) counts only when observed between ClashPulse-driven starts and
+reloads, and only when the previously observed node is still a member of
+the group: after a start, reload, or subscription refresh the observed
+selection is re-baselined, so Mihomo falling back to the first member
+because the stored node vanished or `store-selected` is off never turns
+the opt-in off.
 
 Service groups stay outside latency automation. `refreshGroups` does not add
 a `ClashPulse - <Name>` group to the latency monitor's groups (no delay

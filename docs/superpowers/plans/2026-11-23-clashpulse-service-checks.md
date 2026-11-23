@@ -2230,7 +2230,7 @@ Rules this task implements (spec "Switching" and "IPC"):
 - Service groups stay outside latency automation: in `refreshGroups`, a group for which `mihomo.ServiceGroupFor(group.Name)` holds is listed in the snapshot (with `AutomationEnabled: false`) but never appended to `monitorGroups`; `CommandSetAutoFastest` skips it when building `managed`; and `s.automation[id]` set for one returns `fmt.Errorf("clashpulse: automation group %q is a service group; use services automatic", id)`.
 - A `ServiceBatch` is applied on the service loop (same goroutine discipline as `acceptBatch`): update each `core.ServiceSnapshot` outcome, region, last and next check; for each `ServiceSwitch`, re-check the guard on current state (service still enabled and `Automatic`, group `Selected == Old`, no switch in flight for that group), then `controller.Select(group, New)`, record `LastSwitch = Reason`, append a diagnostic `Kind: "service_switch", SourceID: service ID, Severity: "info", Message: "service.switch." + Reason`, and refresh groups. Exhausted -> `LastSwitch = "exhausted"` and a `warning` diagnostic `service.exhausted`.
 - `CommandSelectGroup` on a service group performs the selection and then persists `Automatic = false` for that service via `config.PutService`.
-- An observed selection change on a service group that ClashPulse did not make (refreshGroups sees `Selected` differ from the last value ClashPulse selected or observed) also persists `Automatic = false`.
+- An observed selection change on a service group counts as a manual pick, persisting `Automatic = false`, only when all hold: it is not a ClashPulse selection (service switch or `CommandSelectGroup`), the runtime has not been (re)started or reloaded since the baseline was taken, and the previously observed node is still a member of the group. Every ClashPulse-driven start and reload clears the baseline; the first `refreshGroups` after it records `Selected` without judging it.
 - `CommandSetAutomation` with a service group's ID returns an error `"service groups use service automatic switching"`.
 - `CommandSetService` converts `ServiceEdit` to `config.Service` and calls `config.PutService`, then the normal reload; `CommandCheckService` calls `s.services.Request(id)`.
 - Diagnostics use only service IDs and fixed message codes; node names go through the existing masked label path.
@@ -2309,9 +2309,31 @@ func TestServiceGroupsOutsideLatencyAutomation(t *testing.T) {
 		t.Fatal("set_auto_fastest opted a service group into lowest-latency switching")
 	}
 }
+
+func TestServiceAutomaticSurvivesRestartWithRemovedNode(t *testing.T) {
+	service, controller := newServiceTestRuntime(t, serviceProfile("Proxy A", "Proxy B"), config.Service{ID: "netflix", Enabled: true, Automatic: true, CheckInterval: 30 * time.Minute, Failures: 2})
+	controller.setSelected("ClashPulse - Netflix", "Proxy B")
+	// A subscription refresh drops Proxy B; after the reload Mihomo falls back to the first member.
+	service.reloadForTest(serviceProfile("Proxy A", "Proxy C"))
+	controller.setSelected("ClashPulse - Netflix", "Proxy A")
+	if err := service.refreshGroups(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !service.store.Snapshot().Services[0].Automatic {
+		t.Fatal("a fallback after reload turned automatic off")
+	}
+	// A dashboard pick between reloads, from a node still present, is manual.
+	controller.setSelected("ClashPulse - Netflix", "Proxy C")
+	if err := service.refreshGroups(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if service.store.Snapshot().Services[0].Automatic {
+		t.Fatal("an external pick did not turn automatic off")
+	}
+}
 ```
 
-`newServiceTestRuntime`, `serviceProfile`, `findService`, `controller.selected`, and `monitorGroupsForTest` (returns the `[]monitor.GroupState` from the last `refreshGroups`) are test helpers to add on top of the existing fake controller; `applyServiceBatch` and the `execute` method name must match the real ones in `app/commands.go` (read it first and rename here if `execute` is called differently).
+`newServiceTestRuntime`, `serviceProfile`, `findService`, `controller.selected`, `controller.setSelected`, `reloadForTest` (runs the normal ClashPulse reload path with a new source profile), and `monitorGroupsForTest` (returns the `[]monitor.GroupState` from the last `refreshGroups`) are test helpers to add on top of the existing fake controller; `applyServiceBatch` and the `execute` method name must match the real ones in `app/commands.go` (read it first and rename here if `execute` is called differently).
 
 - [ ] **Step 2: Run to verify failure**
 
