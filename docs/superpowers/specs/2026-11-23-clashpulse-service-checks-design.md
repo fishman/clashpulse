@@ -200,12 +200,19 @@ call until its last request ends, so no other work can re-point it mid-check.
 `mihomo -t` validates four such pairs (checked 2026-11-23); the plan adds a
 runtime check that each listener follows only its own group.
 
-Scheduling, owned by the existing `monitor.Scheduler` timer:
+Scheduling is owned by a new `monitor.ServiceScheduler`, a sibling of the
+existing `monitor.Scheduler` in the same package with one goroutine and one
+timer of its own. Both reach the probe listeners only through a bounded
+`mihomo.ProbePool`, which owns the 4 listeners and the controller select
+that pins them: a lease selects a node on a free slot and is released after
+the last request. Folding a third probe kind into the existing 720-line
+`Scheduler.Run` loop was rejected as the riskier change (amended 2026-11-23
+while planning).
 
 - Each enabled service has a next-check deadline (`check_interval`, default
-  30 minutes, plus up to 10% jitter) merged into the one timer through
-  `nextDeadline`. Disabled services have no deadline; with no enabled service
-  and no steady stream, no probe work is scheduled.
+  30 minutes, plus up to 10% jitter); the service loop arms its one timer for
+  the earliest. Disabled services have no deadline; with no enabled service
+  the loop holds no timer and does no work.
 - A due round checks only the node currently selected in that service's
   group.
 - A check also becomes due immediately when the group's node changes (by
