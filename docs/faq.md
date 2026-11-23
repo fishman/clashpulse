@@ -76,6 +76,6 @@ No telemetry, crash upload, or cloud backend. See
 ## How do I report a bug?
 
 Open an [issue](https://github.com/fishman/clashpulse/issues). The activity
-view (GUI Overview > View activity, TUI `~`) is safe to share. Do not paste
+view (GUI top-bar menu > View activity, TUI `~`) is safe to share. Do not paste
 subscription URLs, node names, server addresses, or credentials; use
 `example.com` names.

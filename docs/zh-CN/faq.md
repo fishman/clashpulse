@@ -63,4 +63,4 @@ CI 在 `ubuntu-22.04`、`macos-latest`（arm64）和 `windows-latest` 上原生�
 
 ## 怎么报告问题？
 
-在 [Issues](https://github.com/fishman/clashpulse/issues) 提交。活动记录（GUI 概览 > 查看活动记录，TUI `~`）可以放心分享。不要贴订阅 URL、节点名、服务器地址或凭据，请用 `example.com` 这样的名字代替。
+在 [Issues](https://github.com/fishman/clashpulse/issues) 提交。活动记录（GUI 顶栏菜单 > 查看活动记录，TUI `~`）可以放心分享。不要贴订阅 URL、节点名、服务器地址或凭据，请用 `example.com` 这样的名字代替。

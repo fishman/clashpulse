@@ -21,13 +21,18 @@ The interface is Simplified Chinese when the OS locale is `zh-CN` (also
 
 ## GUI
 
-![GUI Overview: service state, Mihomo binary, switch summary, controls](assets/screenshots/gui-overview.png)
+![GUI Overview: sidebar, status pills, and cards for the current node, steady stream, last switch, usage, and health](assets/screenshots/gui-overview.png)
 
-Overview shows service state, the Mihomo binary, the last switch, and the
-last error, with buttons to start, stop, restart, and reload the config. View
-activity lists this session's sanitized diagnostics. Generated config changes
-lists the fields ClashPulse added, replaced, or removed in the active profile,
-with a reason but no values.
+The sidebar switches pages. The top bar shows whether traffic goes through
+Mihomo, with pills for Mihomo, the system proxy, and TUN. Its menu (the dots
+at the right) starts, stops, and restarts the service, reloads the config, and
+opens the activity view.
+
+Overview cards show the current node with its latency, the steady-stream
+download results, the last switch with its reason and evidence, subscription
+usage, and health. The activity view (top-bar menu or the Health card) lists
+this session's sanitized diagnostics and the fields ClashPulse added,
+replaced, or removed in the active profile, with a reason but no values.
 
 ![GUI Proxies: group selector, automation toggle, per-node measurements](assets/screenshots/gui-proxies.png)
 
@@ -36,7 +41,7 @@ group. Enable group automation opts a managed `select` group into switching;
 picking a node by hand turns it off. Probe group runs a latency round now.
 Probe downloads runs a Steady stream round and needs that policy active.
 
-![GUI Subscriptions: subscription rows with refresh and activate](assets/screenshots/gui-subscriptions.png)
+![GUI Subscriptions: subscription rows with status, usage, and actions](assets/screenshots/gui-subscriptions.png)
 
 On Subscriptions, Refresh downloads and validates a new snapshot without
 touching the running profile; Activate applies it. Filter Lists and Data
