@@ -19,10 +19,22 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+      # GPL-3.0 section 6: ship the corresponding source of the bundled Mihomo.
+      - name: Mihomo source
+        id: mihomo
+        run: |
+          version=$(awk '$1 == "version" { print $2 }' packaging/mihomo.lock)
+          go run ./tools/fetch-mihomo -target source -out "dist/mihomo-$version-source.tar.gz"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Checksums
         working-directory: dist
         run: sha256sum * > SHA256SUMS && cat SHA256SUMS
@@ -30,10 +42,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+          MIHOMO: ${{ steps.mihomo.outputs.version }}
         run: |
           gh release create "$TAG" dist/* \
             --repo "$GITHUB_REPOSITORY" \
             --title "ClashPulse $TAG" \
             --generate-notes \
             --prerelease \
-            --notes "Pre-release. Unsigned native builds for Linux (amd64), macOS (Apple silicon), and Windows (amd64). The Linux build runs on any x86-64 CPU with glibc 2.35 or newer (Ubuntu 22.04, Debian 12, and later). Mihomo is not bundled: install it and put mihomo on PATH or select it in Settings. macOS may require removing the quarantine attribute (xattr -dr com.apple.quarantine ClashPulse.app) because the app is not notarized. Verify downloads against SHA256SUMS."
+            --notes "Pre-release. Unsigned native builds for Linux (amd64), macOS (Apple silicon and Intel), and Windows (amd64). The Linux build runs on any x86-64 CPU with glibc 2.35 or newer (Ubuntu 22.04, Debian 12, and later) and uses the system Mihomo: install it and put mihomo on PATH or select it in Settings. The macOS and Windows packages include the official Mihomo $MIHOMO release build (GPL-3.0, unmodified; licence and provenance in licenses/); its source is attached as mihomo-$MIHOMO-source.tar.gz. macOS may require removing the quarantine attribute (xattr -dr com.apple.quarantine ClashPulse.app) because the app is not notarized. Verify downloads against SHA256SUMS."

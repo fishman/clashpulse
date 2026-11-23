@@ -22,12 +22,19 @@ jobs:
           - os: ubuntu-22.04
             target: linux
             arch: amd64
+          # mihomo names the packaging/mihomo.lock target bundled in the package.
           - os: macos-latest
             target: darwin
             arch: arm64
+            mihomo: darwin-arm64
+          - os: macos-26-intel
+            target: darwin
+            arch: amd64
+            mihomo: darwin-amd64
           - os: windows-latest
             target: windows
             arch: amd64
+            mihomo: windows-amd64
     runs-on: ${{ matrix.os }}
     env:
       VERSION: ${{ inputs.version || 'dev' }}
@@ -55,6 +62,14 @@ jobs:
           ldflags="-s -w -X 'main.version=clashpulse $VERSION'"
           a=.github/scripts/annotate-failures.sh
           mkdir -p package dist
+          # Fetch the pinned Mihomo into $1 and record its digest in the build identity.
+          bundle_mihomo() {
+            mkdir -p "$2"
+            cp packaging/mihomo/LICENSE "$2/mihomo-LICENSE.txt"
+            fetched=$(go run ./tools/fetch-mihomo -target ${{ matrix.mihomo }} -out "$1" -provenance "$2/mihomo-PROVENANCE.txt")
+            eval "$fetched"
+            ldflags="$ldflags -X 'github.com/fishman/clashpulse/internal/bundled.Version=$version' -X 'github.com/fishman/clashpulse/internal/bundled.SHA256=$sha256'"
+          }
           case "${{ matrix.target }}" in
             linux)
               bash "$a" "build ${{ matrix.target }}" go build -buildmode=pie -trimpath -ldflags "$ldflags -linkmode=external -extldflags=-Wl,-z,relro,-z,now" -o package/clashpulse ./cmd/clashpulse
@@ -64,12 +79,14 @@ jobs:
             darwin)
               bundle=package/ClashPulse.app/Contents
               mkdir -p "$bundle/MacOS" "$bundle/Resources"
+              bundle_mihomo "$bundle/Resources/mihomo" "$bundle/Resources/licenses"
               bash "$a" "build ${{ matrix.target }}" go build -trimpath -ldflags "$ldflags" -o "$bundle/MacOS/clashpulse" ./cmd/clashpulse
               printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<plist version="1.0"><dict>' '<key>CFBundleIdentifier</key><string>io.github.fishman.clashpulse</string>' '<key>CFBundleName</key><string>ClashPulse</string>' '<key>CFBundleExecutable</key><string>clashpulse</string>' "<key>CFBundleShortVersionString</key><string>${VERSION#v}</string>" '<key>CFBundlePackageType</key><string>APPL</string>' '</dict></plist>' > "$bundle/Info.plist"
               cp README.md LICENSE THIRD_PARTY_LICENSES.txt "$bundle/Resources/"
               tar -czf "dist/$name.tar.gz" -C package ClashPulse.app
               ;;
             windows)
+              bundle_mihomo package/mihomo.exe package/licenses
               bash "$a" "build ${{ matrix.target }}" go build -trimpath -ldflags "$ldflags" -o package/clashpulse.exe ./cmd/clashpulse
               cp README.md LICENSE THIRD_PARTY_LICENSES.txt package/
               powershell.exe -NoProfile -Command "Compress-Archive -Path 'package/*' -DestinationPath 'dist/$name.zip'"
@@ -80,9 +97,15 @@ jobs:
         run: |
           case "${{ matrix.target }}" in
             linux) out=$(package/clashpulse version) ;;
-            darwin) out=$(package/ClashPulse.app/Contents/MacOS/clashpulse version) ;;
-            windows) out=$(package/clashpulse.exe version) ;;
+            darwin) out=$(package/ClashPulse.app/Contents/MacOS/clashpulse version); mihomo=package/ClashPulse.app/Contents/Resources/mihomo ;;
+            windows) out=$(package/clashpulse.exe version); mihomo=package/mihomo.exe ;;
           esac
+          if [ -n "${{ matrix.mihomo }}" ]; then
+            "$mihomo" -v
+            home="$RUNNER_TEMP/mihomo-check"; mkdir -p "$home"
+            printf 'proxies:\n  - name: check\n    type: direct\n' > "$home/check.yaml"
+            "$mihomo" -d "$home" -t -f "$home/check.yaml"
+          fi
           echo "$out"
           if [ "${{ matrix.target }}" = linux ]; then
             isa=$(readelf -n package/clashpulse | grep -i 'ISA needed' || true)
@@ -100,3 +123,24 @@ jobs:
           name: clashpulse-${{ matrix.target }}-${{ matrix.arch }}
           path: dist/*
           if-no-files-found: error
+
+  # Windows on ARM runs the amd64 package under x64 emulation; this proves
+  # both executables start there, not that the GUI opens.
+  smoke-windows-arm:
+    needs: desktop
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: clashpulse-windows-amd64
+          path: dist
+      - name: Smoke-run the amd64 package under emulation
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version || 'dev' }}
+        run: |
+          powershell.exe -NoProfile -Command "Expand-Archive -Path (Get-ChildItem dist/*.zip) -DestinationPath package"
+          out=$(package/clashpulse.exe version)
+          echo "$out"
+          test "$out" = "clashpulse $VERSION"
+          package/mihomo.exe -v
