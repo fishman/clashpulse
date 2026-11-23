@@ -235,8 +235,11 @@ Per service group:
 2. Candidates: every other member whose latest check for this service is not
    `blocked`, filtered to the service's `regions` when set (a node with no
    detected region for this service qualifies only after it is checked).
-   Ordered by median latency from the existing delay history; nodes without
-   latency history go last. At most 8 candidates per search.
+   Ordered by median latency from the existing delay history of the
+   profile's own monitored groups, keyed by node name (a node in several
+   groups takes its lowest median); nodes without latency history go last.
+   Service groups are never delay-probed themselves. At most 8 candidates
+   per search.
 3. Candidates are checked up to 4 at a time (one slot each), in latency
    order. When a wave finishes, the lowest-latency `usable` candidate in the
    preferred regions wins; if none is usable, the next wave starts, up to the
@@ -256,6 +259,14 @@ for controller-driven selection of a managed select group. A manual node
 pick in a service group (GUI, TUI, or Mihomo dashboard observed through the
 controller) sets `automatic = false` for that service until the user
 re-enables it, matching existing group automation.
+
+Service groups stay outside latency automation. `refreshGroups` does not add
+a `ClashPulse - <Name>` group to the latency monitor's groups (no delay
+probing, no lowest-latency or steady-stream switching), `set_auto_fastest`
+skips them, `set_automation` on one is rejected, and a service group ID in
+`monitor.automated_groups` is a configuration error naming the group.
+Otherwise lowest-latency switching could move a service group onto a node
+the service blocks and bypass `automatic = false`.
 
 ## Configuration
 

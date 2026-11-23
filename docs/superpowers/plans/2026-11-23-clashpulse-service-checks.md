@@ -30,6 +30,7 @@
 3. Steady stream and services both enabled: a stream pull and a service check must never hold the same slot (Task 3 test `TestProbePoolLeasesAreExclusive`).
 4. A YouTube consent redirect that stays on `youtube.com` but has no `GL` must be `error`, never `usable` (Task 1 test `TestCheckConsentPageWithoutSignalIsError`).
 5. Disabling the last service while a check is in flight must cancel it and leave no timer armed (Task 5 test `TestServiceSchedulerIdleWithoutServices`).
+6. Lowest-latency automation must never move a service group: `set_auto_fastest` and the latency monitor skip `ClashPulse - <Name>` groups (Task 7 test `TestServiceGroupsOutsideLatencyAutomation`).
 
 ## File Structure
 
@@ -2225,7 +2226,8 @@ git commit -m "feat(ipc): add service snapshot and commands"
 
 Rules this task implements (spec "Switching" and "IPC"):
 - `serviceChecker.CheckServices(ctx, proxy, ids)` acquires one lease from `s.probePool` for `proxy`, runs `services.Check(ctx, lease.Transport(), defs)` for the definitions of `ids` (in that order), releases the lease, and returns the results; a failed lease returns `Failed` for every id.
-- The plan is rebuilt in `refreshGroups` and on every accepted monitor batch: one `ServiceTarget` per enabled service whose group `ClashPulse - <Name>` is present in the controller's groups, with `Selected` and `Members` from that group, `Interval`/`Failures`/`Automatic`/`Regions` from config, `Latency` from current proxy medians by name, `Unhealthy` from the latest latency outcome by name, `Cooldown` from `monitor.cooldown`, `Slots` = `s.probePool.Size()`. With no pool or no enabled service, `SetPlan(ServicePlan{})`.
+- The plan is rebuilt in `refreshGroups` and on every accepted monitor batch: one `ServiceTarget` per enabled service whose group `ClashPulse - <Name>` is present in the controller's groups, with `Selected` and `Members` from that group, `Interval`/`Failures`/`Automatic`/`Regions` from config, `Latency` per node name as the lowest median across the profile's monitored groups, `Unhealthy` from the latest latency outcome by name, `Cooldown` from `monitor.cooldown`, `Slots` = `s.probePool.Size()`. With no pool or no enabled service, `SetPlan(ServicePlan{})`.
+- Service groups stay outside latency automation: in `refreshGroups`, a group for which `mihomo.ServiceGroupFor(group.Name)` holds is listed in the snapshot (with `AutomationEnabled: false`) but never appended to `monitorGroups`; `CommandSetAutoFastest` skips it when building `managed`; and `s.automation[id]` set for one returns `fmt.Errorf("clashpulse: automation group %q is a service group; use services automatic", id)`.
 - A `ServiceBatch` is applied on the service loop (same goroutine discipline as `acceptBatch`): update each `core.ServiceSnapshot` outcome, region, last and next check; for each `ServiceSwitch`, re-check the guard on current state (service still enabled and `Automatic`, group `Selected == Old`, no switch in flight for that group), then `controller.Select(group, New)`, record `LastSwitch = Reason`, append a diagnostic `Kind: "service_switch", SourceID: service ID, Severity: "info", Message: "service.switch." + Reason`, and refresh groups. Exhausted -> `LastSwitch = "exhausted"` and a `warning` diagnostic `service.exhausted`.
 - `CommandSelectGroup` on a service group performs the selection and then persists `Automatic = false` for that service via `config.PutService`.
 - An observed selection change on a service group that ClashPulse did not make (refreshGroups sees `Selected` differ from the last value ClashPulse selected or observed) also persists `Automatic = false`.
@@ -2292,9 +2294,24 @@ func TestServiceDiagnosticsCarryNoNodeNames(t *testing.T) {
 		t.Fatalf("snapshot leaks a node name: %+v", svc)
 	}
 }
+
+func TestServiceGroupsOutsideLatencyAutomation(t *testing.T) {
+	service, _ := newServiceTestRuntime(t, serviceProfile("Proxy A", "Proxy B"), config.Service{ID: "netflix", Enabled: true, CheckInterval: 30 * time.Minute, Failures: 2})
+	for _, group := range service.monitorGroupsForTest() { // the []monitor.GroupState last handed to the latency monitor
+		if group.Group == "ClashPulse - Netflix" {
+			t.Fatal("service group is delay-probed by the latency monitor")
+		}
+	}
+	if err := service.execute(ipc.Command{Kind: ipc.CommandSetAutoFastest, Automation: &ipc.AutomationSetting{Enabled: true}}); err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(service.store.Snapshot().Monitor.AutomatedGroups, opaqueID("ClashPulse - Netflix")) {
+		t.Fatal("set_auto_fastest opted a service group into lowest-latency switching")
+	}
+}
 ```
 
-`newServiceTestRuntime`, `serviceProfile`, `findService`, and `controller.selected` are test helpers to add in this file on top of the existing fake controller; `applyServiceBatch` and the `execute` method name must match the real ones in `app/commands.go` (read it first and rename here if `execute` is called differently).
+`newServiceTestRuntime`, `serviceProfile`, `findService`, `controller.selected`, and `monitorGroupsForTest` (returns the `[]monitor.GroupState` from the last `refreshGroups`) are test helpers to add on top of the existing fake controller; `applyServiceBatch` and the `execute` method name must match the real ones in `app/commands.go` (read it first and rename here if `execute` is called differently).
 
 - [ ] **Step 2: Run to verify failure**
 
