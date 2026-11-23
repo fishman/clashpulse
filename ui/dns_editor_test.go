@@ -38,8 +38,7 @@ func TestDNSResolverAddEditRemovePreservesUnchangedEntriesUntilSnapshot(t *testi
 	}
 
 	page.update(core.DNSSnapshot{Listen: current.Listen, ResolverSets: []core.ResolverSetSnapshot{{ID: "primary", Endpoints: []string{"udp://192.0.2.53:53"}}, {ID: "backup", Endpoints: []string{"https://resolver.example/dns-query"}}}, Routes: []core.DNSRouteSnapshot{{Suffix: "example.test", ResolverSet: "backup"}}})
-	page.resolverSelect.SetSelected("backup")
-	page.editResolver.OnTapped()
+	page.resolverRows[1].edit.OnTapped()
 	page.resolverEditor.endpoints.SetText("tcp://192.0.2.54:53")
 	page.resolverEditor.dnscrypt.SetChecked(false)
 	page.resolverEditor.id.SetText("secondary")
@@ -52,14 +51,12 @@ func TestDNSResolverAddEditRemovePreservesUnchangedEntriesUntilSnapshot(t *testi
 	}
 
 	page.update(core.DNSSnapshot{Listen: current.Listen, ResolverSets: []core.ResolverSetSnapshot{{ID: "primary", Endpoints: current.ResolverSets[0].Endpoints}, {ID: "secondary", Endpoints: []string{"tcp://192.0.2.54:53"}}}, Routes: []core.DNSRouteSnapshot{{Suffix: "example.test", ResolverSet: "secondary"}}})
-	page.resolverSelect.SetSelected("secondary")
-	page.removeResolver.OnTapped()
+	page.resolverRows[1].remove.OnTapped()
 	if len(sent) != 2 {
 		t.Fatal("removed a resolver set still referenced by a route")
 	}
 	page.update(core.DNSSnapshot{Listen: current.Listen, ResolverSets: []core.ResolverSetSnapshot{{ID: "primary", Endpoints: current.ResolverSets[0].Endpoints}, {ID: "secondary", Endpoints: []string{"tcp://192.0.2.54:53"}}}, Routes: current.Routes})
-	page.resolverSelect.SetSelected("secondary")
-	page.removeResolver.OnTapped()
+	page.resolverRows[1].remove.OnTapped()
 	if len(sent) != 3 || len(sent[2].DNSRouting.ResolverSets) != 1 || sent[2].DNSRouting.ResolverSets[0].ID != "primary" || len(sent[2].DNSRouting.Routes) != 1 {
 		t.Fatalf("remove did not send full table without unrelated route loss: %+v", sent)
 	}
@@ -97,8 +94,7 @@ func TestDNSRouteAddEditRemoveUsesOneMatcherAndWaitsForSnapshot(t *testing.T) {
 	}
 
 	page.update(core.DNSSnapshot{ResolverSets: current.ResolverSets, Routes: []core.DNSRouteSnapshot{{Suffix: "example.test", ResolverSet: "primary"}, {GeoSite: "private", ResolverSet: "primary"}}})
-	page.routeSelect.SetSelected(page.routeSelect.Options[1])
-	page.editRoute.OnTapped()
+	page.routeRows[1].edit.OnTapped()
 	page.routeEditor.matcher.SetSelected("Resource ID")
 	page.routeEditor.value.SetText("managed-domains")
 	page.routeEditor.dialog.Submit()
@@ -113,8 +109,7 @@ func TestDNSRouteAddEditRemoveUsesOneMatcherAndWaitsForSnapshot(t *testing.T) {
 		t.Fatal("pending route edit changed the displayed DNS snapshot before an event")
 	}
 
-	page.routeSelect.SetSelected(page.routeSelect.Options[1])
-	page.removeRoute.OnTapped()
+	page.routeRows[1].remove.OnTapped()
 	if len(sent) != 3 || len(sent[2].DNSRouting.Routes) != 1 || sent[2].DNSRouting.Routes[0].Suffix != "example.test" {
 		t.Fatalf("remove did not preserve the remaining route: %+v", sent)
 	}
@@ -158,5 +153,52 @@ func TestDNSResolverEditorRejectsEndpointCredentials(t *testing.T) {
 	editor := &dnsResolverEditor{id: id, endpoints: endpoints, dnscrypt: widget.NewCheck("DNSCrypt", nil)}
 	if _, _, err := editor.command(core.DNSSnapshot{}); err == nil {
 		t.Fatal("resolver endpoint with credentials passed desktop validation")
+	}
+}
+
+func TestDNSRowActionsTargetTheirOwnEntry(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	window := app.NewWindow("ClashPulse")
+	var sent []ipc.Command
+	page := newDNSSettings(func(command ipc.Command) { sent = append(sent, command) }, window)
+	window.SetContent(page.view)
+	page.update(core.DNSSnapshot{
+		ResolverSets: []core.ResolverSetSnapshot{{ID: "primary", Endpoints: []string{"udp://192.0.2.53:53"}}, {ID: "backup", Endpoints: []string{"udp://192.0.2.54:53"}}},
+		Routes:       []core.DNSRouteSnapshot{{Suffix: "one.example", ResolverSet: "primary"}, {Suffix: "two.example", ResolverSet: "primary"}},
+	})
+	if len(page.resolverRows) != 2 || len(page.routeRows) != 2 {
+		t.Fatalf("rows = %d resolver, %d route; want 2 each", len(page.resolverRows), len(page.routeRows))
+	}
+
+	page.resolverRows[1].edit.OnTapped()
+	if page.resolverEditor == nil || page.resolverEditor.existingID != "backup" {
+		t.Fatal("second resolver row did not edit the second set")
+	}
+	page.resolverEditor.endpoints.SetText("udp://192.0.2.55:53")
+	page.resolverEditor.dialog.Submit()
+	if got := sent[len(sent)-1].DNSRouting.ResolverSets; len(got) != 2 || got[0].ID != "primary" || got[0].Endpoints[0] != "udp://192.0.2.53:53" || got[1].Endpoints[0] != "udp://192.0.2.55:53" {
+		t.Fatalf("resolver edit = %+v", got)
+	}
+	page.resolverRows[1].remove.OnTapped()
+	if got := sent[len(sent)-1].DNSRouting.ResolverSets; len(got) != 1 || got[0].ID != "primary" {
+		t.Fatalf("resolver remove = %+v", got)
+	}
+
+	page.routeRows[1].edit.OnTapped()
+	if page.routeEditor == nil || page.routeEditor.value.Text != "two.example" {
+		t.Fatal("second route row did not edit the second route")
+	}
+	page.routeEditor.value.SetText("three.example")
+	page.routeEditor.dialog.Submit()
+	if got := sent[len(sent)-1].DNSRouting.Routes; len(got) != 2 || got[0].Suffix != "one.example" || got[1].Suffix != "three.example" {
+		t.Fatalf("route edit = %+v", got)
+	}
+	page.routeRows[1].remove.OnTapped()
+	if got := sent[len(sent)-1].DNSRouting.Routes; len(got) != 1 || got[0].Suffix != "one.example" {
+		t.Fatalf("route remove = %+v", got)
+	}
+	if len(sent) != 4 {
+		t.Fatalf("sent %d intents, want 4", len(sent))
 	}
 }

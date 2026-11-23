@@ -20,6 +20,7 @@ func TestSettingsPanesExposeRowsAndActions(t *testing.T) {
 		"System Proxy":  {page.systemProxy, page.proxyStatus, page.mixedPort, page.proxyMode},
 		"TUN":           {page.tunEnabled, page.tunStatus, page.tunAuthorize, page.tunManual, page.tunLeftover, page.tunStack, page.tunDNSMode},
 		"Monitor":       {page.monitor, page.interval, page.threshold, page.switchPolicy, page.switchPolicyHelp, page.stability, page.urlTestDelay},
+		"DNS":           {page.dns.listener, page.dns.editListener, page.dns.addResolver, page.dns.addRoute},
 	} {
 		for i, object := range objects {
 			if !containsObject(page.sectionViews[section], object) {
@@ -31,6 +32,7 @@ func TestSettingsPanesExposeRowsAndActions(t *testing.T) {
 		"Mihomo binary": {"Choose path..."},
 		"System Proxy":  {"Change"},
 		"Monitor":       {"Change", "Edit...", "Send test"},
+		"DNS":           {"Change", "Add"},
 	} {
 		for _, text := range buttons {
 			if findSettingsButton(page.sectionViews[section], localize.T(text)) == nil {
@@ -38,9 +40,8 @@ func TestSettingsPanesExposeRowsAndActions(t *testing.T) {
 			}
 		}
 	}
-	// The section list names the pane; the four card panes repeat no bold
-	// heading.
-	for _, section := range []string{"Mihomo binary", "System Proxy", "TUN", "Monitor"} {
+	// The section list names the pane; the card panes repeat no bold heading.
+	for _, section := range []string{"Mihomo binary", "System Proxy", "TUN", "Monitor", "DNS"} {
 		if heading := boldLabels(page.sectionViews[section]); len(heading) > 0 {
 			t.Errorf("%s pane has a bold heading: %q", section, heading)
 		}

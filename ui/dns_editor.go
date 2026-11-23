@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 
@@ -20,69 +19,45 @@ import (
 )
 
 type dnsSettings struct {
-	view            fyne.CanvasObject
-	send            sendIntent
-	window          fyne.Window
-	snapshot        core.DNSSnapshot
-	refreshing      bool
-	listener        *widget.Label
-	resolverSummary *widget.Label
-	routeSummary    *widget.Label
-	resolverSelect  *widget.Select
-	routeSelect     *widget.Select
-	routeIndexes    map[string]int
-	editListener    *widget.Button
-	addResolver     *widget.Button
-	editResolver    *widget.Button
-	removeResolver  *widget.Button
-	addRoute        *widget.Button
-	editRoute       *widget.Button
-	removeRoute     *widget.Button
-	listenerEditor  *widget.Entry
-	listenerDialog  *dialog.FormDialog
-	resolverEditor  *dnsResolverEditor
-	routeEditor     *dnsRouteEditor
+	view           fyne.CanvasObject
+	send           sendIntent
+	window         fyne.Window
+	snapshot       core.DNSSnapshot
+	listener       *widget.Label
+	editListener   *widget.Button
+	addResolver    *widget.Button
+	addRoute       *widget.Button
+	resolverBody   *fyne.Container
+	routeBody      *fyne.Container
+	resolverRows   []dnsEntryRow
+	routeRows      []dnsEntryRow
+	listenerEditor *widget.Entry
+	listenerDialog *dialog.FormDialog
+	resolverEditor *dnsResolverEditor
+	routeEditor    *dnsRouteEditor
+}
+
+// dnsEntryRow is one resolver set or route row; its buttons act on that
+// entry only.
+type dnsEntryRow struct {
+	edit, remove *widget.Button
 }
 
 func newDNSSettings(send sendIntent, window fyne.Window) *dnsSettings {
-	p := &dnsSettings{send: send, window: window, routeIndexes: make(map[string]int)}
-	p.listener = widget.NewLabel(localize.T("Listen: not configured"))
-	p.resolverSummary = widget.NewLabel(localize.T("No resolver sets configured"))
-	p.resolverSummary.Wrapping = fyne.TextWrapWord
-	p.routeSummary = widget.NewLabel(localize.T("No DNS routes configured"))
-	p.routeSummary.Wrapping = fyne.TextWrapWord
-	p.editListener = widget.NewButton(localize.T("Change listener"), p.openListenerEditor)
-	p.resolverSelect = widget.NewSelect(nil, func(string) {
-		if !p.refreshing {
-			p.updateButtons()
-		}
-	})
-	p.resolverSelect.PlaceHolder = localize.T("Select resolver set")
-	p.routeSelect = widget.NewSelect(nil, func(string) {
-		if !p.refreshing {
-			p.updateButtons()
-		}
-	})
-	p.routeSelect.PlaceHolder = localize.T("Select DNS route")
-	p.addResolver = widget.NewButton(localize.T("Add resolver set"), func() { p.openResolverEditor(nil) })
-	p.editResolver = widget.NewButton(localize.T("Edit resolver set"), p.editSelectedResolver)
-	p.removeResolver = widget.NewButton(localize.T("Remove resolver set"), p.removeSelectedResolver)
-	p.addRoute = widget.NewButton(localize.T("Add DNS route"), func() { p.openRouteEditor(-1) })
-	p.editRoute = widget.NewButton(localize.T("Edit DNS route"), p.editSelectedRoute)
-	p.removeRoute = widget.NewButton(localize.T("Remove DNS route"), p.removeSelectedRoute)
-	p.view = container.NewVBox(
-		widget.NewLabelWithStyle(localize.T("DNS policy"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		container.NewHBox(widget.NewLabel(localize.T("DNS listener")), p.listener, p.editListener),
-		widget.NewLabelWithStyle(localize.T("Resolver sets"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		p.resolverSummary,
-		p.resolverSelect,
-		container.NewHBox(p.addResolver, p.editResolver, p.removeResolver),
-		widget.NewLabelWithStyle(localize.T("DNS routes"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		p.routeSummary,
-		p.routeSelect,
-		container.NewHBox(p.addRoute, p.editRoute, p.removeRoute),
+	p := &dnsSettings{send: send, window: window}
+	p.listener = widget.NewLabel(dnsListenLabel(""))
+	p.editListener = widget.NewButton(localize.T("Change"), p.openListenerEditor)
+	p.addResolver = widget.NewButton(localize.T("Add"), func() { p.openResolverEditor(nil) })
+	p.addRoute = widget.NewButton(localize.T("Add"), func() { p.openRouteEditor(-1) })
+	p.resolverBody = cardBody()
+	p.routeBody = cardBody()
+	p.setResolverRows()
+	p.setRouteRows()
+	p.view = settingsPane(
+		settingsCard(localize.T("Listener"), nil, cardBody(settingRow(localize.T("DNS listener"), p.listener, []fyne.CanvasObject{p.editListener}))),
+		settingsCard(localize.T("Resolver sets"), p.addResolver, p.resolverBody),
+		settingsCard(localize.T("DNS routes"), p.addRoute, p.routeBody),
 	)
-	p.updateButtons()
 	return p
 }
 
@@ -93,92 +68,61 @@ func (p *dnsSettings) update(snapshot core.DNSSnapshot) {
 	if !listenerChanged && !resolversChanged && !routesChanged {
 		return
 	}
-	selectedResolver := p.resolverSelect.Selected
-	var selectedRoute *core.DNSRouteSnapshot
-	if index, exists := p.routeIndexes[p.routeSelect.Selected]; exists && index >= 0 && index < len(p.snapshot.Routes) {
-		route := p.snapshot.Routes[index]
-		selectedRoute = &route
-	}
 	p.snapshot = cloneDNSSnapshot(snapshot)
 	if listenerChanged {
-		p.listener.SetText(fmt.Sprintf(localize.T("Listen: %s"), dnsListenLabel(snapshot.Listen)))
+		p.listener.SetText(dnsListenLabel(snapshot.Listen))
 	}
-	p.refreshing = true
 	if resolversChanged {
-		lines := make([]string, 0, len(snapshot.ResolverSets))
-		p.resolverSelect.Options = make([]string, 0, len(snapshot.ResolverSets))
-		for _, set := range snapshot.ResolverSets {
-			endpoints := make([]string, len(set.Endpoints))
-			for i, endpoint := range set.Endpoints {
-				endpoints[i] = dnsEndpointLabel(endpoint)
-			}
-			detail := fmt.Sprintf(localize.T("%s: %s"), set.ID, strings.Join(endpoints, localize.T(", ")))
-			if set.DNSCrypt {
-				detail += localize.T(" (DNSCrypt)")
-			}
-			lines = append(lines, detail)
-			p.resolverSelect.Options = append(p.resolverSelect.Options, set.ID)
-		}
-		if len(lines) == 0 {
-			p.resolverSummary.SetText(localize.T("No resolver sets configured"))
-		} else {
-			p.resolverSummary.SetText(strings.Join(lines, "\n"))
-		}
-		p.resolverSelect.Selected = selectedResolver
-		if !containsString(p.resolverSelect.Options, selectedResolver) {
-			p.resolverSelect.Selected = ""
-		}
-		p.resolverSelect.Refresh()
+		p.setResolverRows()
 	}
 	if routesChanged {
-		lines := make([]string, 0, len(snapshot.Routes))
-		p.routeIndexes = make(map[string]int, len(snapshot.Routes))
-		p.routeSelect.Options = make([]string, 0, len(snapshot.Routes))
-		for i, route := range snapshot.Routes {
-			label := dnsRouteDetail(route)
-			lines = append(lines, label)
-			option := fmt.Sprintf(localize.T("%d. %s"), i+1, label)
-			p.routeSelect.Options = append(p.routeSelect.Options, option)
-			p.routeIndexes[option] = i
-		}
-		if len(lines) == 0 {
-			p.routeSummary.SetText(localize.T("No DNS routes configured"))
-		} else {
-			p.routeSummary.SetText(strings.Join(lines, "\n"))
-		}
-		p.routeSelect.Selected = ""
-		if selectedRoute != nil {
-			for i, route := range snapshot.Routes {
-				if route == *selectedRoute {
-					p.routeSelect.Selected = fmt.Sprintf(localize.T("%d. %s"), i+1, dnsRouteDetail(route))
-					break
-				}
-			}
-		}
-		p.routeSelect.Refresh()
+		p.setRouteRows()
 	}
-	p.refreshing = false
-	p.updateButtons()
 }
 
-func (p *dnsSettings) updateButtons() {
-	if p == nil || p.resolverSelect == nil || p.routeSelect == nil {
-		return
+// entryRow builds a row whose Edit and Remove buttons act on that row's entry.
+func (p *dnsSettings) entryRow(name, detail string, edit, remove func()) (fyne.CanvasObject, dnsEntryRow) {
+	entry := dnsEntryRow{edit: widget.NewButton(localize.T("Edit"), edit), remove: widget.NewButton(localize.T("Remove"), remove)}
+	value := widget.NewLabel(detail)
+	return settingRow(name, value, []fyne.CanvasObject{entry.edit, entry.remove}), entry
+}
+
+func (p *dnsSettings) setResolverRows() {
+	p.resolverRows = make([]dnsEntryRow, 0, len(p.snapshot.ResolverSets))
+	rows := make([]fyne.CanvasObject, 0, len(p.snapshot.ResolverSets))
+	for _, set := range p.snapshot.ResolverSets {
+		endpoints := make([]string, len(set.Endpoints))
+		for i, endpoint := range set.Endpoints {
+			endpoints[i] = dnsEndpointLabel(endpoint)
+		}
+		detail := strings.Join(endpoints, localize.T(", "))
+		if set.DNSCrypt {
+			detail += localize.T(" (DNSCrypt)")
+		}
+		id := set.ID
+		row, entry := p.entryRow(id, detail, func() { p.editResolver(id) }, func() { p.removeResolver(id) })
+		rows = append(rows, row)
+		p.resolverRows = append(p.resolverRows, entry)
 	}
-	if p.resolverSelect.Selected != "" && findResolverSet(p.snapshot, p.resolverSelect.Selected) >= 0 {
-		p.editResolver.Enable()
-		p.removeResolver.Enable()
-	} else {
-		p.editResolver.Disable()
-		p.removeResolver.Disable()
+	if len(rows) == 0 {
+		rows = append(rows, settingRow(localize.T("No resolver sets configured"), nil, nil))
 	}
-	if _, exists := p.routeIndexes[p.routeSelect.Selected]; p.routeSelect.Selected != "" && exists {
-		p.editRoute.Enable()
-		p.removeRoute.Enable()
-	} else {
-		p.editRoute.Disable()
-		p.removeRoute.Disable()
+	setCardRows(p.resolverBody, rows...)
+}
+
+func (p *dnsSettings) setRouteRows() {
+	p.routeRows = make([]dnsEntryRow, 0, len(p.snapshot.Routes))
+	rows := make([]fyne.CanvasObject, 0, len(p.snapshot.Routes))
+	for i, route := range p.snapshot.Routes {
+		index := i
+		row, entry := p.entryRow(dnsRouteDetail(route), "", func() { p.editRoute(index) }, func() { p.removeRoute(index) })
+		rows = append(rows, row)
+		p.routeRows = append(p.routeRows, entry)
 	}
+	if len(rows) == 0 {
+		rows = append(rows, settingRow(localize.T("No DNS routes configured"), nil, nil))
+	}
+	setCardRows(p.routeBody, rows...)
 }
 
 func (p *dnsSettings) openListenerEditor() {
@@ -203,8 +147,8 @@ func (p *dnsSettings) openListenerEditor() {
 	p.listenerDialog.Show()
 }
 
-func (p *dnsSettings) editSelectedResolver() {
-	index := findResolverSet(p.snapshot, p.resolverSelect.Selected)
+func (p *dnsSettings) editResolver(id string) {
+	index := findResolverSet(p.snapshot, id)
 	if index < 0 {
 		return
 	}
@@ -259,8 +203,7 @@ func (p *dnsSettings) openResolverEditor(existing *core.ResolverSetSnapshot) {
 	e.dialog.Show()
 }
 
-func (p *dnsSettings) removeSelectedResolver() {
-	id := p.resolverSelect.Selected
+func (p *dnsSettings) removeResolver(id string) {
 	index := findResolverSet(p.snapshot, id)
 	if index < 0 {
 		return
@@ -276,9 +219,8 @@ func (p *dnsSettings) removeSelectedResolver() {
 	p.send(ipc.Command{Kind: ipc.CommandSetDNSRouting, DNSRouting: edit})
 }
 
-func (p *dnsSettings) editSelectedRoute() {
-	index, exists := p.routeIndexes[p.routeSelect.Selected]
-	if !exists || index < 0 || index >= len(p.snapshot.Routes) {
+func (p *dnsSettings) editRoute(index int) {
+	if index < 0 || index >= len(p.snapshot.Routes) {
 		return
 	}
 	p.openRouteEditor(index)
@@ -340,9 +282,8 @@ func (p *dnsSettings) openRouteEditor(index int) {
 	e.dialog.Show()
 }
 
-func (p *dnsSettings) removeSelectedRoute() {
-	index, exists := p.routeIndexes[p.routeSelect.Selected]
-	if !exists || index < 0 || index >= len(p.snapshot.Routes) {
+func (p *dnsSettings) removeRoute(index int) {
+	if index < 0 || index >= len(p.snapshot.Routes) {
 		return
 	}
 	edit := dnsRoutingEdit(p.snapshot)
@@ -631,13 +572,4 @@ func validDNSRuleToken(value string) bool {
 		}
 	}
 	return true
-}
-
-func containsString(values []string, value string) bool {
-	for _, candidate := range values {
-		if candidate == value {
-			return true
-		}
-	}
-	return false
 }

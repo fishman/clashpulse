@@ -567,11 +567,11 @@ other = "活动记录"
 ["Close"]
 other = "关闭"
 
-["Listen: not configured"]
-other = "监听：未配置"
+["Listener"]
+other = "监听地址"
 
-["Listen: %s"]
-other = "监听：%s"
+["Remove"]
+other = "移除"
 
 ["No resolver sets configured"]
 other = "尚未配置解析器组"
@@ -579,23 +579,11 @@ other = "尚未配置解析器组"
 ["No DNS routes configured"]
 other = "尚未配置 DNS 路由"
 
-["Change listener"]
-other = "更改监听地址"
-
-["Select resolver set"]
-other = "选择解析器组"
-
-["Select DNS route"]
-other = "选择 DNS 路由"
-
 ["Add resolver set"]
 other = "添加解析器组"
 
 ["Edit resolver set"]
 other = "编辑解析器组"
-
-["Remove resolver set"]
-other = "移除解析器组"
 
 ["Add DNS route"]
 other = "添加 DNS 路由"
@@ -603,29 +591,17 @@ other = "添加 DNS 路由"
 ["Edit DNS route"]
 other = "编辑 DNS 路由"
 
-["Remove DNS route"]
-other = "移除 DNS 路由"
-
-["DNS policy"]
-other = "DNS 策略"
-
 ["Resolver sets"]
 other = "解析器组"
 
 ["DNS routes"]
 other = "DNS 路由"
 
-["%s: %s"]
-other = "%s：%s"
-
 [", "]
 other = "，"
 
 [" (DNSCrypt)"]
 other = "（DNSCrypt）"
-
-["%d. %s"]
-other = "%d. %s"
 
 ["127.0.0.1:5353 or [::1]:5353"]
 other = "127.0.0.1:5353 或 [::1]:5353"

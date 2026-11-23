@@ -85,31 +85,33 @@ func TestSettingsNavigationCollapsesOnlyWhenSectionsCannotFit(t *testing.T) {
 			t.Fatalf("initial selection marks %q = %t", e.id, e.selected)
 		}
 	}
-	test.Tap(sectionEntry(t, page, "DNS"))
-	if page.sectionSelect.Selected != "DNS" || !page.dns.view.Visible() || !sectionEntry(t, page, "DNS").selected || sectionEntry(t, page, "Mihomo binary").selected {
-		t.Fatal("section list did not select the DNS section")
+	// Monitor is the widest pane and DNS the narrowest: at this width only
+	// DNS fits beside the section list.
+	test.Tap(sectionEntry(t, page, "Monitor"))
+	if page.sectionSelect.Selected != "Monitor" || !page.sectionViews["Monitor"].Visible() || !sectionEntry(t, page, "Monitor").selected || sectionEntry(t, page, "Mihomo binary").selected {
+		t.Fatal("section list did not select the Monitor section")
 	}
-	w.Resize(fyne.NewSize(480, 640))
-	if page.sectionList.Visible() || !page.sectionSelect.Visible() || page.sectionSelect.Selected != "DNS" || !page.dns.view.Visible() {
-		t.Fatal("collapsed navigation lost the DNS section")
+	w.Resize(fyne.NewSize(430, 640))
+	if page.sectionList.Visible() || !page.sectionSelect.Visible() || page.sectionSelect.Selected != "Monitor" || !page.sectionViews["Monitor"].Visible() {
+		t.Fatal("collapsed navigation lost the Monitor section")
 	}
-	if page.sectionViews["Mihomo binary"].MinSize().Width > page.sectionContent.Size().Width {
-		t.Fatal("binary actions overflow the compact settings viewport")
+	if page.sectionViews["Monitor"].MinSize().Width > page.sectionContent.Size().Width {
+		t.Fatal("monitor controls overflow the compact settings viewport")
 	}
-	page.sectionSelect.SetSelected("Mihomo binary")
+	page.sectionSelect.SetSelected("DNS")
 	if !page.sectionList.Visible() || page.sectionSelect.Visible() {
 		t.Fatal("settings switched to dropdown despite enough room for the section list")
 	}
-	page.sectionSelect.SetSelected("DNS")
-	if page.sectionList.Visible() || page.sectionContent.Size().Width < page.dns.view.MinSize().Width {
-		t.Fatal("DNS controls are clipped instead of collapsing the section list")
-	}
 	page.sectionSelect.SetSelected("Monitor")
-	if !sectionEntry(t, page, "Monitor").selected || page.dns.view.Visible() || !page.sectionViews["Monitor"].Visible() {
+	if page.sectionList.Visible() || page.sectionContent.Size().Width < page.sectionViews["Monitor"].MinSize().Width {
+		t.Fatal("Monitor controls are clipped instead of collapsing the section list")
+	}
+	page.sectionSelect.SetSelected("DNS")
+	if !sectionEntry(t, page, "DNS").selected || !page.dns.view.Visible() || page.sectionViews["Monitor"].Visible() {
 		t.Fatal("dropdown did not change sections")
 	}
 	w.Resize(fyne.NewSize(1200, 640))
-	if !page.sectionList.Visible() || page.sectionSelect.Visible() || !sectionEntry(t, page, "Monitor").selected {
+	if !page.sectionList.Visible() || page.sectionSelect.Visible() || !sectionEntry(t, page, "DNS").selected {
 		t.Fatal("expanding settings did not restore the selected section")
 	}
 }
