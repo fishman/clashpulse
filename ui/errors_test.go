@@ -10,7 +10,6 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/test"
-	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/localize"
@@ -57,10 +56,43 @@ func TestActivityDialogShowsSanitizedSnapshot(t *testing.T) {
 	if view.activity.list.Length() != 1 {
 		t.Fatal("open activity did not follow new snapshot")
 	}
-	item := view.activity.list.CreateItem().(*widget.RichText)
+	item := view.activity.list.CreateItem().(*activityRow)
 	view.activity.list.UpdateItem(0, item)
-	if text := item.String(); !strings.Contains(text, "recovered") || !strings.Contains(text, "feed") || strings.Contains(text, "HTTP 406") {
+	if text := item.text.Text; !strings.Contains(text, "working again") || !strings.Contains(text, "feed") || strings.Contains(text, "HTTP 406") {
 		t.Fatalf("activity row did not update: %q", text)
+	}
+	if item.level.Importance != widget.SuccessImportance {
+		t.Fatalf("recovery level importance = %v, want success", item.level.Importance)
+	}
+}
+
+func TestActivityListsNewestFirstAndFiltersProblems(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	view := newActivityView()
+	view.update([]core.DiagnosticSnapshot{
+		{At: 100, Severity: "error", Kind: "refresh_subscription", SourceID: "feed", Message: "HTTP 429"},
+		{At: 200, Severity: "info", Kind: "refresh_subscription", SourceID: "feed", Message: "recovered"},
+		{At: 300, Severity: "warning", Kind: "stream_probe", SourceID: "node", Message: "stream.outcome.reset"},
+	}, nil)
+	var levels []string
+	for _, row := range view.rows {
+		levels = append(levels, row.level)
+	}
+	if got := strings.Join(levels, ","); got != "warning,ok,error" {
+		t.Fatalf("row levels = %s, want newest first", got)
+	}
+	view.filter.SetChecked(true)
+	levels = levels[:0]
+	for _, row := range view.rows {
+		levels = append(levels, row.level)
+	}
+	if got := strings.Join(levels, ","); got != "warning,error" {
+		t.Fatalf("problem rows = %s, want only warning and error", got)
+	}
+	view.update([]core.DiagnosticSnapshot{{At: 400, Severity: "info", Kind: "refresh_subscription", SourceID: "feed", Message: "recovered"}}, nil)
+	if len(view.rows) != 0 || !view.empty.Visible() || view.empty.Text != "No problems recorded" {
+		t.Fatalf("filtered empty state: rows %d, label %q visible %v", len(view.rows), view.empty.Text, view.empty.Visible())
 	}
 }
 
@@ -169,6 +201,13 @@ func rowLabels(object fyne.CanvasObject) []string {
 		return []string{object.String()}
 	case *container.Scroll:
 		return rowLabels(object.Content)
+	case *widget.Accordion:
+		var labels []string
+		for _, item := range object.Items {
+			labels = append(labels, item.Title)
+			labels = append(labels, rowLabels(item.Detail)...)
+		}
+		return labels
 	case *widget.Form:
 		var labels []string
 		for _, field := range object.Items {
@@ -244,23 +283,22 @@ func TestActivityNamesStreamProbeNodeByLabel(t *testing.T) {
 }
 
 func activityText(entry core.DiagnosticSnapshot, proxies []core.ProxySnapshot) string {
-	return activityRow(activitySegments(entry, proxies)).String()
+	view := newActivityView()
+	view.update([]core.DiagnosticSnapshot{entry}, proxies)
+	row := view.newRow()
+	row.set(view.rows[0])
+	return row.level.Text + " " + row.text.Text
 }
 
-func TestActivityHighlightsErrorSeverity(t *testing.T) {
-	color := func(severity string) fyne.ThemeColorName {
-		for _, segment := range activitySegments(core.DiagnosticSnapshot{At: 100, Severity: severity, Kind: "refresh_subscription", SourceID: "feed", Message: "fetch failed"}, nil) {
-			if text := segment.(*widget.TextSegment); text.Text == localize.Code("diagnostic.severity", severity) {
-				return text.Style.ColorName
-			}
+func TestActivityHighlightsSeverity(t *testing.T) {
+	view := newActivityView()
+	for severity, want := range map[string]widget.Importance{"error": widget.DangerImportance, "warning": widget.WarningImportance, "info": widget.LowImportance} {
+		view.update([]core.DiagnosticSnapshot{{At: 100, Severity: severity, Kind: "refresh_subscription", SourceID: "feed", Message: "fetch failed"}}, nil)
+		row := view.newRow()
+		row.set(view.rows[0])
+		if row.level.Importance != want || row.level.Text != localize.Code("diagnostic.severity", severity) {
+			t.Fatalf("%s level = %q importance %v, want %v", severity, row.level.Text, row.level.Importance, want)
 		}
-		return ""
-	}
-	if got := color("error"); got != theme.ColorNameError {
-		t.Fatalf("error severity color = %q", got)
-	}
-	if got := color("info"); got == theme.ColorNameError || got == "" {
-		t.Fatalf("info severity color = %q", got)
 	}
 }
 

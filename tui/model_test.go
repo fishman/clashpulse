@@ -720,7 +720,7 @@ func TestJobsProgressAndCommandResultDoNotChangeFocus(t *testing.T) {
 	model.Tab = TabProxies
 	model.Focus = FocusContent
 	model = model.Apply(eventFromJSON(t, `{"Snapshot":{"Jobs":[{"ID":"j","Kind":"subscription","State":"running"}]}}`))
-	if got := model.Progress(); !strings.Contains(got, "subscription: running") {
+	if got := model.Progress(); !strings.Contains(got, "Subscription: running") {
 		t.Fatalf("progress = %q", got)
 	}
 	model = model.CommandQueued().CommandResult(false, errors.New("unavailable"))

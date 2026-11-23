@@ -1,9 +1,9 @@
 package core
 
 import (
-	"slices"
-
 	"fmt"
+	"net/http"
+	"slices"
 
 	"github.com/fishman/clashpulse/localize"
 )
@@ -303,6 +303,48 @@ func DiagnosticSource(proxies []ProxySnapshot, diagnostic DiagnosticSnapshot) st
 		return diagnostic.SourceID
 	}
 	return ProxyLabel(proxies, diagnostic.SourceID)
+}
+
+// DiagnosticText renders a diagnostic as one localized sentence: the
+// operation and its source, then what happened, e.g.
+// "Refresh subscription main: failed: HTTP 429 Too Many Requests".
+func DiagnosticText(proxies []ProxySnapshot, diagnostic DiagnosticSnapshot) string {
+	return DiagnosticSubject(proxies, diagnostic) + ": " + DiagnosticOutcome(diagnostic)
+}
+
+// DiagnosticSubject names the operation and its source, e.g.
+// "Refresh subscription main".
+func DiagnosticSubject(proxies []ProxySnapshot, diagnostic DiagnosticSnapshot) string {
+	subject := localize.Code("operation", diagnostic.Kind)
+	if source := DiagnosticSource(proxies, diagnostic); source != "" {
+		subject += " " + source
+	}
+	return subject
+}
+
+// DiagnosticOutcome says what happened, e.g. "failed: HTTP 429 Too Many
+// Requests"; a narrow client shows it alone when the subject does not fit.
+func DiagnosticOutcome(diagnostic DiagnosticSnapshot) string {
+	switch {
+	case diagnostic.Severity == "error" && diagnostic.Message == "operation failed":
+		return localize.T("failed")
+	case diagnostic.Severity == "error":
+		return fmt.Sprintf(localize.T("failed: %s"), diagnosticDetail(diagnostic.Message))
+	case diagnostic.Message == "recovered":
+		return localize.T("working again")
+	}
+	return localize.T(diagnostic.Message)
+}
+
+// diagnosticDetail names an HTTP status the service reported only by number.
+func diagnosticDetail(message string) string {
+	var code int
+	if n, err := fmt.Sscanf(message, "HTTP %d", &code); n == 1 && err == nil {
+		if text := http.StatusText(code); text != "" && message == fmt.Sprintf("HTTP %d", code) {
+			return message + " " + text
+		}
+	}
+	return localize.T(message)
 }
 
 // ProxyLabel names a node for display: its masked row label, or the

@@ -258,7 +258,7 @@ func TestRenderLogKeepsBottomStatus(t *testing.T) {
 	for _, size := range []struct{ width, height int }{{80, 12}, {32, 9}} {
 		rows := mockRender(t, model, size.width, size.height)
 		text := strings.Join(rows[:size.height-1], "\n")
-		if !strings.Contains(text, "HTTP 406") || !strings.Contains(text, "recovered") || !strings.Contains(text, "feed") {
+		if !strings.Contains(text, "HTTP 406") || !strings.Contains(text, "working again") || !strings.Contains(text, "feed") {
 			t.Fatalf("%d-column activity lost event details: %q", size.width, text)
 		}
 		if !strings.Contains(rows[size.height-1], "IPC connected") {

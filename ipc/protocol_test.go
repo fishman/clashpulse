@@ -101,6 +101,15 @@ func TestDiagnosticSnapshotBoundsAndSafety(t *testing.T) {
 	if err := validateSnapshot(valid); err != nil {
 		t.Fatal(err)
 	}
+	for _, severity := range []string{"info", "warning"} {
+		entry := core.Snapshot{Diagnostics: []core.DiagnosticSnapshot{{At: 1, Severity: severity, Kind: "stream_probe", SourceID: "feed", Message: "stream.outcome.reset"}}}
+		if err := validateSnapshot(entry); err != nil {
+			t.Fatalf("%s diagnostic rejected: %v", severity, err)
+		}
+	}
+	if validateSnapshot(core.Snapshot{Diagnostics: []core.DiagnosticSnapshot{{At: 1, Severity: "debug", Kind: "service", Message: "x"}}}) == nil {
+		t.Fatal("unknown diagnostic severity accepted")
+	}
 	valid.Diagnostics[0].Message = strings.Repeat("x", 161)
 	if validateSnapshot(valid) == nil {
 		t.Fatal("oversized diagnostic message accepted")

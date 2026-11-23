@@ -111,13 +111,15 @@ type desktopUI struct {
 	overview         *overviewView
 	overridesRows    *fyne.Container
 	overridesSection *fyne.Container
-	overrideLabels   []*widget.Label
-	proxyPage        *proxyPage
-	subPage          *subscriptionPage
-	resourcePage     *resourcePage
-	filterPage       *filterPage
-	settingsPage     *settingsPage
-	activity         *activityView
+	// overridesFold starts collapsed so the activity log keeps the space.
+	overridesFold  *widget.Accordion
+	overrideLabels []*widget.Label
+	proxyPage      *proxyPage
+	subPage        *subscriptionPage
+	resourcePage   *resourcePage
+	filterPage     *filterPage
+	settingsPage   *settingsPage
+	activity       *activityView
 }
 
 func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopUI {
@@ -140,7 +142,8 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 	d.overrideLabels[0].SetText(localize.T("No managed overrides"))
 	d.overrideLabels[0].Show()
 	d.overridesRows = container.NewVBox(rows...)
-	d.overridesSection = container.NewVBox(widget.NewLabelWithStyle(localize.T("Generated config changes"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), d.overridesRows)
+	d.overridesFold = widget.NewAccordion(widget.NewAccordionItem(localize.T("Generated config changes"), d.overridesRows))
+	d.overridesSection = container.NewVBox(d.overridesFold)
 	d.proxyPage = newProxyPage(d.enqueue)
 	d.subPage = newSubscriptionPage(d.enqueue, w)
 	d.resourcePage = newResourcePage(d.enqueue, w)

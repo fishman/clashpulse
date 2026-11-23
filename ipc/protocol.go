@@ -16,7 +16,7 @@ import (
 
 const (
 	// ProtocolVersion is negotiated in the first frame on every connection.
-	ProtocolVersion uint16 = 12
+	ProtocolVersion uint16 = 13
 	// MaxFrameSize bounds both incoming and outgoing JSON frames.
 	MaxFrameSize = 1 << 20
 )
@@ -494,7 +494,7 @@ func validateSnapshot(snapshot core.Snapshot) error {
 		}
 	}
 	for _, item := range snapshot.Diagnostics {
-		if item.At < 0 || (item.Severity != "error" && item.Severity != "info") || !stableIDPattern.MatchString(item.Kind) ||
+		if item.At < 0 || (item.Severity != "error" && item.Severity != "warning" && item.Severity != "info") || !stableIDPattern.MatchString(item.Kind) ||
 			(item.SourceID != "" && !stableIDPattern.MatchString(item.SourceID)) || len(item.Message) == 0 || len(item.Message) > 160 ||
 			strings.ContainsAny(item.Message, "\x00\r\n") || strings.Contains(item.Message, "://") {
 			return errors.New("ipc: invalid diagnostic snapshot")

@@ -117,3 +117,99 @@ other = "Failover"
 
 ["monitor.policy.steady_stream"]
 other = "Steady stream"
+
+["operation.stream_probe"]
+other = "Stream test"
+
+["operation.start"]
+other = "Start service"
+
+["operation.stop"]
+other = "Stop service"
+
+["operation.restart"]
+other = "Restart service"
+
+["operation.reload_configuration"]
+other = "Reload configuration"
+
+["operation.update_configuration"]
+other = "Update settings"
+
+["operation.manual_probe"]
+other = "Latency test"
+
+["operation.select_group"]
+other = "Select node"
+
+["operation.set_automation"]
+other = "Automatic switching"
+
+["operation.refresh_subscription"]
+other = "Refresh subscription"
+
+["operation.activate_subscription"]
+other = "Activate subscription"
+
+["operation.delete_subscription"]
+other = "Delete subscription"
+
+["operation.put_subscription"]
+other = "Save subscription"
+
+["operation.refresh_resource"]
+other = "Refresh data resource"
+
+["operation.refresh_filter"]
+other = "Refresh filter list"
+
+["operation.put_resource"]
+other = "Save data resource"
+
+["operation.put_filter"]
+other = "Save filter list"
+
+["operation.set_dns_routing"]
+other = "DNS routing"
+
+["operation.test_notification"]
+other = "Test notification"
+
+["operation.set_auto_fastest"]
+other = "Auto-select fastest"
+
+["operation.subscription"]
+other = "Subscription"
+
+["operation.resource"]
+other = "Data resource"
+
+["operation.config"]
+other = "Configuration"
+
+["operation.config_reload"]
+other = "Configuration reload"
+
+["operation.system_proxy"]
+other = "System proxy"
+
+["operation.notification"]
+other = "Notification"
+
+["operation.mihomo"]
+other = "Mihomo"
+
+["operation.service"]
+other = "Service"
+
+["diagnostic.severity.error"]
+other = "Error"
+
+["diagnostic.severity.warning"]
+other = "Warning"
+
+["diagnostic.severity.info"]
+other = "Info"
+
+["diagnostic.severity.ok"]
+other = "OK"

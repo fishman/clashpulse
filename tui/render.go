@@ -247,7 +247,7 @@ func drawLog(lines []renderLine, width, height int, model Model) {
 		if diagnostic.Severity == "error" {
 			role = roleError
 		}
-		setLine(lines, 2, localize.Code("diagnostic.severity", diagnostic.Severity)+": "+localize.T(diagnostic.Message), role)
+		setLine(lines, 2, localize.Code("diagnostic.severity", diagnostic.Severity)+": "+core.DiagnosticOutcome(diagnostic), role)
 		return
 	}
 	perEntry := 1
@@ -267,12 +267,12 @@ func drawLog(lines []renderLine, width, height int, model Model) {
 			role = roleError
 		}
 		if perEntry == 1 {
-			setLine(lines, y, timeLabel(diagnostic.At)+" "+localize.Code("diagnostic.severity", diagnostic.Severity)+" "+localize.Code("operation", diagnostic.Kind)+" "+core.DiagnosticSource(model.snapshot.Snapshot.Proxies, diagnostic)+" "+localize.T(diagnostic.Message), role)
+			setLine(lines, y, timeLabel(diagnostic.At)+" "+localize.Code("diagnostic.severity", diagnostic.Severity)+" "+core.DiagnosticText(model.snapshot.Snapshot.Proxies, diagnostic), role)
 			y++
 			continue
 		}
-		setLine(lines, y, time.Unix(diagnostic.At, 0).UTC().Format("15:04:05Z")+" "+localize.Code("diagnostic.severity", diagnostic.Severity), role)
-		setLine(lines, y+1, localize.Code("operation", diagnostic.Kind)+" "+core.DiagnosticSource(model.snapshot.Snapshot.Proxies, diagnostic)+" "+localize.T(diagnostic.Message), role)
+		setLine(lines, y, time.Unix(diagnostic.At, 0).UTC().Format("15:04:05Z")+" "+localize.Code("diagnostic.severity", diagnostic.Severity)+" "+core.DiagnosticSubject(model.snapshot.Snapshot.Proxies, diagnostic), role)
+		setLine(lines, y+1, core.DiagnosticOutcome(diagnostic), role)
 		y += 2
 	}
 }

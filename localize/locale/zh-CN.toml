@@ -396,3 +396,27 @@ other = "%d/%d 次下载完成"
 
 ["%d KB/s"]
 other = "%d KB/s"
+
+["diagnostic.severity.warning"]
+other = "警告"
+
+["diagnostic.severity.ok"]
+other = "正常"
+
+["failed"]
+other = "失败"
+
+["failed: %s"]
+other = "失败：%s"
+
+["working again"]
+other = "已恢复正常"
+
+["Problems only"]
+other = "仅显示问题"
+
+["No problems recorded"]
+other = "没有记录到问题"
+
+["No activity yet"]
+other = "暂无活动记录"

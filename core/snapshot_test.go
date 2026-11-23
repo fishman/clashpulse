@@ -163,3 +163,21 @@ func TestProxyLabel(t *testing.T) {
 		}
 	}
 }
+
+func TestDiagnosticTextNamesOperationSourceAndOutcome(t *testing.T) {
+	proxies := []ProxySnapshot{{ID: "0123456789abcdef", Label: "Node 3"}}
+	for _, tc := range []struct {
+		entry DiagnosticSnapshot
+		want  string
+	}{
+		{DiagnosticSnapshot{Severity: "error", Kind: "refresh_subscription", SourceID: "main", Message: "HTTP 429"}, "Refresh subscription main: failed: HTTP 429 Too Many Requests"},
+		{DiagnosticSnapshot{Severity: "error", Kind: "refresh_resource", SourceID: "geoip", Message: "operation failed"}, "Refresh data resource geoip: failed"},
+		{DiagnosticSnapshot{Severity: "info", Kind: "refresh_subscription", SourceID: "main", Message: "recovered"}, "Refresh subscription main: working again"},
+		{DiagnosticSnapshot{Severity: "warning", Kind: "stream_probe", SourceID: "0123456789abcdef", Message: "stream.outcome.reset"}, "Stream test Node 3: download reset"},
+		{DiagnosticSnapshot{Severity: "error", Kind: "service", Message: "HTTP 4290"}, "Service: failed: HTTP 4290"},
+	} {
+		if got := DiagnosticText(proxies, tc.entry); got != tc.want {
+			t.Errorf("DiagnosticText(%+v) = %q, want %q", tc.entry, got, tc.want)
+		}
+	}
+}

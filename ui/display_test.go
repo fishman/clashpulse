@@ -215,6 +215,7 @@ func TestConfigOverrideLogPanelRowsDoNotOverlap(t *testing.T) {
 	view := newDesktopUI(t.Context(), "", w)
 	view.postSnapshot(core.Snapshot{ConfigOverrides: []core.ConfigOverrideSnapshot{{Key: "mixed-port", Change: "replaced"}, {Key: "external-controller", Change: "replaced"}, {Key: "secret", Change: "added"}, {Key: "allow-lan", Change: "replaced"}, {Key: "dns.listen", Change: "replaced"}}})
 	view.openActivity()
+	view.overridesFold.Open(0)
 	fyne.DoAndWait(func() {})
 	_ = w.Canvas().Capture()
 	if view.overridesRows.Size().Height < view.overridesRows.MinSize().Height {
@@ -244,6 +245,7 @@ func TestConfigOverrideLogPanelFitsNarrowWindow(t *testing.T) {
 	view := newDesktopUI(t.Context(), "", w)
 	view.postSnapshot(core.Snapshot{ConfigOverrides: []core.ConfigOverrideSnapshot{{Key: "external-controller", Change: "replaced"}}})
 	view.openActivity()
+	view.overridesFold.Open(0)
 	fyne.DoAndWait(func() {})
 	_ = w.Canvas().Capture()
 	if view.overridesRows.Size().Width > w.Canvas().Size().Width {
