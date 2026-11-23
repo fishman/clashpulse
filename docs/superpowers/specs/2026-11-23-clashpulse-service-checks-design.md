@@ -28,13 +28,20 @@ nothing and downloads nothing.
 | URL | Size | Signal position |
 |---|---|---|
 | `https://gemini.google.com` | 917,028 bytes | region marker `,2,1,200,"` at byte 790,387 |
-| `https://www.youtube.com/premium?hl=en` (after redirects) | 1,018,981 bytes | `"GL":"` at byte 59,683; `country-code` at 836,211 |
+| `https://www.youtube.com/premium?hl=en` | first response `302`; 1,018,981 bytes after following it to `www.youtube.com` | `"GL":"` at byte 59,683; `country-code` at 836,211 |
 
 The Cloudflare trace endpoints (`/cdn-cgi/trace`) return a few hundred bytes
 of `key=value` lines including `loc=`. The reference client
 (`references/clash-verge-rev/crates/clash-verge-media-unlock`) supplied the
 check URLs and blocked lists below; ClashPulse reuses the signals, not the
 code.
+
+## Verified against Mihomo v1.19.31 (installed binary, `mihomo -t`)
+
+A configuration with a select group named `ClashPulse - ChatGPT` using
+`include-all: true`, rules `DOMAIN-SUFFIX,openai.com,ClashPulse - ChatGPT`
+and `RULE-SET,<file provider>,ClashPulse - ChatGPT` ahead of `MATCH`, and the
+existing `clashpulse-stream-probe` group and pinned listener validates.
 
 Limitation: the YouTube "not available in your region" phrase could not be
 observed from this host. If a blocked page places it beyond the read cap,
@@ -50,14 +57,16 @@ check code; they enable, configure regions, and replace routing domains.
 type Rule string // "trace_loc", "body_marker", "status_pair", "json_country"
 
 type Definition struct {
-	ID       string   // "chatgpt", stable, used in config and group names
-	Name     string   // display name, e.g. "ChatGPT"
-	Rule     Rule
-	URLs     []string // fixed HTTPS URLs, never user input
-	Blocked  []string // ISO 3166-1 alpha-2 country codes refused by the service
-	Markers  []string // body phrases meaning "refused here"
-	MaxBytes int64    // read cap; reading stops early once the signal is found
-	Domains  []string // default DOMAIN-SUFFIX routing set
+	ID        string   // "chatgpt", stable, used in config and group names
+	Name      string   // display name, e.g. "ChatGPT"
+	Rule      Rule
+	URLs      []string // fixed HTTPS URLs, never user input
+	Blocked   []string // ISO 3166-1 alpha-2 country codes refused by the service
+	Markers   []string // body phrases meaning "refused here"
+	MaxBytes  int64    // read cap; reading stops early once the signal is found
+	Redirects int      // redirects followed; 0 means a 3xx is the final response
+	Hosts     []string // host suffixes a redirect may target
+	Domains   []string // default DOMAIN-SUFFIX routing set
 }
 
 type Result struct {
@@ -71,12 +80,12 @@ type Result struct {
 
 | ID | Rule | Request(s) | Usable when | Cap |
 |---|---|---|---|---|
-| `chatgpt` | `trace_loc` + marker | `https://chat.openai.com/cdn-cgi/trace`, then `https://api.openai.com/compliance/cookie_requirements` | `loc` not blocked and the second body lacks `unsupported_country` | 4 KiB each |
+| `chatgpt` | `body_marker` | `https://chat.openai.com/cdn-cgi/trace` (region only), then `https://api.openai.com/compliance/cookie_requirements` | the second response is 2xx and its body lacks `unsupported_country` (case-insensitive); region from `loc` | 4 KiB each |
 | `claude` | `trace_loc` | `https://claude.ai/cdn-cgi/trace` | `loc` not in AF BY CN CU HK IR KP MO RU SY | 4 KiB |
 | `gemini` | Google country | shares the YouTube read | `GL` not in CN RU BY CU IR KP SY HK MO | (YouTube read) |
-| `youtube` | `body_marker` | `https://www.youtube.com/premium?hl=en` | `GL` found and no `premium is not available in your region` marker in the read prefix | 96 KiB |
+| `youtube` | `body_marker` | `https://www.youtube.com/premium?hl=en`; up to 3 redirects within `youtube.com` | `GL` found and no `premium is not available in your region` marker in the read prefix | 96 KiB |
 | `netflix` | `status_pair` | `https://www.netflix.com/title/81280792` and `https://www.netflix.com/title/70143836`, then `https://www.netflix.com/title/80018499` for the region; no redirects followed | either title not 404 and neither 403; region from the third response's `Location` path segment (`/us-en/...` gives `US`) | headers only |
-| `spotify` | `json_country` | `https://www.spotify.com/api/content/v1/country-selector?platform=web&format=json` | status 2xx, body lacks `not available in your country`; region from `countryCode` | 16 KiB |
+| `spotify` | `json_country` | `https://www.spotify.com/api/content/v1/country-selector?platform=web&format=json`; up to 3 redirects within `spotify.com` | final status 2xx, body lacks `not available in your country`; region from `countryCode`, else the final URL's first path segment (`/us-en/` gives `US`) | 16 KiB |
 
 The Netflix title IDs are the ones the reference client probes
 (`netflix.rs:39` and `:74`).
@@ -91,18 +100,24 @@ Outcome rules:
   marker is `error`, never `usable`.
 
 Every request: GET, HTTPS only, TLS 1.2+, no cookies, `DisableKeepAlives`,
-a 10 s total timeout, the read cap above, and context cancellation. Region
-codes and outcomes are the only parsed values that leave the `services`
-package; bodies are discarded.
+a 10 s total timeout across its redirects, the read cap above, and context
+cancellation. Redirects follow the definition: at most `Redirects` hops, each
+to an HTTPS URL whose host equals or ends in `.` + one of `Hosts`; any other
+target, or a 3xx beyond the cap, ends the check as `error`. A redirect that
+stays in bounds but lands on a page without the expected signal (for
+example `consent.youtube.com` without `GL`) is `error`, never `usable`.
+Region codes and outcomes are the only parsed values that leave the
+`services` package; bodies are discarded.
 
 ## Routing
 
 For each enabled service, `mihomo.Render` adds:
 
-- a `select` group named `ClashPulse · <Name>` whose members are every proxy
-  of the profile, provider nodes included (`include-all: true`, as the
-  existing probe group renders),
-- `DOMAIN-SUFFIX,<domain>,ClashPulse · <Name>` rules for the service's
+- a `select` group named `ClashPulse - <Name>` (ASCII; e.g.
+  `ClashPulse - ChatGPT`) whose members are every proxy of the profile,
+  provider nodes included (`include-all: true`, as the existing probe group
+  renders),
+- `DOMAIN-SUFFIX,<domain>,ClashPulse - <Name>` rules for the service's
   domains, placed ahead of the profile's rules and after ClashPulse's own
   managed filter rules, in service-definition order.
 
@@ -119,11 +134,11 @@ Default domain sets:
 
 A service may instead name a `domains_resource`: the ID of an enabled
 `resources.toml` rule-set resource. Rendering then emits one
-`RULE-SET,<provider>,ClashPulse · <Name>` rule from the existing registry
+`RULE-SET,<provider>,ClashPulse - <Name>` rule from the existing registry
 instead of the default suffixes. An unknown, disabled, or non-domain resource
 is a load-time validation error.
 
-A profile group already named `ClashPulse · <Name>` is a render error naming
+A profile group already named `ClashPulse - <Name>` is a render error naming
 the service; ClashPulse never renames silently. The `proxy-groups` and
 `rules` entries are already listed in `core.ConfigOverrideKeys`, so the
 Activity "Generated config changes" tab reports them.
@@ -163,7 +178,8 @@ handshakes. All six services at two checks an hour: about 0.3 MB an hour.
 
 Per service group:
 
-1. The selected node fails `failures` consecutive checks (default 2). A
+1. The service has `automatic = true`, and the selected node fails
+   `failures` consecutive checks (default 2). A
    `blocked` result counts. An `error` counts only when that node's latest
    latency probe also failed; otherwise an `error` is recorded and retried at
    the next deadline.
@@ -183,9 +199,12 @@ Per service group:
 Each switch emits a diagnostic with old node, new node, outcome, and region.
 Node names are masked through the existing label path before display.
 
-A manual node pick in a service group (GUI, TUI, or Mihomo dashboard
-observed through the controller) disables automation for that service until
-the user re-enables it, matching existing group automation.
+A service with `automatic = false` (the default) is checked and reported but
+its group is never switched; this is the explicit opt-in AGENTS.md requires
+for controller-driven selection of a managed select group. A manual node
+pick in a service group (GUI, TUI, or Mihomo dashboard observed through the
+controller) sets `automatic = false` for that service until the user
+re-enables it, matching existing group automation.
 
 ## Configuration
 
@@ -198,7 +217,7 @@ enabled = true
 regions = ["US", "JP"]    # optional; empty means any region that is not blocked
 check_interval = "30m"    # optional; default 30m, minimum 5m
 failures = 2              # optional; consecutive failed checks before a search
-automatic = true          # optional; false checks and reports but never switches
+automatic = true          # optional; default false: check and report only. true lets ClashPulse switch the group.
 # domains_resource = "geosite-openai"  # optional resources.toml rule-set ID
 ```
 
@@ -232,16 +251,21 @@ domains_resource; written through the normal config writer and reload) and
 `check_service` (enqueue a check now). `validateSnapshot` bounds the new
 slice. Protocol version 14.
 
-GUI: Settings → Services, one row per built-in service: Enable, Automatic,
+GUI: Settings > Services, one row per built-in service: Enable, Automatic,
 regions, current node, outcome with region, last/next check, "Check now",
-and an edit dialog for interval, failures, and routing domains. TUI: the
-same rows and actions through the declarative keymap.
+and an edit dialog for interval, failures, and routing domains. Enable and
+Automatic are separate switches; turning Enable on never turns Automatic on.
+TUI: the same rows and actions through the declarative keymap.
 
 ## Testing
 
 - `services`: `httptest` TLS servers for each rule kind: usable, blocked by
   region, blocked by marker, Netflix originals-only and 403, missing signal is
   `error`, cap stops reading, cancellation, no redirect leak of cookies.
+  Redirects: an in-bounds 302 is followed to the signal; a hop to another
+  host, to plain HTTP, or past the cap is `error`; a no-redirect definition
+  treats a 302 as `error`; an in-bounds landing page without the signal
+  (consent page) is `error`.
   Fixtures use reserved names and synthetic bodies only.
 - `monitor`: only the selected node is checked on a due round; node change
   and "Check now" force a check; candidate search caps at 8 and honours
