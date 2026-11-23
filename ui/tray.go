@@ -251,7 +251,7 @@ func (d *desktopUI) trayMenu(snapshot core.Snapshot) *fyne.Menu {
 		systemProxy.Label = localize.T("System Proxy (restore needed)")
 	}
 	tun := fyne.NewMenuItem(localize.T("TUN"), func() {
-		enabled := !snapshot.Tun.Enabled
+		enabled, _ := tunToggle(snapshot.Tun)
 		d.enqueue(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{TunEnabled: &enabled}})
 	})
 	tun.Checked = snapshot.Tun.Enabled

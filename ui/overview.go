@@ -375,27 +375,6 @@ func (v *overviewView) disconnect() {
 	v.healthDot.set(pillOff.color())
 }
 
-// tapArea makes a whole card open something when tapped.
-type tapArea struct {
-	widget.BaseWidget
-	content fyne.CanvasObject
-	onTap   func()
-}
-
-func newTapArea(content fyne.CanvasObject, onTap func()) *tapArea {
-	t := &tapArea{content: content, onTap: onTap}
-	t.ExtendBaseWidget(t)
-	return t
-}
-
-func (t *tapArea) CreateRenderer() fyne.WidgetRenderer {
-	return widget.NewSimpleRenderer(t.content)
-}
-
-func (t *tapArea) Tapped(*fyne.PointEvent) {
-	t.onTap()
-}
-
 func joinNonEmpty(parts ...string) string {
 	kept := parts[:0:0]
 	for _, part := range parts {

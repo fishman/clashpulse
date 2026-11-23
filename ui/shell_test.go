@@ -28,6 +28,7 @@ func TestPillStates(t *testing.T) {
 		{"system proxy requested not applied", core.Snapshot{ServiceRunning: true, SystemProxy: core.SystemProxySnapshot{Enabled: true}}, pillOn, pillFailed, pillOff},
 		{"system proxy requested while stopped", core.Snapshot{SystemProxy: core.SystemProxySnapshot{Enabled: true}}, pillOff, pillArmed, pillOff},
 		{"tun failure", core.Snapshot{ServiceRunning: true, Tun: core.TunSnapshot{Enabled: true, LastFailure: "permission denied"}}, pillOn, pillOff, pillFailed},
+		{"tun requested while stopped", core.Snapshot{Tun: core.TunSnapshot{Enabled: true}}, pillOff, pillOff, pillArmed},
 	} {
 		mihomo, systemProxy, tun := pillStates(tc.snapshot)
 		if mihomo != tc.mihomo || systemProxy != tc.systemProxy || tun != tc.tun {
@@ -203,5 +204,36 @@ func TestSystemProxyPillTogglesSetting(t *testing.T) {
 		if got.Kind != ipc.CommandUpdateConfiguration || got.Config == nil || got.Config.SystemProxyEnabled == nil || *got.Config.SystemProxyEnabled != tc.want {
 			t.Fatalf("%s: pill sent %#v, want system proxy %t", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestTunPillTogglesSetting(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	view := newDesktopUI(context.Background(), "", a.NewWindow("ClashPulse"))
+	view.connected = true
+	for _, tc := range []struct {
+		name string
+		tun  core.TunSnapshot
+		want bool
+	}{
+		{"off", core.TunSnapshot{}, true},
+		{"on", core.TunSnapshot{Enabled: true, Active: true}, false},
+		{"on while stopped", core.TunSnapshot{Enabled: true}, false},
+		{"on where unsupported", core.TunSnapshot{Enabled: true, Privilege: core.TunPrivilegeUnsupported}, false},
+	} {
+		view.topBar.update(core.Snapshot{Tun: tc.tun})
+		test.Tap(view.topBar.tunToggle)
+		got := <-view.actions
+		if got.Kind != ipc.CommandUpdateConfiguration || got.Config == nil || got.Config.TunEnabled == nil || *got.Config.TunEnabled != tc.want {
+			t.Fatalf("%s: pill sent %#v, want TUN %t", tc.name, got, tc.want)
+		}
+	}
+	view.topBar.update(core.Snapshot{Tun: core.TunSnapshot{Privilege: core.TunPrivilegeUnsupported}})
+	test.Tap(view.topBar.tunToggle)
+	select {
+	case got := <-view.actions:
+		t.Fatalf("unsupported TUN pill sent %#v", got)
+	default:
 	}
 }

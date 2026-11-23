@@ -159,8 +159,8 @@ var (
 )
 
 // topBar shows the page title, the connection text, the service status
-// pills, the power toggle, and the service menu. The system proxy pill
-// toggles the system proxy setting.
+// pills, the power toggle, and the service menu. The system proxy and TUN
+// pills toggle their settings.
 type topBar struct {
 	object      fyne.CanvasObject
 	title       *canvas.Text
@@ -171,13 +171,18 @@ type topBar struct {
 	power       *widget.Button
 	running     bool
 	proxy       core.SystemProxySnapshot
-	proxyToggle *tapTarget
+	proxyToggle *tapArea
+	tunState    core.TunSnapshot
+	tunToggle   *tapArea
 	menu        *widget.Button
 }
 
-// newTopBar builds the bar; setRunning and setSystemProxy send the change the
-// power button or the system proxy pill asks for.
-func newTopBar(w fyne.Window, connection *widget.Label, setRunning, setSystemProxy func(bool), items ...*fyne.MenuItem) *topBar {
+// topBarActions send the change the power button or a setting pill asks for.
+type topBarActions struct {
+	setRunning, setSystemProxy, setTun func(bool)
+}
+
+func newTopBar(w fyne.Window, connection *widget.Label, actions topBarActions, items ...*fyne.MenuItem) *topBar {
 	t := &topBar{
 		title:       canvas.NewText("", theme.Color(theme.ColorNameForeground)),
 		mihomo:      pill("Mihomo"),
@@ -187,10 +192,15 @@ func newTopBar(w fyne.Window, connection *widget.Label, setRunning, setSystemPro
 	}
 	t.title.TextSize = 26
 	t.title.TextStyle.Bold = true
-	t.power = widget.NewButtonWithIcon("", powerOffIcon, func() { setRunning(!t.running) })
+	t.power = widget.NewButtonWithIcon("", powerOffIcon, func() { actions.setRunning(!t.running) })
 	t.power.Importance = widget.LowImportance
 	t.power.Disable()
-	t.proxyToggle = newTapTarget(t.systemProxy.object, func() { setSystemProxy(systemProxyToggle(t.proxy)) })
+	t.proxyToggle = newTapArea(t.systemProxy.object, func() { actions.setSystemProxy(systemProxyToggle(t.proxy)) })
+	t.tunToggle = newTapArea(t.tun.object, func() {
+		if enabled, ok := tunToggle(t.tunState); ok {
+			actions.setTun(enabled)
+		}
+	})
 	menu := fyne.NewMenu("", items...)
 	t.menu = widget.NewButtonWithIcon("", theme.MoreVerticalIcon(), nil)
 	t.menu.Importance = widget.LowImportance
@@ -202,7 +212,7 @@ func newTopBar(w fyne.Window, connection *widget.Label, setRunning, setSystemPro
 	// long status never widens the window.
 	connection.Truncation = fyne.TextTruncateEllipsis
 	connection.Alignment = fyne.TextAlignTrailing
-	status := container.NewHBox(center(t.mihomo.object), center(t.proxyToggle), center(t.tun.object), t.power, t.menu)
+	status := container.NewHBox(center(t.mihomo.object), center(t.proxyToggle), center(t.tunToggle), t.power, t.menu)
 	title := container.New(paintLayout{layout.NewVBoxLayout(), func() {
 		t.title.Color = theme.Color(theme.ColorNameForeground)
 	}}, t.title)
@@ -249,7 +259,7 @@ func (t *topBar) update(s core.Snapshot) {
 	t.tun.set(tun)
 	t.setConnection(proxyStatus(s))
 	t.setRunning(s.ServiceRunning)
-	t.proxy = s.SystemProxy
+	t.proxy, t.tunState = s.SystemProxy, s.Tun
 	t.power.Enable()
 }
 
@@ -283,6 +293,8 @@ func pillStates(s core.Snapshot) (mihomo, systemProxy, tun pillState) {
 		tun = pillFailed
 	case s.Tun.Active:
 		tun = pillOn
+	case s.Tun.Enabled && !s.ServiceRunning:
+		tun = pillArmed
 	}
 	return mihomo, systemProxy, tun
 }
@@ -291,4 +303,10 @@ func pillStates(s core.Snapshot) (mihomo, systemProxy, tun pillState) {
 // is off and no desktop proxy is left applied; a leftover is switched off.
 func systemProxyToggle(p core.SystemProxySnapshot) bool {
 	return !p.Enabled && !p.Active
+}
+
+// tunToggle is the TUN setting a toggle asks for; ok is false when TUN is off
+// and this platform cannot run it, so there is nothing to switch on.
+func tunToggle(t core.TunSnapshot) (enabled, ok bool) {
+	return !t.Enabled, t.Enabled || t.Privilege != core.TunPrivilegeUnsupported
 }

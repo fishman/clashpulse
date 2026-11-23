@@ -171,27 +171,27 @@ func (s pillState) color() fyne.ThemeColorName {
 	return theme.ColorNamePlaceHolder
 }
 
-// tapTarget makes content clickable with a pointer cursor, without the
-// button chrome a status pill should not have.
-type tapTarget struct {
+// tapArea makes content clickable with a pointer cursor, without button
+// chrome: a whole card, or a status pill that toggles its setting.
+type tapArea struct {
 	widget.BaseWidget
 	content fyne.CanvasObject
 	onTap   func()
 }
 
-func newTapTarget(content fyne.CanvasObject, onTap func()) *tapTarget {
-	t := &tapTarget{content: content, onTap: onTap}
+func newTapArea(content fyne.CanvasObject, onTap func()) *tapArea {
+	t := &tapArea{content: content, onTap: onTap}
 	t.ExtendBaseWidget(t)
 	return t
 }
 
-func (t *tapTarget) CreateRenderer() fyne.WidgetRenderer {
+func (t *tapArea) CreateRenderer() fyne.WidgetRenderer {
 	return widget.NewSimpleRenderer(t.content)
 }
 
-func (t *tapTarget) Tapped(*fyne.PointEvent) { t.onTap() }
+func (t *tapArea) Tapped(*fyne.PointEvent) { t.onTap() }
 
-func (t *tapTarget) Cursor() desktop.Cursor { return desktop.PointerCursor }
+func (t *tapArea) Cursor() desktop.Cursor { return desktop.PointerCursor }
 
 // statusPill is a dot and a label on a rounded surface.
 type statusPill struct {
