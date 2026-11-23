@@ -14,6 +14,7 @@
 
 - No new dependency, no new IPC/snapshot field, no new config setting.
 - No timers, tickers, animations; times are absolute (`detailTime`).
+- Card, pill, value, meter, badge, dot, and muted text are small `widget.BaseWidget` types storing theme color/size *names*; their renderer `Refresh()` re-reads the theme so a live light/dark switch recolors them. Task 2 adds a variant-flip test.
 - Fyne calls only on the UI thread (inside `postSnapshot`'s `fyne.Do` or constructors).
 - Every widget update compares old vs new text/color before `Refresh`/`SetText`.
 - Every new user-visible string goes through `localize.T` and gets a zh-CN entry in `localize/locale/gui.zh-CN.toml` (and `gui.en.toml` if that catalog lists GUI ids).
@@ -122,7 +123,7 @@ func (v *overviewView) update(m overviewModel) // compares before SetText/Refres
 
 Rules (from spec): node = selected member of first group with `AutomationEnabled`, else first group's selected; latency text from `LatencyMillis` when outcome success, else `MihomoMillis` with "(mihomo)", else "-"; detail `StabilityLabel()`; automation on/off/manual. Stream card: policy `monitor.SwitchSteadyStream` and node `StreamSamples > 0`; value `StreamKBps`, label `StreamLabel()`, meter fraction completed/samples, color success at 1, warning in (0,1), error at 0. Otherwise card shows "URL test every %d s, timeout %d ms". Switch card: last of `Switches`; title `ProxyLabel(old) -> ProxyLabel(new)`; time `detailTime(At)`; reason `localize.T(Reason)`; evidence via existing summary pieces using `ProxyLabel`. Usage: active subscription (`Active` true); used = Uploaded+Downloaded; GB with one decimal; expiry `detailTime(ExpiresAt)` when > 0. Health: counts of subscriptions/resources/filters; issue text = first `Errors[0]` message via existing `serviceErrors`, else compatibility label when failure set, else "No issues"; dot state accordingly. Profile: active subscription Name, or "Local profile" when `ActiveSource == "local"`, else "None". Mode: `localize.Code("proxy.mode", ProxyMode)` if that namespace exists, else `localize.T`. Policy: the existing localized policy label used by Settings.
 
-Layout: facts row (`GridWithColumns(4)` of caption/value VBoxes); `container.NewGridWrap`-free responsive grid: `container.NewAdaptiveGrid(2, node, stream)`, switch full width, `NewAdaptiveGrid(2, usage, health)`; everything in a `VScroll`. Health card is tappable -> `openActivity`.
+Layout: facts row (`GridWithColumns(4)` of caption/value VBoxes); `container.NewGridWithColumns(2, node, stream)`, switch full width, `NewGridWithColumns(2, usage, health)`; everything in a `VScroll`. `Run` opens the window at 980x700. Health card is tappable -> `openActivity`.
 
 - [ ] Step 1: failing tests for `buildOverview`: empty snapshot (no panic, node hidden, "No switch yet", usage hidden, health "No issues"); automated group preferred; stream visibility both ways; usage TotalBytes 0 hidden and nil hidden; switch with old ID missing from Proxies -> 8-char prefix; errors -> health failed.
 - [ ] Step 2: FAIL. Step 3: implement model, view, wiring; add catalog entries (en + zh-CN) for every new string.
@@ -138,7 +139,7 @@ Layout: facts row (`GridWithColumns(4)` of caption/value VBoxes); `container.New
 
 Rows keep `widget.List` and their existing create/update callbacks; add badge (`canvas.Rectangle` radius 8 + `canvas.Text`), status dot, muted secondary text (`canvas.Text` with muted color). Update colors only when changed. Subscriptions add `meter` when usage present. Add buttons get `widget.HighImportance`. Settings section list: put on card surface background via `newCard`-style rectangle; no behavior change.
 
-- [ ] Step 1: failing tests: `latencyBadge` table (120 ms with alert 250/threshold 800 -> success; 400 -> warning; 900 -> error; timeout -> error; unmeasured -> disabled "-"; mihomo-only -> disabled "75 ms (mihomo)"); `rowState` table.
+- [ ] Step 1: failing tests: `latencyBadge` table (120 ms with alert 250/threshold 800 -> success; 400 -> warning; 900 -> error; timeout -> error; unmeasured -> disabled "-"; mihomo-only -> disabled "75 ms (mihomo)"; alert 0 and threshold 800: 400 -> success, 900 -> error; both 0 -> success); `rowState` table.
 - [ ] Step 2: FAIL. Step 3: implement. Step 4: `go test -tags ci ./ui` both locales green. Commit `feat(ui): restyle list rows with status and latency badges`.
 
 ### Task 6: Screenshots, docs, final checks

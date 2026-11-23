@@ -47,6 +47,12 @@ this design adds none.
 Custom names are package constants with a `clashpulse` prefix. Colors are
 `color.NRGBA` literals; no runtime parsing.
 
+Fyne's live theme change only calls `Refresh()` on each object, and a raw
+`canvas.Rectangle` or `canvas.Text` keeps the color it was built with. Cards,
+pills, badges, meters, and muted text are therefore small widgets that store
+theme color *names* and re-read them in their renderer's `Refresh()`. A test
+flips the variant and checks the colors follow.
+
 ## Shell (`ui/ui.go`)
 
 - Replace the view `widget.Select` with a sidebar: a fixed-width (190) column
@@ -85,7 +91,9 @@ Facts row (caption above value): PROFILE (active subscription name from
 (`Monitor.SwitchPolicy`, localized), MIHOMO (observed version plus desired
 binary).
 
-Cards, two-column grid that collapses to one column below 760 px:
+Cards, two-column grid (no width collapse: Fyne's adaptive grid keys on device
+orientation, not width). The default window grows from 760x640 to 980x700 so
+the sidebar plus two card columns fit:
 
 1. Current node: group label in the caption; node label (masked label from
    the snapshot); latency value; `ProxySnapshot.StabilityLabel` line; automation
@@ -123,7 +131,8 @@ never as a raw name from elsewhere.
   become: selection dot, label, latency badge (rounded rect; success at or below
   `AlertThresholdMillis` (default 250 ms), warning at or below
   `ThresholdMillis` (default 800 ms), error above it or on timeout/error,
-  muted when unmeasured), stability label, stream label in muted
+  muted when unmeasured). With `AlertThresholdMillis <= 0` (not configured),
+  success at or below `ThresholdMillis`, error above it., stability label, stream label in muted
   text. Rows stay in `widget.List`; badge colors change via the existing
   update path, no rebuild.
 - Subscriptions, Filter Lists, Data Resources: rows get a status dot
