@@ -29,6 +29,7 @@ func TestPillStates(t *testing.T) {
 		{"system proxy requested while stopped", core.Snapshot{SystemProxy: core.SystemProxySnapshot{Enabled: true}}, pillOff, pillArmed, pillOff},
 		{"tun failure", core.Snapshot{ServiceRunning: true, Tun: core.TunSnapshot{Enabled: true, LastFailure: "permission denied"}}, pillOn, pillOff, pillFailed},
 		{"tun requested while stopped", core.Snapshot{Tun: core.TunSnapshot{Enabled: true}}, pillOff, pillOff, pillArmed},
+		{"tun requested, running, inactive", core.Snapshot{ServiceRunning: true, Tun: core.TunSnapshot{Enabled: true}}, pillOn, pillOff, pillArmed},
 	} {
 		mihomo, systemProxy, tun := pillStates(tc.snapshot)
 		if mihomo != tc.mihomo || systemProxy != tc.systemProxy || tun != tc.tun {

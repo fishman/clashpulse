@@ -293,7 +293,9 @@ func pillStates(s core.Snapshot) (mihomo, systemProxy, tun pillState) {
 		tun = pillFailed
 	case s.Tun.Active:
 		tun = pillOn
-	case s.Tun.Enabled && !s.ServiceRunning:
+	case s.Tun.Enabled:
+		// Also while running: a pending privilege grant or a binary without
+		// TUN leaves it inactive with no failure recorded.
 		tun = pillArmed
 	}
 	return mihomo, systemProxy, tun
