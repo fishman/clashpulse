@@ -15,8 +15,8 @@ import (
 	"github.com/fishman/clashpulse/localize"
 )
 
-// sidebarEntry is one tappable navigation row: an optional icon and a label
-// over an accent tint shown while selected.
+// sidebarEntry is one tappable, focusable navigation row: an optional icon and
+// a label over an accent tint shown while selected, ringed while focused.
 type sidebarEntry struct {
 	widget.BaseWidget
 	id       string
@@ -24,6 +24,7 @@ type sidebarEntry struct {
 	tint     *canvas.Rectangle
 	content  fyne.CanvasObject
 	selected bool
+	focused  bool
 	onTap    func(id string)
 }
 
@@ -49,10 +50,35 @@ func (e *sidebarEntry) paint() {
 		accent.A = 0x2E
 		e.tint.FillColor = accent
 	}
+	e.tint.StrokeWidth = 0
+	if e.focused {
+		e.tint.StrokeWidth = 2
+		e.tint.StrokeColor = theme.Color(theme.ColorNameFocus)
+	}
 }
 
 func (e *sidebarEntry) Tapped(*fyne.PointEvent) {
 	e.onTap(e.id)
+}
+
+func (e *sidebarEntry) FocusGained() { e.setFocused(true) }
+
+func (e *sidebarEntry) FocusLost() { e.setFocused(false) }
+
+func (e *sidebarEntry) setFocused(focused bool) {
+	e.focused = focused
+	e.paint()
+	e.tint.Refresh()
+}
+
+func (e *sidebarEntry) TypedRune(rune) {}
+
+// TypedKey selects the entry on Space or Return, like a tap.
+func (e *sidebarEntry) TypedKey(event *fyne.KeyEvent) {
+	switch event.Name {
+	case fyne.KeySpace, fyne.KeyReturn, fyne.KeyEnter:
+		e.onTap(e.id)
+	}
 }
 
 func (e *sidebarEntry) setSelected(selected bool) {

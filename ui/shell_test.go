@@ -132,3 +132,27 @@ func paintedObjects(o fyne.CanvasObject) []fyne.CanvasObject {
 	}
 	return objects
 }
+
+func TestSidebarEntryKeyboard(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	var tapped []string
+	entry := newSidebarEntry("DNS", "DNS", nil, func(id string) { tapped = append(tapped, id) })
+	window := a.NewWindow("ClashPulse")
+	window.SetContent(entry)
+	var focusable fyne.Focusable = entry
+	window.Canvas().Focus(focusable)
+	if entry.tint.StrokeWidth == 0 || entry.tint.StrokeColor != theme.Color(theme.ColorNameFocus) {
+		t.Fatalf("focused entry ring = width %v color %v", entry.tint.StrokeWidth, entry.tint.StrokeColor)
+	}
+	for _, key := range []fyne.KeyName{fyne.KeySpace, fyne.KeyReturn, fyne.KeyEnter, fyne.KeyTab} {
+		entry.TypedKey(&fyne.KeyEvent{Name: key})
+	}
+	if len(tapped) != 3 || tapped[0] != "DNS" {
+		t.Fatalf("keys selected %v, want Space, Return, and Enter only", tapped)
+	}
+	window.Canvas().Unfocus()
+	if entry.tint.StrokeWidth != 0 {
+		t.Fatalf("unfocused entry keeps its ring: %v", entry.tint.StrokeWidth)
+	}
+}
