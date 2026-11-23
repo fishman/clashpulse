@@ -18,7 +18,9 @@ import (
 
 // TestDocsScreenshots builds the real window over the docs fixture and
 // captures one PNG per page. DOCS_SCREENSHOTS overrides the output directory;
-// a relative value is taken from the repository root.
+// a relative value is taken from the repository root. DOCS_SCREENSHOTS_DARK,
+// when set, also writes a dark Overview there for a manual check; it is not a
+// docs image.
 func TestDocsScreenshots(t *testing.T) {
 	dir := os.Getenv("DOCS_SCREENSHOTS")
 	if dir == "" {
@@ -70,15 +72,34 @@ func TestDocsScreenshots(t *testing.T) {
 			draw.Draw(cropped, cropped.Bounds(), img, shot.crop.Min, draw.Src)
 			img = cropped
 		}
-		file, err := os.Create(filepath.Join(dir, shot.name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := png.Encode(file, img); err != nil {
-			t.Fatal(err)
-		}
-		if err := file.Close(); err != nil {
-			t.Fatal(err)
-		}
+		savePNG(t, filepath.Join(dir, shot.name), img)
+	}
+
+	darkDir := os.Getenv("DOCS_SCREENSHOTS_DARK")
+	if darkDir == "" {
+		return
+	}
+	if err := os.MkdirAll(darkDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fyne.DoAndWait(func() {
+		window.Canvas().Overlays().Remove(window.Canvas().Overlays().Top())
+		app.Settings().SetTheme(variantTheme{newTheme(), theme.VariantDark})
+		view.showView("Overview")
+	})
+	savePNG(t, filepath.Join(darkDir, "gui-overview.png"), window.Canvas().Capture())
+}
+
+func savePNG(t *testing.T, path string, img image.Image) {
+	t.Helper()
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(file, img); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
