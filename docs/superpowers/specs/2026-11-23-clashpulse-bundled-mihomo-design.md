@@ -64,6 +64,14 @@ never written back, so existing configs keep their explicit value, and a
 config that says `bundled` on a build without a bundle fails with the existing
 named compatibility error instead of silently using another binary.
 
+`config.Seed` writes `examples/config.toml` verbatim on first start, and that
+file currently sets `binary = "system"` explicitly, which would override the
+build default on every fresh install. The seeded key becomes a comment
+(`# binary = "system"  # default: "bundled" in macOS/Windows release
+packages, "system" otherwise; or an executable path`), and the header line
+"Defaults: system Mihomo" is reworded to match. Already-seeded configs keep
+their explicit `system`; switching them is a user edit, not a migration.
+
 ## Packaged location and private copy
 
 - macOS: `ClashPulse.app/Contents/Resources/mihomo`, found relative to
@@ -147,6 +155,10 @@ it (aggregate), not linked.
 
 - `internal/bundled` + `config`: default is `bundled` when `SHA256` is set
   and `system` when empty; an explicit `system` stays `system`.
+- Seed then load: a fresh config directory seeded from `examples/` resolves
+  to `bundled` when `SHA256` is set and to `system` when empty.
+- Homebrew `test do` runs against a fresh temporary config directory and
+  asserts the resolved binary is `system`, not only `clashpulse version`.
 - `mihomo` bundled resolution with a fake executable in a temp package
   layout: hash match installs a private copy with 0700 dir/file and inspects
   it; mismatch errors and leaves no copy; missing file errors; an existing
