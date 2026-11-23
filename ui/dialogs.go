@@ -18,7 +18,8 @@ type dialogOwner interface {
 // forms and wrapped text into a narrow column. These caps apply on wide windows;
 // a narrow window gets a share of its width instead.
 const (
-	messageDialogWidth float32 = 560
+	// Fyne's own cap for text dialogs; sizing one replaces its width hook.
+	messageDialogWidth float32 = 600
 	formDialogWidth    float32 = 720
 	logDialogWidth     float32 = 1080
 )

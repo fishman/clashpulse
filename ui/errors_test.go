@@ -8,6 +8,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -279,8 +280,9 @@ func TestDialogsUseReadableWidth(t *testing.T) {
 		t.Fatalf("activity list width %v, want most of the 980 px window", width)
 	}
 	hideTopOverlay(w.Canvas())
-	showInformation("Detail", "body", w)
-	if width := w.Canvas().Overlays().Top().Size().Width; width < 500 {
-		t.Fatalf("information dialog width %v, want a readable width", width)
+	body := widget.NewLabel("body")
+	showSized(dialog.NewCustom("Detail", "OK", body, w), w, formDialogWidth, false)
+	if width := body.Size().Width; width < formDialogWidth-80 {
+		t.Fatalf("dialog content width %v, want close to %v", width, formDialogWidth)
 	}
 }
