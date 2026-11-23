@@ -12,6 +12,27 @@ on:
         type: string
 
 jobs:
+  # Cross-platform static checks. Linux and Windows run as one staticcheck
+  # matrix so code used on only one of them is not reported as unused; darwin
+  # needs cgo for Fyne and runs natively in its desktop job instead.
+  checks:
+    runs-on: ubuntu-22.04
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Go toolchain
+        run: go version
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 -tags ci ./...
+      - name: staticcheck (linux, windows)
+        run: |
+          printf 'linux: GOOS=linux -tags=ci\nwindows: GOOS=windows -tags=ci\n' | go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 -matrix ./...
+
   desktop:
     strategy:
       fail-fast: false
@@ -53,8 +74,13 @@ jobs:
         shell: bash
         run: |
           a=.github/scripts/annotate-failures.sh
-          bash "$a" "tests ${{ matrix.target }}" go test -tags ci -timeout 8m ./...
+          race=; [ "${{ matrix.target }}" = linux ] && race=-race
+          bash "$a" "tests ${{ matrix.target }}" go test -tags ci $race -timeout 8m ./...
           bash "$a" "vet ${{ matrix.target }}" go vet -tags ci ./...
+          if [ "${{ matrix.target }}" = darwin ]; then
+            # Unused code is checked by the linux/windows matrix in the checks job.
+            bash "$a" "staticcheck darwin" go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 -tags ci -checks inherit,-U1000 ./...
+          fi
       - name: Native desktop package
         shell: bash
         run: |
