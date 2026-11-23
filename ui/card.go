@@ -155,7 +155,7 @@ const (
 	pillOff pillState = iota
 	pillOn
 	pillFailed
-	// pillArmed is a setting that is on but waits for the service to start.
+	// pillArmed is a setting that is on but not in effect yet.
 	pillArmed
 )
 
