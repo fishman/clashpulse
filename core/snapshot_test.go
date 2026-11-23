@@ -181,3 +181,12 @@ func TestDiagnosticTextNamesOperationSourceAndOutcome(t *testing.T) {
 		}
 	}
 }
+
+func TestCloneSnapshotSeparatesServiceRegions(t *testing.T) {
+	original := Snapshot{Services: []ServiceSnapshot{{ID: "claude", Regions: []string{"US"}}}}
+	clone := CloneSnapshot(original)
+	clone.Services[0].Regions[0] = "JP"
+	if original.Services[0].Regions[0] != "US" {
+		t.Fatal("clone shares service regions")
+	}
+}

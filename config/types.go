@@ -126,7 +126,7 @@ type Service struct {
 
 const (
 	DefaultServiceInterval = 30 * time.Minute
-	MinServiceInterval     = 5 * time.Minute
+	MinServiceInterval     = 5 * time.Minute // mirrored by ipc.minServiceIntervalSeconds
 	DefaultServiceFailures = 2
 	MaxServiceFailures     = 10
 )

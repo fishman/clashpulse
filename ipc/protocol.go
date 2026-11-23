@@ -12,11 +12,12 @@ import (
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/download"
 	"github.com/fishman/clashpulse/monitor"
+	"github.com/fishman/clashpulse/services"
 )
 
 const (
 	// ProtocolVersion is negotiated in the first frame on every connection.
-	ProtocolVersion uint16 = 13
+	ProtocolVersion uint16 = 14
 	// MaxFrameSize bounds both incoming and outgoing JSON frames.
 	MaxFrameSize = 1 << 20
 )
@@ -56,6 +57,10 @@ const (
 	CommandSetAutoFastest CommandKind = "set_auto_fastest"
 	// CommandStreamProbe runs a steady-stream download round now.
 	CommandStreamProbe CommandKind = "stream_probe"
+	// CommandSetService replaces one service check's settings.
+	CommandSetService CommandKind = "set_service"
+	// CommandCheckService checks one service on its selected node now.
+	CommandCheckService CommandKind = "check_service"
 )
 
 // Command is a deliberately narrow user-intent schema. Sensitive URLs may
@@ -73,6 +78,8 @@ type Command struct {
 	Resource       *ResourceEdit      `json:"resource,omitempty"`
 	Filter         *FilterEdit        `json:"filter,omitempty"`
 	DNSRouting     *DNSRoutingEdit    `json:"dns_routing,omitempty"`
+	ServiceID      string             `json:"service_id,omitempty"`
+	Service        *ServiceEdit       `json:"service,omitempty"`
 	// JobID is assigned by the server when it accepts the command; a client
 	// cannot set it.
 	JobID string `json:"-"`
@@ -196,6 +203,25 @@ func validTunDNSMode(value string) bool {
 	return slices.Contains(core.TunDNSModes, value)
 }
 
+// ServiceEdit is the complete settings of one built-in service check.
+type ServiceEdit struct {
+	ID              string   `json:"id"`
+	Enabled         bool     `json:"enabled"`
+	Automatic       bool     `json:"automatic"`
+	Regions         []string `json:"regions,omitempty"`
+	IntervalSeconds uint32   `json:"interval_seconds"`
+	Failures        int      `json:"failures"`
+	DomainsResource string   `json:"domains_resource,omitempty"`
+}
+
+// minServiceIntervalSeconds mirrors config.MinServiceInterval.
+const minServiceIntervalSeconds = 300
+
+// validRegion accepts an ISO 3166-1 alpha-2 code.
+func validRegion(region string) bool {
+	return len(region) == 2 && region[0] >= 'A' && region[0] <= 'Z' && region[1] >= 'A' && region[1] <= 'Z'
+}
+
 func (c Command) validate() error {
 	if c.Kind != CommandPutSubscription && c.Subscription != nil {
 		return errors.New("unexpected subscription edit fields")
@@ -205,6 +231,9 @@ func (c Command) validate() error {
 	}
 	if c.Kind != CommandSetDNSRouting && c.DNSRouting != nil {
 		return errors.New("unexpected DNS routing fields")
+	}
+	if c.Kind != CommandSetService && c.Service != nil || c.Kind != CommandCheckService && c.ServiceID != "" {
+		return errors.New("unexpected service fields")
 	}
 	validID := func(id string) bool { return stableIDPattern.MatchString(id) }
 	hasOtherTarget := func(want string) bool {
@@ -361,6 +390,29 @@ func (c Command) validate() error {
 		if !validID(c.FilterID) || c.GroupID != "" || c.ChoiceID != "" || c.Config != nil || c.Automation != nil || hasOtherTarget("filter") {
 			return errors.New("invalid filter command")
 		}
+	case CommandSetService:
+		edit := c.Service
+		if edit == nil || c.GroupID != "" || c.ChoiceID != "" || c.Config != nil || c.Automation != nil || hasOtherTarget("") {
+			return errors.New("invalid service command")
+		}
+		if _, ok := services.Lookup(edit.ID); !ok {
+			return errors.New("unknown service")
+		}
+		if edit.IntervalSeconds < minServiceIntervalSeconds || edit.IntervalSeconds > 86400*30 || edit.Failures < 1 || edit.Failures > 10 || len(edit.Regions) > 32 {
+			return errors.New("invalid service settings")
+		}
+		for _, region := range edit.Regions {
+			if !validRegion(region) {
+				return errors.New("invalid service region")
+			}
+		}
+		if edit.DomainsResource != "" && !validID(edit.DomainsResource) {
+			return errors.New("invalid service resource")
+		}
+	case CommandCheckService:
+		if _, ok := services.Lookup(c.ServiceID); !ok || c.GroupID != "" || c.ChoiceID != "" || c.Config != nil || c.Automation != nil || hasOtherTarget("") {
+			return errors.New("invalid service check command")
+		}
 	default:
 		return errors.New("unknown command kind")
 	}
@@ -398,7 +450,7 @@ func validateSnapshot(snapshot core.Snapshot) error {
 		!addItems(len(snapshot.Filters)) || !addItems(len(snapshot.DNS.ResolverSets)) || !addItems(len(snapshot.DNS.Routes)) ||
 		!addItems(len(snapshot.Binary.Capabilities)) || !addItems(len(snapshot.Jobs)) || !addItems(len(snapshot.Errors)) ||
 		len(snapshot.FinishedJobs) > core.MaxFinishedJobs || !addItems(len(snapshot.FinishedJobs)) ||
-		len(snapshot.Diagnostics) > core.MaxDiagnostics || !addItems(len(snapshot.Diagnostics)) {
+		len(snapshot.Diagnostics) > core.MaxDiagnostics || !addItems(len(snapshot.Diagnostics)) || !addItems(len(snapshot.Services)) {
 		return ErrSnapshotTooLarge
 	}
 	textBytes := 0
@@ -500,6 +552,21 @@ func validateSnapshot(snapshot core.Snapshot) error {
 			return errors.New("ipc: invalid diagnostic snapshot")
 		}
 		if !addText(item.Severity, item.Kind, item.SourceID, item.Message) {
+			return ErrSnapshotTooLarge
+		}
+	}
+	for _, service := range snapshot.Services {
+		if _, ok := services.Lookup(service.ID); !ok || !slices.Contains([]string{"", "usable", "blocked", "error"}, service.Outcome) ||
+			!slices.Contains([]string{"", "blocked", "failing", "exhausted"}, service.LastSwitch) ||
+			service.Region != "" && !validRegion(service.Region) || len(service.Regions) > 32 || strings.Contains(service.Selected, "://") {
+			return errors.New("ipc: invalid service snapshot")
+		}
+		for _, region := range service.Regions {
+			if !validRegion(region) {
+				return errors.New("ipc: invalid service snapshot")
+			}
+		}
+		if !addText(service.ID, service.Name, service.Selected, service.GroupID, service.DomainsResource, service.Region) {
 			return ErrSnapshotTooLarge
 		}
 	}

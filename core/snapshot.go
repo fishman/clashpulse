@@ -361,6 +361,25 @@ func ProxyLabel(proxies []ProxySnapshot, id string) string {
 	return id
 }
 
+// ServiceSnapshot is one service check's settings and latest result on the
+// service group's selected node. Selected is a masked label.
+type ServiceSnapshot struct {
+	ID, Name        string
+	Enabled         bool
+	Automatic       bool
+	Regions         []string
+	IntervalSeconds uint32
+	Failures        int
+	DomainsResource string
+	GroupID         string
+	Selected        string
+	Outcome         string // "usable", "blocked", "error", ""
+	Region          string
+	LastCheck       int64
+	NextCheck       int64
+	LastSwitch      string // "", "blocked", "failing", "exhausted"
+}
+
 type Snapshot struct {
 	Revision        uint64
 	ActiveSource    string
@@ -387,6 +406,7 @@ type Snapshot struct {
 	Switches     []SwitchSnapshot
 	Errors       []ErrorSnapshot
 	Diagnostics  []DiagnosticSnapshot
+	Services     []ServiceSnapshot
 }
 
 // AnyGroupAutomated reports whether any group has automatic switching on;
@@ -430,6 +450,10 @@ func CloneSnapshot(snapshot Snapshot) Snapshot {
 	for i := range out.Switches {
 		out.Switches[i].Evidence = append([]ProbeSnapshot(nil), snapshot.Switches[i].Evidence...)
 		out.Switches[i].StreamEvidence = append([]StreamProbeSnapshot(nil), snapshot.Switches[i].StreamEvidence...)
+	}
+	out.Services = append([]ServiceSnapshot(nil), snapshot.Services...)
+	for i := range out.Services {
+		out.Services[i].Regions = append([]string(nil), snapshot.Services[i].Regions...)
 	}
 	return out
 }

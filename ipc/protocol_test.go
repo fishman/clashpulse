@@ -383,3 +383,46 @@ func TestProxyModePatchAcceptsOnlyMihomoModes(t *testing.T) {
 		}
 	}
 }
+
+func TestServiceCommandsValidate(t *testing.T) {
+	good := Command{Kind: CommandSetService, Service: &ServiceEdit{ID: "claude", Enabled: true, Regions: []string{"US"}, IntervalSeconds: 1800, Failures: 2}}
+	if err := good.validate(); err != nil {
+		t.Fatal(err)
+	}
+	bad := []Command{
+		{Kind: CommandSetService},
+		{Kind: CommandSetService, Service: &ServiceEdit{ID: "tiktok", IntervalSeconds: 1800, Failures: 2}},
+		{Kind: CommandSetService, Service: &ServiceEdit{ID: "claude", IntervalSeconds: 60, Failures: 2}},
+		{Kind: CommandSetService, Service: &ServiceEdit{ID: "claude", IntervalSeconds: 1800, Failures: 0}},
+		{Kind: CommandSetService, Service: &ServiceEdit{ID: "claude", IntervalSeconds: 1800, Failures: 2, Regions: []string{"usa"}}},
+		{Kind: CommandSetService, Service: &ServiceEdit{ID: "claude", IntervalSeconds: 1800, Failures: 2}, GroupID: "x"},
+		{Kind: CommandCheckService},
+		{Kind: CommandCheckService, ServiceID: "nope"},
+		{Kind: CommandStart, ServiceID: "netflix"},
+		{Kind: CommandStart, Service: &ServiceEdit{ID: "claude", IntervalSeconds: 1800, Failures: 2}},
+	}
+	for _, command := range bad {
+		if command.validate() == nil {
+			t.Fatalf("accepted %+v", command)
+		}
+	}
+	if err := (Command{Kind: CommandCheckService, ServiceID: "netflix"}).validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestServiceSnapshotValidates(t *testing.T) {
+	snapshot := core.Snapshot{Services: []core.ServiceSnapshot{{ID: "claude", Name: "Claude", Enabled: true, Regions: []string{"US"}, IntervalSeconds: 1800, Failures: 2, Outcome: "usable", Region: "US", Selected: "Proxy 3"}}}
+	if err := validateSnapshot(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	snapshot.Services[0].Outcome = "unlocked"
+	if validateSnapshot(snapshot) == nil {
+		t.Fatal("unknown outcome accepted")
+	}
+	snapshot.Services[0].Outcome = "usable"
+	snapshot.Services[0].Selected = "https://example.com/x"
+	if validateSnapshot(snapshot) == nil {
+		t.Fatal("URL in a service label accepted")
+	}
+}
