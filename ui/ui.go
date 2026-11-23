@@ -157,8 +157,13 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 	d.views["Settings"] = d.settingsPage.view
 	d.sidebar = newSidebar(d.showView)
 	d.topBar = newTopBar(w, d.connection,
-		fyne.NewMenuItem(localize.T("Start service"), func() { d.enqueue(ipc.Command{Kind: ipc.CommandStart}) }),
-		fyne.NewMenuItem(localize.T("Stop service"), func() { d.enqueue(ipc.Command{Kind: ipc.CommandStop}) }),
+		func(running bool) {
+			kind := ipc.CommandStop
+			if running {
+				kind = ipc.CommandStart
+			}
+			d.enqueue(ipc.Command{Kind: kind})
+		},
 		fyne.NewMenuItem(localize.T("Restart service"), func() { d.enqueue(ipc.Command{Kind: ipc.CommandRestart}) }),
 		fyne.NewMenuItem(localize.T("Reload configuration"), func() { d.enqueue(ipc.Command{Kind: ipc.CommandReloadConfiguration}) }),
 		fyne.NewMenuItemSeparator(),

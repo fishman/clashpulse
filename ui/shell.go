@@ -149,8 +149,17 @@ func (s *sidebar) setSelected(id string) {
 	}
 }
 
+// powerIcon is Material Design's power_settings_new (Apache 2.0), the icon set
+// Fyne's own theme icons come from.
+var powerIcon = fyne.NewStaticResource("power.svg", []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z" fill="#000000"/></svg>`))
+
+var (
+	powerOnIcon  = theme.NewSuccessThemedResource(powerIcon)
+	powerOffIcon = theme.NewColoredResource(powerIcon, theme.ColorNamePlaceHolder)
+)
+
 // topBar shows the page title, the connection text, the service status
-// pills, and the service menu.
+// pills, the power toggle, and the service menu.
 type topBar struct {
 	object      fyne.CanvasObject
 	title       *canvas.Text
@@ -158,10 +167,14 @@ type topBar struct {
 	systemProxy *statusPill
 	tun         *statusPill
 	connection  *widget.Label
+	power       *widget.Button
+	running     bool
 	menu        *widget.Button
 }
 
-func newTopBar(w fyne.Window, connection *widget.Label, items ...*fyne.MenuItem) *topBar {
+// newTopBar builds the bar; setRunning sends the start or stop the power
+// button asks for.
+func newTopBar(w fyne.Window, connection *widget.Label, setRunning func(bool), items ...*fyne.MenuItem) *topBar {
 	t := &topBar{
 		title:       canvas.NewText("", theme.Color(theme.ColorNameForeground)),
 		mihomo:      pill("Mihomo"),
@@ -171,6 +184,9 @@ func newTopBar(w fyne.Window, connection *widget.Label, items ...*fyne.MenuItem)
 	}
 	t.title.TextSize = 26
 	t.title.TextStyle.Bold = true
+	t.power = widget.NewButtonWithIcon("", powerOffIcon, func() { setRunning(!t.running) })
+	t.power.Importance = widget.LowImportance
+	t.power.Disable()
 	menu := fyne.NewMenu("", items...)
 	t.menu = widget.NewButtonWithIcon("", theme.MoreVerticalIcon(), nil)
 	t.menu.Importance = widget.LowImportance
@@ -182,13 +198,27 @@ func newTopBar(w fyne.Window, connection *widget.Label, items ...*fyne.MenuItem)
 	// long status never widens the window.
 	connection.Truncation = fyne.TextTruncateEllipsis
 	connection.Alignment = fyne.TextAlignTrailing
-	status := container.NewHBox(center(t.mihomo.object), center(t.systemProxy.object), center(t.tun.object), t.menu)
+	status := container.NewHBox(center(t.mihomo.object), center(t.systemProxy.object), center(t.tun.object), t.power, t.menu)
 	title := container.New(paintLayout{layout.NewVBoxLayout(), func() {
 		t.title.Color = theme.Color(theme.ColorNameForeground)
 	}}, t.title)
 	row := container.NewBorder(nil, nil, title, status, connection)
 	t.object = container.New(layout.NewCustomPaddedLayout(12, 6, 16, 12), row)
 	return t
+}
+
+// setRunning colors the power icon green while the service runs, so a tap
+// stops it; otherwise the icon is muted and a tap starts it.
+func (t *topBar) setRunning(running bool) {
+	if t.running == running {
+		return
+	}
+	t.running = running
+	if running {
+		t.power.SetIcon(powerOnIcon)
+	} else {
+		t.power.SetIcon(powerOffIcon)
+	}
 }
 
 func center(object fyne.CanvasObject) fyne.CanvasObject {
@@ -214,6 +244,8 @@ func (t *topBar) update(s core.Snapshot) {
 	t.systemProxy.set(systemProxy)
 	t.tun.set(tun)
 	t.setConnection(proxyStatus(s))
+	t.setRunning(s.ServiceRunning)
+	t.power.Enable()
 }
 
 func (t *topBar) disconnect() {
@@ -221,6 +253,8 @@ func (t *topBar) disconnect() {
 	t.systemProxy.set(pillOff)
 	t.tun.set(pillOff)
 	t.setConnection(localize.T("Disconnected"))
+	t.setRunning(false)
+	t.power.Disable()
 }
 
 // pillStates maps a snapshot to the Mihomo, system proxy, and TUN pills.

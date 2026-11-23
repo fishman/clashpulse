@@ -34,12 +34,6 @@ other = "正在连接本地服务…"
 ["Sources"]
 other = "来源"
 
-["Start service"]
-other = "启动服务"
-
-["Stop service"]
-other = "停止服务"
-
 ["Restart service"]
 other = "重启服务"
 

@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/localize"
 )
 
@@ -154,5 +155,29 @@ func TestSidebarEntryKeyboard(t *testing.T) {
 	window.Canvas().Unfocus()
 	if entry.tint.StrokeWidth != 0 {
 		t.Fatalf("unfocused entry keeps its ring: %v", entry.tint.StrokeWidth)
+	}
+}
+
+func TestPowerButtonTogglesService(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	view := newDesktopUI(context.Background(), "", a.NewWindow("ClashPulse"))
+	if !view.topBar.power.Disabled() {
+		t.Fatal("power button enabled before the service is reachable")
+	}
+	view.connected = true
+	for _, tc := range []struct {
+		running bool
+		want    ipc.CommandKind
+	}{{false, ipc.CommandStart}, {true, ipc.CommandStop}} {
+		view.topBar.update(core.Snapshot{ServiceRunning: tc.running})
+		test.Tap(view.topBar.power)
+		if got := <-view.actions; got.Kind != tc.want {
+			t.Fatalf("running=%t: power sent %q, want %q", tc.running, got.Kind, tc.want)
+		}
+	}
+	view.topBar.disconnect()
+	if !view.topBar.power.Disabled() {
+		t.Fatal("power button enabled after disconnect")
 	}
 }
