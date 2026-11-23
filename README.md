@@ -65,7 +65,7 @@ A download must contain at least one proxy or proxy provider; an empty profile (
 
 Press `?` in TUI views for keyboard help (`F1` inside editors), or `~` to view and scroll current-session activity; `q` closes either overlay without quitting. In the GUI, use Overview > View activity. Both activity views show only sanitized IPC diagnostics, not subscription URLs or credentials.
 
-Settings has Mihomo binary, System Proxy, Monitor, and DNS sections. Its sidebar becomes a dropdown when the sidebar and selected section cannot fit side by side.
+Settings has Mihomo binary, System Proxy, TUN, Monitor, Services, and DNS sections. Its sidebar becomes a dropdown when the sidebar and selected section cannot fit side by side.
 
 ### Choosing a node automatically
 
@@ -76,6 +76,8 @@ ClashPulse measures every node in an automated group and switches by `switch_pol
 - **Steady stream** (`steady_stream`): every `stream_interval`, ClashPulse downloads a 256 KiB HTTPS file (`stream_url`) through the current node and the 3 fastest others, one at a time, and records whether each download finished, reset, stalled, or was cut short. It leaves a node only after 2 of its last 5 downloads broke, for a node with fewer broken downloads and at least 3 completed ones; ties go to the faster download. Good for streams, calls, and large transfers. Costs about 12 MB per hour for one automated group, at most 24 MB per hour; a node shared by groups is downloaded once. A node that stops answering latency probes still leaves under the Failover rule, without waiting for a download round.
 
 Steady stream pulls through a private loopback listener that only ClashPulse can use; your selected node and rules are untouched. It requires a Mihomo whose capability check confirms pinned listeners (v1.19.31 verified). The Proxies page "Probe downloads" button (TUI `d`) runs a download round immediately. Every policy honors cooldown, manual selection, and the all-nodes-failed stop.
+
+Service checks (opt-in, Settings > Services, `[[service]]`) route ChatGPT, Claude, Gemini, YouTube Premium, Netflix, or Spotify through their own `ClashPulse - <Name>` group, check every 30 minutes that the group's node is not refused by region, and with `automatic = true` move the group to the fastest usable node. See [service checks](docs/switching.md#service-checks).
 
 The tray's Proxies menu selects a member of an active managed `select` group; its System Proxy item changes the requested OS setting. Controls return when the local IPC service reconnects.
 

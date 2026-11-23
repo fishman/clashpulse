@@ -69,3 +69,63 @@ probe, at most every 15s.
 The default `test_url` is plain HTTP and can be intercepted. Use HTTPS if
 probe integrity matters. TUI `T` or the Monitor section sends a test
 notification.
+
+## Service checks
+
+Some services refuse a node by region; a fast node can still be refused.
+A service check reads a small response through a node and reports `usable`,
+`blocked`, or `error`, with the detected region. Nothing is enabled by
+default. Configure `[[service]]` in `config.toml`, GUI Settings > Services, or
+TUI Settings (`Enter` on a service row edits it).
+
+Each enabled service gets a `select` group `ClashPulse - <Name>` holding every
+proxy of the profile, and `DOMAIN-SUFFIX` rules sending its domains there
+ahead of the profile's own rules. `domains_resource` replaces those domains
+with one `RULE-SET` rule for an enabled domain rule-set resource. A profile
+group already named `ClashPulse - <Name>` is an error; ClashPulse never
+renames it.
+
+| Service | ID | Check | Usable when |
+| --- | --- | --- | --- |
+| ChatGPT | `chatgpt` | `https://chat.openai.com/cdn-cgi/trace`, `https://api.openai.com/compliance/cookie_requirements` | second answer is 2xx without `unsupported_country` |
+| Claude | `claude` | `https://claude.ai/cdn-cgi/trace` | region not blocked by Claude |
+| Gemini | `gemini` | the YouTube read | Google's country is not blocked by Gemini |
+| YouTube Premium | `youtube` | `https://www.youtube.com/premium?hl=en` (first 96 KiB) | a country is found and no "not available in your region" notice |
+| Netflix | `netflix` | three `https://www.netflix.com/title/...` pages, headers only | a title is available and none is refused |
+| Spotify | `spotify` | `https://www.spotify.com/api/content/v1/country-selector?platform=web&format=json` | 2xx without "not available in your country" |
+
+Every check uses HTTPS with verified TLS, a 15 s limit, redirects only within
+the service's own hosts, and a fresh in-memory cookie jar. Only the outcome and
+region are kept. All six services at the default interval use about 0.3 MB an
+hour.
+
+Limitation: if YouTube places its region notice beyond the first 96 KiB, the
+check relies on the country alone and may report `usable`.
+
+| key | default | meaning | TUI |
+| --- | --- | --- | --- |
+| `id` | | `chatgpt`, `claude`, `gemini`, `youtube`, `netflix`, `spotify`; each at most once | |
+| `enabled` | `false` | render the group and check it | `E` |
+| `regions` | `[]` | preferred two-letter country codes; empty: any region not blocked | `Enter` |
+| `check_interval` | `"30m"` | between checks of the selected node; at least `5m` | `Enter` |
+| `failures` | `2` | consecutive failed checks before a search (1-10) | `Enter` |
+| `automatic` | `false` | let ClashPulse switch this service's group | `G` |
+| `domains_resource` | `""` | domain rule-set resource replacing the built-in domains | `Enter` |
+
+TUI `K` (GUI Check now) checks the selected node immediately. A check also
+runs when the group's node changes.
+
+Service switching is separate from group automation. The service groups are
+never latency-probed, and `automated_groups` cannot name them. With
+`automatic = true`, a group moves after `failures` consecutive failed checks
+of its node: `blocked` counts; `error` counts only when the node's latest
+latency probe also failed. The search checks up to 8 other nodes, 4 at a
+time in latency order, and picks the fastest usable one in `regions`. It
+honors `cooldown` from `[monitor]` and one switch at a time. If no candidate
+is usable, the node stays and the next search waits for the next check.
+Picking a node by hand in a service group turns `automatic` off for that
+service.
+
+Checks and steady-stream downloads share 4 private loopback probe listeners,
+so services need a Mihomo with pinned listener support (verified with
+v1.19.31).

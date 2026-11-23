@@ -71,6 +71,18 @@ cooldown = "5m"
 jitter = "10s" # Spreads each round so every probe does not fire at once.
 automated_groups = [] # Switches these groups automatically. Opaque group IDs shown by IPC/UI; manual selection removes opt-in.
 
+# Service checks. Nothing runs unless a service is listed with enabled = true.
+# Each enabled service gets a "ClashPulse - <Name>" group and routes its domains through it.
+# IDs: chatgpt, claude, gemini, youtube, netflix, spotify. Each at most once.
+# [[service]]
+# id = "chatgpt"
+# enabled = true
+# regions = ["US", "JP"]   # Empty: any region the service does not block.
+# check_interval = "30m"   # Minimum 5m.
+# failures = 2             # Consecutive failed checks (1-10) before looking for another node.
+# automatic = false        # true lets ClashPulse switch this group's node.
+# domains_resource = ""    # Optional resources.toml domain rule-set ID replacing the built-in domains.
+
 [dns]
 listen = "127.0.0.1:1053" # No privileged port or system DNS redirect is enabled implicitly.
 
@@ -84,7 +96,7 @@ stack = "gvisor" # gvisor | mixed | system
 dns_mode = "profile" # profile keeps the profile's DNS mode (fake-ip if unset); fake-ip | redir-host force it.
 ```
 
-延迟监测设置见[自动切换](switching.html)。
+延迟监测设置见[自动切换](switching.html)，`[[service]]` 条目见[服务检测](switching.html#service-checks)。
 
 ## subscriptions.toml
 

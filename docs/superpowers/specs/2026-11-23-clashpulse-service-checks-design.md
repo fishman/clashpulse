@@ -279,7 +279,7 @@ the service blocks and bypass `automatic = false`.
 `config.toml`, strict decoding, one table per configured service:
 
 ```toml
-[[services]]
+[[service]]
 id = "chatgpt"            # one of the built-in IDs; each at most once
 enabled = true
 regions = ["US", "JP"]    # optional; empty means any region that is not blocked
