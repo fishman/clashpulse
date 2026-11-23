@@ -42,13 +42,15 @@ func newSurface(colorName fyne.ThemeColorName) *canvas.Rectangle {
 }
 
 // newCard puts a muted uppercase caption and the body on a rounded card
-// surface.
+// surface. The caption, values, and meters are inset by the inner padding so
+// they line up with label text.
 func newCard(caption string, body ...fyne.CanvasObject) *fyne.Container {
 	surface := newSurface(colorNameCard)
 	title := newMutedText(strings.ToUpper(caption), sizeNameCaption)
 	title.TextStyle.Bold = true
-	content := container.NewVBox(append([]fyne.CanvasObject{title}, body...)...)
-	inset := container.New(layout.NewCustomPaddedLayout(12, 12, 14, 14), content)
+	heading := container.New(layout.NewCustomPaddedLayout(0, 2, theme.InnerPadding(), 0), title)
+	content := container.New(layout.NewCustomPaddedVBoxLayout(0), append([]fyne.CanvasObject{heading}, body...)...)
+	inset := container.New(layout.NewCustomPaddedLayout(10, 10, 4, 4), content)
 	return container.New(paintLayout{layout.NewStackLayout(), func() {
 		surface.FillColor = theme.Color(colorNameCard)
 		surface.StrokeColor = theme.Color(theme.ColorNameSeparator)
@@ -74,14 +76,14 @@ type valueLayout struct{}
 func (valueLayout) Layout(objects []fyne.CanvasObject, _ fyne.Size) {
 	number, unit := objects[0].MinSize(), objects[1].MinSize()
 	objects[0].Resize(number)
-	objects[0].Move(fyne.NewPos(0, 0))
+	objects[0].Move(fyne.NewPos(theme.InnerPadding(), 0))
 	objects[1].Resize(unit)
-	objects[1].Move(fyne.NewPos(number.Width+theme.Padding(), number.Height-unit.Height-theme.Padding()))
+	objects[1].Move(fyne.NewPos(theme.InnerPadding()+number.Width+theme.Padding(), number.Height-unit.Height-theme.Padding()))
 }
 
 func (valueLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
 	number, unit := objects[0].MinSize(), objects[1].MinSize()
-	return fyne.NewSize(number.Width+theme.Padding()+unit.Width, number.Height)
+	return fyne.NewSize(theme.InnerPadding()+number.Width+theme.Padding()+unit.Width, number.Height)
 }
 
 // meter is an 8 px rounded bar filled to a fraction.
@@ -118,8 +120,12 @@ func (m *meter) set(fraction float64, color fyne.ThemeColorName) {
 type meterLayout struct{ m *meter }
 
 func (l meterLayout) Layout(_ []fyne.CanvasObject, size fyne.Size) {
-	l.m.track.Resize(size)
-	l.m.fill.Resize(fyne.NewSize(size.Width*float32(l.m.fraction), size.Height))
+	inset := theme.InnerPadding()
+	width := max(size.Width-2*inset, 0)
+	l.m.track.Move(fyne.NewPos(inset, 0))
+	l.m.track.Resize(fyne.NewSize(width, size.Height))
+	l.m.fill.Move(fyne.NewPos(inset, 0))
+	l.m.fill.Resize(fyne.NewSize(width*float32(l.m.fraction), size.Height))
 }
 
 func (meterLayout) MinSize([]fyne.CanvasObject) fyne.Size {

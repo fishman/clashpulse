@@ -22,32 +22,14 @@ other = "最快（始终使用延迟最低的节点）"
 ["Connecting to local service..."]
 other = "正在连接本地服务…"
 
-["Proxy groups"]
-other = "代理组"
-
 ["Data resources"]
 other = "数据资源"
 
 ["Filter lists"]
 other = "过滤列表"
 
-["Jobs"]
-other = "任务"
-
-["Reported issues"]
-other = "报告的问题"
-
-["No automatic switches recorded"]
-other = "暂无自动切换记录"
-
-["No service errors"]
-other = "当前没有服务错误"
-
 ["Sources"]
 other = "来源"
-
-["Service overview"]
-other = "服务概览"
 
 ["Start service"]
 other = "启动服务"
@@ -460,12 +442,6 @@ other = "已报告兼容性问题"
 
 ["%s %s %d ms"]
 other = "%s %s %d 毫秒"
-
-["Last switch %s -> %s: %s. Measurements: %s"]
-other = "上次切换：%s -> %s；%s。测量结果：%s"
-
-["Last switch %s -> %s: %s. Measurements: %s. Downloads: %s"]
-other = "上次切换：%s -> %s；%s。测量结果：%s。下载结果：%s"
 
 ["not yet"]
 other = "尚无"
@@ -947,3 +923,54 @@ other = "留空则保留当前流测试 URL"
 
 ["stream URL must use HTTPS without credentials or fragment"]
 other = "流测试 URL 必须使用 HTTPS，且不含凭据或片段"
+
+["Current node"]
+other = "当前节点"
+
+["Last switch"]
+other = "最近切换"
+
+["Subscription usage"]
+other = "订阅用量"
+
+["Health"]
+other = "健康状态"
+
+["Profile"]
+other = "配置"
+
+["Mode"]
+other = "代理模式"
+
+["No proxy group yet"]
+other = "暂无代理组"
+
+["Automatic switching on"]
+other = "自动切换已开启"
+
+["Automatic switching off"]
+other = "自动切换已关闭"
+
+["Manual override"]
+other = "已手动选择"
+
+["No switch yet"]
+other = "暂无切换"
+
+["No issues"]
+other = "暂无问题"
+
+["Local profile"]
+other = "本地配置"
+
+["URL test every %d s, timeout %d ms"]
+other = "URL 测试每 %d 秒一次，超时 %d 毫秒"
+
+["of %s GB"]
+other = "共 %s GB"
+
+["%d subscriptions · %d resources · %d filters"]
+other = "%d 个订阅 · %d 个数据资源 · %d 个过滤列表"
+
+["Status"]
+other = "状态"

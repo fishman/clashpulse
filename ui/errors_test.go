@@ -19,7 +19,7 @@ func TestOverviewDisplaysConfigurationErrorDetails(t *testing.T) {
 	view := newDesktopUI(context.Background(), "", app.NewWindow("ClashPulse"))
 	view.postSnapshot(core.Snapshot{Errors: []core.ErrorSnapshot{{File: "config.toml", Key: "monitor.interval", Message: "invalid configuration; previous settings remain active"}}})
 	fyne.DoAndWait(func() {})
-	got := view.errorSummary.Text
+	got := view.overview.healthIssue.Text
 	for _, detail := range []string{"config.toml", "monitor.interval", "previous settings remain active"} {
 		if !strings.Contains(got, detail) {
 			t.Fatalf("service issue detail %q absent from %q", detail, got)
@@ -27,18 +27,13 @@ func TestOverviewDisplaysConfigurationErrorDetails(t *testing.T) {
 	}
 }
 
-func TestOverviewDistinguishesIssuesBySource(t *testing.T) {
-	app := test.NewApp()
-	defer app.Quit()
-	view := newDesktopUI(context.Background(), "", app.NewWindow("ClashPulse"))
-	view.postSnapshot(core.Snapshot{Errors: []core.ErrorSnapshot{
+func TestServiceErrorDistinguishesIssuesBySource(t *testing.T) {
+	for _, issue := range []core.ErrorSnapshot{
 		{Kind: "refresh_subscription", Key: "subscription", SourceID: "feed-a", Message: "HTTP 406"},
 		{Kind: "refresh_subscription", Key: "subscription", SourceID: "feed-b", Message: "HTTP 429"},
-	}})
-	fyne.DoAndWait(func() {})
-	for _, detail := range []string{"feed-a", "HTTP 406", "feed-b", "HTTP 429"} {
-		if !strings.Contains(view.errorSummary.Text, detail) {
-			t.Fatalf("source-specific issue detail %q absent from %q", detail, view.errorSummary.Text)
+	} {
+		if got := serviceError(issue); !strings.Contains(got, issue.SourceID) || !strings.Contains(got, issue.Message) {
+			t.Fatalf("issue detail %q/%q absent from %q", issue.SourceID, issue.Message, got)
 		}
 	}
 }
@@ -127,45 +122,6 @@ func TestSettingsBinaryFieldsAreAligned(t *testing.T) {
 	}
 }
 
-func TestOverviewCountsUseSeparateLabels(t *testing.T) {
-	app := test.NewApp()
-	defer app.Quit()
-	view := newDesktopUI(context.Background(), "", app.NewWindow("ClashPulse"))
-	view.postSnapshot(core.Snapshot{Groups: []core.GroupSnapshot{{ID: "main"}}, Jobs: []core.JobSnapshot{{ID: "job-1", Kind: "refresh", State: "running"}}})
-	fyne.DoAndWait(func() {})
-	labels := rowLabels(view.views["Overview"])
-	for _, want := range []string{"Proxy groups", "Jobs", "1"} {
-		found := false
-		for _, label := range labels {
-			found = found || label == want
-		}
-		if !found {
-			t.Errorf("Overview lacks separately labelled %q: %v", want, labels)
-		}
-	}
-	if strings.Contains(strings.Join(labels, " "), " | ") {
-		t.Errorf("Overview still has pipe layout: %v", labels)
-	}
-}
-
-func TestOverviewBinaryFieldsAreAligned(t *testing.T) {
-	app := test.NewApp()
-	defer app.Quit()
-	view := newDesktopUI(context.Background(), "", app.NewWindow("ClashPulse"))
-	view.postSnapshot(core.Snapshot{Binary: core.BinarySnapshot{Desired: "system", ObservedVersion: "v1", Capabilities: []string{"geoip.dat"}}})
-	fyne.DoAndWait(func() {})
-	labels := rowLabels(view.views["Overview"])
-	for _, want := range []string{"Desired", "system", "Observed", "v1", "Capabilities", "geoip.dat", "Compatibility"} {
-		found := false
-		for _, label := range labels {
-			found = found || label == want
-		}
-		if !found {
-			t.Errorf("Overview binary identity lacks %q cell: %v", want, labels)
-		}
-	}
-}
-
 func TestMainlandDesktopOverviewAndSubscriptionControls(t *testing.T) {
 	localize.SetLanguage("zh-CN")
 	t.Cleanup(func() { localize.SetLanguage("en") })
@@ -173,7 +129,7 @@ func TestMainlandDesktopOverviewAndSubscriptionControls(t *testing.T) {
 	defer a.Quit()
 	view := newDesktopUI(context.Background(), "", a.NewWindow("ClashPulse"))
 	labels := strings.Join(rowLabels(view.views["Overview"]), "\n")
-	for _, want := range []string{"\u670d\u52a1\u6982\u89c8", "\u542f\u52a8\u670d\u52a1"} {
+	for _, want := range []string{"\u6682\u65e0\u5207\u6362", "\u6682\u65e0\u4ee3\u7406\u7ec4"} {
 		if !strings.Contains(labels, want) {
 			t.Fatalf("Mainland overview lacks %q: %q", want, labels)
 		}

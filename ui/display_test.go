@@ -135,7 +135,7 @@ func TestLastSwitchSummaryShowsDecisionEvidence(t *testing.T) {
 		Evidence:       []core.ProbeSnapshot{{ProxyID: "aaaaaaaa11111111", Outcome: "timeout"}, {ProxyID: "bbbbbbbb22222222", Outcome: "success", LatencyMillis: 180}},
 		StreamEvidence: []core.StreamProbeSnapshot{{ProxyID: "aaaaaaaa11111111", Outcome: "reset"}, {ProxyID: "bbbbbbbb22222222", Outcome: "success", KBps: 1800}},
 	}}}
-	got := lastSwitchSummary(view)
+	got := overviewSwitchText(view)
 	for _, piece := range []string{"aaaaaaaa -> bbbbbbbb", "materially better candidate", "timeout 0 ms", "success 180 ms", "aaaaaaaa download reset", "bbbbbbbb download completed \u00b7 1800 KB/s"} {
 		if !strings.Contains(got, piece) {
 			t.Fatalf("switch evidence missing %q: %q", piece, got)
@@ -146,7 +146,7 @@ func TestLastSwitchSummaryShowsDecisionEvidence(t *testing.T) {
 	}
 	localize.SetLanguage("zh-CN")
 	t.Cleanup(func() { localize.SetLanguage("en") })
-	if got := lastSwitchSummary(view); !strings.Contains(got, "\u4e0b\u8f7d\u88ab\u91cd\u7f6e") || strings.Contains(got, "download") {
+	if got := overviewSwitchText(view); !strings.Contains(got, "\u4e0b\u8f7d\u88ab\u91cd\u7f6e") || strings.Contains(got, "download") {
 		t.Fatalf("Chinese stream evidence = %q", got)
 	}
 }
@@ -155,7 +155,7 @@ func TestMainlandSwitchEvidenceUsesFixedDisplayTranslations(t *testing.T) {
 	localize.SetLanguage("zh-CN")
 	t.Cleanup(func() { localize.SetLanguage("en") })
 	view := core.Snapshot{Switches: []core.SwitchSnapshot{{OldID: "aaaaaaaa11111111", NewID: "bbbbbbbb22222222", Reason: "materially better candidate", Evidence: []core.ProbeSnapshot{{ProxyID: "aaaaaaaa11111111", Outcome: "timeout"}, {ProxyID: "bbbbbbbb22222222", Outcome: "success", LatencyMillis: 180}}}}}
-	text := lastSwitchSummary(view)
+	text := overviewSwitchText(view)
 	for _, value := range []string{"\u5019\u9009\u8282\u70b9\u660e\u663e\u66f4\u4f18", "\u8d85\u65f6", "\u6210\u529f"} {
 		if !strings.Contains(text, value) {
 			t.Fatalf("Chinese switch summary lost %q: %q", value, text)
@@ -292,4 +292,9 @@ func TestProxyStatusReportsWhetherTrafficIsProxied(t *testing.T) {
 	if view.connection.Text != "Proxy off" {
 		t.Fatalf("header = %q, want the proxy state", view.connection.Text)
 	}
+}
+
+func overviewSwitchText(snapshot core.Snapshot) string {
+	card := buildOverview(snapshot).Switch
+	return strings.Join([]string{card.Title, card.Reason, card.Evidence}, " ")
 }

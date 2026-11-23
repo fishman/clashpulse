@@ -52,7 +52,7 @@ func TestMeterClampsFraction(t *testing.T) {
 	defer app.Quit()
 	app.Settings().SetTheme(newTheme())
 	m := newMeter()
-	m.object.Resize(fyne.NewSize(100, 8))
+	m.object.Resize(fyne.NewSize(100+2*theme.InnerPadding(), 8))
 	m.set(1.5, theme.ColorNameSuccess)
 	if got := m.fill.Size().Width; got != 100 {
 		t.Fatalf("over-full meter width = %v", got)

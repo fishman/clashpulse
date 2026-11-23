@@ -148,7 +148,6 @@ func newTopBar(w fyne.Window, connection *widget.Label, items ...*fyne.MenuItem)
 		position := fyne.CurrentApp().Driver().AbsolutePositionForObject(t.menu)
 		widget.NewPopUpMenu(menu, w.Canvas()).ShowAtPosition(position.AddXY(0, t.menu.Size().Height))
 	}
-	connection.Importance = widget.LowImportance
 	status := container.NewHBox(connection, center(t.mihomo.object), center(t.systemProxy.object), center(t.tun.object), t.menu)
 	row := container.NewBorder(nil, nil, nil, status, container.New(paintLayout{layout.NewVBoxLayout(), func() {
 		t.title.Color = theme.Color(theme.ColorNameForeground)

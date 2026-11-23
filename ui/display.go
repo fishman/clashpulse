@@ -125,25 +125,6 @@ func groupLabel(group core.GroupSnapshot) string {
 	return label + " (" + group.Type + ")"
 }
 
-func lastSwitchSummary(snapshot core.Snapshot) string {
-	if len(snapshot.Switches) == 0 {
-		return localize.T("No automatic switches recorded")
-	}
-	event := snapshot.Switches[len(snapshot.Switches)-1]
-	measurements := make([]string, 0, len(event.Evidence))
-	for _, sample := range event.Evidence {
-		measurements = append(measurements, fmt.Sprintf(localize.T("%s %s %d ms"), core.ProxyLabel(snapshot.Proxies, sample.ProxyID), localize.Code("probe.outcome", sample.Outcome), sample.LatencyMillis))
-	}
-	if len(event.StreamEvidence) == 0 {
-		return fmt.Sprintf(localize.T("Last switch %s -> %s: %s. Measurements: %s"), core.ProxyLabel(snapshot.Proxies, event.OldID), core.ProxyLabel(snapshot.Proxies, event.NewID), localize.T(event.Reason), strings.Join(measurements, "; "))
-	}
-	downloads := make([]string, 0, len(event.StreamEvidence))
-	for _, sample := range event.StreamEvidence {
-		downloads = append(downloads, core.ProxyLabel(snapshot.Proxies, sample.ProxyID)+" "+sample.Label())
-	}
-	return fmt.Sprintf(localize.T("Last switch %s -> %s: %s. Measurements: %s. Downloads: %s"), core.ProxyLabel(snapshot.Proxies, event.OldID), core.ProxyLabel(snapshot.Proxies, event.NewID), localize.T(event.Reason), strings.Join(measurements, "; "), strings.Join(downloads, "; "))
-}
-
 func shortID(id string) string {
 	if len(id) > 8 {
 		return id[:8]

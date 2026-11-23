@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"reflect"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -47,7 +46,7 @@ func Run(ctx context.Context, endpoint string) error {
 	metadata.Migrations["fyneDo"] = true
 	app.SetMetadata(metadata)
 	w := a.NewWindow("ClashPulse")
-	w.Resize(fyne.NewSize(760, 640))
+	w.Resize(fyne.NewSize(980, 700))
 
 	icon := appIcon()
 	a.SetIcon(icon)
@@ -109,21 +108,16 @@ type desktopUI struct {
 	viewStack  *fyne.Container
 	views      map[string]fyne.CanvasObject
 
-	overviewCounts      *fyne.Container
-	overviewCountValues []*widget.Label
-	binarySummary       *widget.Form
-	binaryValues        [4]*widget.Label
-	overridesRows       *fyne.Container
-	overridesSection    *fyne.Container
-	overrideLabels      []*widget.Label
-	switchSummary       *widget.Label
-	errorSummary        *widget.Label
-	proxyPage           *proxyPage
-	subPage             *subscriptionPage
-	resourcePage        *resourcePage
-	filterPage          *filterPage
-	settingsPage        *settingsPage
-	activity            *activityView
+	overview         *overviewView
+	overridesRows    *fyne.Container
+	overridesSection *fyne.Container
+	overrideLabels   []*widget.Label
+	proxyPage        *proxyPage
+	subPage          *subscriptionPage
+	resourcePage     *resourcePage
+	filterPage       *filterPage
+	settingsPage     *settingsPage
+	activity         *activityView
 }
 
 func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopUI {
@@ -135,15 +129,6 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 		views:      make(map[string]fyne.CanvasObject),
 		connection: widget.NewLabel(localize.T("Connecting to local service...")),
 	}
-	d.overviewCountValues = make([]*widget.Label, 0, 6)
-	countCells := make([]fyne.CanvasObject, 0, 6)
-	for _, label := range []string{localize.T("Proxy groups"), localize.T("Subscriptions"), localize.T("Data resources"), localize.T("Filter lists"), localize.T("Jobs"), localize.T("Reported issues")} {
-		value := widget.NewLabel("0")
-		d.overviewCountValues = append(d.overviewCountValues, value)
-		countCells = append(countCells, container.NewVBox(widget.NewLabelWithStyle(label, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), value))
-	}
-	d.overviewCounts = container.NewGridWithColumns(3, countCells...)
-	d.binarySummary, d.binaryValues = newBinaryForm()
 	d.overrideLabels = make([]*widget.Label, 14)
 	rows := make([]fyne.CanvasObject, len(d.overrideLabels))
 	for i := range d.overrideLabels {
@@ -156,10 +141,6 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 	d.overrideLabels[0].Show()
 	d.overridesRows = container.NewVBox(rows...)
 	d.overridesSection = container.NewVBox(widget.NewLabelWithStyle(localize.T("Generated config changes"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), d.overridesRows)
-	d.switchSummary = widget.NewLabel(localize.T("No automatic switches recorded"))
-	d.switchSummary.Wrapping = fyne.TextWrapWord
-	d.errorSummary = widget.NewLabel(localize.T("No service errors"))
-	d.errorSummary.Wrapping = fyne.TextWrapWord
 	d.proxyPage = newProxyPage(d.enqueue)
 	d.subPage = newSubscriptionPage(d.enqueue, w)
 	d.resourcePage = newResourcePage(d.enqueue, w)
@@ -167,7 +148,8 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 	d.settingsPage = newSettingsPage(d.enqueue, w)
 	d.activity = newActivityView()
 
-	d.views["Overview"] = d.overviewView()
+	d.overview = newOverviewView(d.openActivity)
+	d.views["Overview"] = d.overview.object
 	d.views["Proxies"] = d.proxyPage.view
 	d.views["Subscriptions"] = d.subPage.view
 	d.views["Filter Lists"] = d.filterPage.view
@@ -201,18 +183,6 @@ func (d *desktopUI) installKeys() {
 			d.dismissTopDialog()
 		}
 	})
-}
-
-func (d *desktopUI) overviewView() fyne.CanvasObject {
-	title := widget.NewLabelWithStyle(localize.T("Service overview"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	controls := container.NewGridWithColumns(2,
-		widget.NewButton(localize.T("Start service"), func() { d.enqueue(ipc.Command{Kind: ipc.CommandStart}) }),
-		widget.NewButton(localize.T("Stop service"), func() { d.enqueue(ipc.Command{Kind: ipc.CommandStop}) }),
-		widget.NewButton(localize.T("Restart service"), func() { d.enqueue(ipc.Command{Kind: ipc.CommandRestart}) }),
-		widget.NewButton(localize.T("Reload configuration"), func() { d.enqueue(ipc.Command{Kind: ipc.CommandReloadConfiguration}) }),
-		widget.NewButton(localize.T("View activity"), d.openActivity),
-	)
-	return container.NewVScroll(container.NewVBox(title, d.overviewCounts, widget.NewLabelWithStyle(localize.T("Mihomo binary"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), d.binarySummary, d.switchSummary, d.errorSummary, controls))
 }
 
 func (d *desktopUI) showView(name string) {
@@ -346,31 +316,13 @@ func (d *desktopUI) postSnapshot(snapshot core.Snapshot) {
 		first := !d.hasSnapshot
 		d.connected = true
 		d.topBar.update(immutable)
-		counts := []string{count(immutable.Groups), count(immutable.Subscriptions), count(immutable.Resources), count(immutable.Filters), count(immutable.Jobs), count(immutable.Errors)}
-		for i, value := range counts {
-			if d.overviewCountValues[i].Text != value {
-				d.overviewCountValues[i].SetText(value)
-			}
-		}
+		d.overview.update(buildOverview(immutable))
 		binaryChanged := first || !reflect.DeepEqual(previous.Binary, immutable.Binary)
-		if binaryChanged {
-			for i, value := range binaryFieldValues(immutable.Binary) {
-				if d.binaryValues[i].Text != value {
-					d.binaryValues[i].SetText(value)
-				}
-			}
-		}
 		if first || !reflect.DeepEqual(previous.ConfigOverrides, immutable.ConfigOverrides) {
 			d.updateOverrides(immutable.ConfigOverrides)
 			if d.activity.dialog != nil {
 				d.activity.dialog.Refresh()
 			}
-		}
-		if first || !reflect.DeepEqual(previous.Switches, immutable.Switches) {
-			d.switchSummary.SetText(lastSwitchSummary(immutable))
-		}
-		if first || !reflect.DeepEqual(previous.Errors, immutable.Errors) {
-			d.errorSummary.SetText(serviceErrors(immutable.Errors))
 		}
 		if first || !reflect.DeepEqual(previous.Groups, immutable.Groups) || !reflect.DeepEqual(previous.Proxies, immutable.Proxies) {
 			d.proxyPage.update(immutable)
@@ -422,26 +374,20 @@ func (d *desktopUI) postStatus(status string) {
 	})
 }
 
-func serviceErrors(issues []core.ErrorSnapshot) string {
-	if len(issues) == 0 {
-		return localize.T("No service errors")
+// serviceError names where a reported issue comes from, then its message.
+func serviceError(issue core.ErrorSnapshot) string {
+	location := strings.TrimSpace(strings.Join([]string{issue.File, issue.Key}, " "))
+	if location == "" {
+		location = localize.T("Service")
 	}
-	lines := make([]string, 0, len(issues))
-	for _, issue := range issues {
-		location := strings.TrimSpace(strings.Join([]string{issue.File, issue.Key}, " "))
-		if location == "" {
-			location = localize.T("Service")
+	if issue.SourceID != "" {
+		scope := issue.SourceID
+		if issue.Kind != "" {
+			scope = issue.Kind + "/" + scope
 		}
-		if issue.SourceID != "" {
-			scope := issue.SourceID
-			if issue.Kind != "" {
-				scope = issue.Kind + "/" + scope
-			}
-			location += " [" + scope + "]"
-		}
-		lines = append(lines, location+": "+issue.Message)
+		location += " [" + scope + "]"
 	}
-	return strings.Join(lines, "\n")
+	return location + ": " + issue.Message
 }
 
 func binaryFieldValues(binary core.BinarySnapshot) [4]string {
@@ -471,8 +417,4 @@ func newBinaryForm() (*widget.Form, [4]*widget.Label) {
 		items = append(items, widget.NewFormItem(label, value))
 	}
 	return widget.NewForm(items...), values
-}
-
-func count[T any](items []T) string {
-	return strconv.Itoa(len(items))
 }

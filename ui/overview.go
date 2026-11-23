@@ -1,0 +1,373 @@
+package ui
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/theme"
+	"fyne.io/fyne/v2/widget"
+
+	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/localize"
+	"github.com/fishman/clashpulse/monitor"
+)
+
+type nodeCard struct {
+	Visible                                        bool
+	Group, Node, Latency, Unit, Detail, Automation string
+}
+
+type streamCard struct {
+	Visible              bool
+	KBps, Label, Summary string
+	Fraction             float64
+	Color                fyne.ThemeColorName
+}
+
+type switchCard struct {
+	Empty                         bool
+	Title, Time, Reason, Evidence string
+}
+
+type usageCard struct {
+	Visible                    bool
+	Name, Used, Total, Expires string
+	Fraction                   float64
+	Color                      fyne.ThemeColorName
+}
+
+type healthCard struct {
+	Counts, Issue string
+	State         pillState
+}
+
+type overviewModel struct {
+	Profile, Mode, Policy, Mihomo string
+	Node                          nodeCard
+	Stream                        streamCard
+	Switch                        switchCard
+	Usage                         usageCard
+	Health                        healthCard
+}
+
+// buildOverview derives every Overview card from one snapshot; it touches
+// no widget, so it is tested without a display.
+func buildOverview(s core.Snapshot) overviewModel {
+	m := overviewModel{
+		Profile: localize.T("None"),
+		Mode:    localize.Code("proxy.mode", s.ProxyMode),
+		Policy:  switchPolicyLabel(s.Monitor.SwitchPolicy),
+	}
+	if m.Mode == "" {
+		m.Mode = "-"
+	}
+	binary := binaryFieldValues(s.Binary)
+	m.Mihomo = binary[1] + " \u00b7 " + binary[0]
+	var active *core.SubscriptionSnapshot
+	for i := range s.Subscriptions {
+		if s.Subscriptions[i].Active {
+			active = &s.Subscriptions[i]
+			break
+		}
+	}
+	switch {
+	case s.ActiveSource == "local":
+		m.Profile = localize.T("Local profile")
+	case active != nil && active.Name != "":
+		m.Profile = active.Name
+	case active != nil:
+		m.Profile = active.ID
+	}
+
+	var node *core.ProxySnapshot
+	if len(s.Groups) > 0 {
+		group := s.Groups[0]
+		for _, candidate := range s.Groups {
+			if candidate.AutomationEnabled {
+				group = candidate
+				break
+			}
+		}
+		m.Node = nodeCard{Visible: true, Group: groupLabel(group), Node: core.ProxyLabel(s.Proxies, group.Selected), Latency: "-"}
+		switch {
+		case group.ManualOverride:
+			m.Node.Automation = localize.T("Manual override")
+		case group.AutomationEnabled:
+			m.Node.Automation = localize.T("Automatic switching on")
+		default:
+			m.Node.Automation = localize.T("Automatic switching off")
+		}
+		for i := range s.Proxies {
+			if s.Proxies[i].GroupID == group.ID && s.Proxies[i].ID == group.Selected {
+				node = &s.Proxies[i]
+				break
+			}
+		}
+		if node != nil {
+			switch {
+			case node.Outcome == "success" && node.LatencyMillis > 0:
+				m.Node.Latency, m.Node.Unit = strconv.FormatInt(node.LatencyMillis, 10), "ms"
+			case node.MihomoMillis > 0:
+				m.Node.Latency, m.Node.Unit = strconv.FormatInt(node.MihomoMillis, 10), "ms (mihomo)"
+			}
+			m.Node.Detail = node.StabilityLabel()
+		}
+	}
+
+	m.Stream.Summary = fmt.Sprintf(localize.T("URL test every %d s, timeout %d ms"), s.Monitor.IntervalSeconds, s.Monitor.TimeoutMillis)
+	if s.Monitor.SwitchPolicy == monitor.SwitchSteadyStream && node != nil && node.StreamSamples > 0 {
+		fraction := float64(node.StreamCompleted) / float64(node.StreamSamples)
+		color := theme.ColorNameWarning
+		switch {
+		case fraction >= 1:
+			color = theme.ColorNameSuccess
+		case fraction <= 0:
+			color = theme.ColorNameError
+		}
+		m.Stream = streamCard{Visible: true, KBps: strconv.FormatInt(node.StreamKBps, 10), Label: node.StreamLabel(), Fraction: fraction, Color: color, Summary: m.Stream.Summary}
+	}
+
+	m.Switch = switchCard{Empty: true, Title: localize.T("No switch yet")}
+	if len(s.Switches) > 0 {
+		event := s.Switches[len(s.Switches)-1]
+		m.Switch = switchCard{
+			Title:    core.ProxyLabel(s.Proxies, event.OldID) + " -> " + core.ProxyLabel(s.Proxies, event.NewID),
+			Time:     detailTime(event.At),
+			Reason:   localize.T(event.Reason),
+			Evidence: switchEvidence(s.Proxies, event),
+		}
+	}
+
+	if active != nil && active.Usage != nil && active.Usage.TotalBytes > 0 {
+		used := active.Usage.UploadedBytes + active.Usage.DownloadedBytes
+		fraction := float64(used) / float64(active.Usage.TotalBytes)
+		color := theme.ColorNamePrimary
+		if fraction >= 0.9 {
+			color = theme.ColorNameWarning
+		}
+		m.Usage = usageCard{Visible: true, Name: m.Profile, Used: gigabytes(used), Total: fmt.Sprintf(localize.T("of %s GB"), gigabytes(active.Usage.TotalBytes)), Fraction: fraction, Color: color}
+		if active.Usage.ExpiresAt > 0 {
+			m.Usage.Expires = fmt.Sprintf(localize.T("Expires: %s"), detailTime(active.Usage.ExpiresAt))
+		}
+	}
+
+	m.Health = healthCard{
+		Counts: fmt.Sprintf(localize.T("%d subscriptions \u00b7 %d resources \u00b7 %d filters"), len(s.Subscriptions), len(s.Resources), len(s.Filters)),
+		Issue:  localize.T("No issues"),
+		State:  pillOn,
+	}
+	switch {
+	case len(s.Errors) > 0:
+		m.Health.Issue, m.Health.State = serviceError(s.Errors[0]), pillFailed
+	case s.Binary.LastCompatibilityFailure != "":
+		m.Health.Issue, m.Health.State = compatibilityLabel(s.Binary.LastCompatibilityFailure), pillFailed
+	}
+	return m
+}
+
+// switchEvidence lists the probe and download samples behind a switch.
+func switchEvidence(proxies []core.ProxySnapshot, event core.SwitchSnapshot) string {
+	pieces := make([]string, 0, len(event.Evidence)+len(event.StreamEvidence))
+	for _, sample := range event.Evidence {
+		pieces = append(pieces, fmt.Sprintf(localize.T("%s %s %d ms"), core.ProxyLabel(proxies, sample.ProxyID), localize.Code("probe.outcome", sample.Outcome), sample.LatencyMillis))
+	}
+	for _, sample := range event.StreamEvidence {
+		pieces = append(pieces, core.ProxyLabel(proxies, sample.ProxyID)+" "+sample.Label())
+	}
+	return strings.Join(pieces, "; ")
+}
+
+func gigabytes(bytes uint64) string {
+	return strconv.FormatFloat(float64(bytes)/(1<<30), 'f', 1, 64)
+}
+
+// overviewView holds the Overview widgets; update changes only what differs.
+type overviewView struct {
+	object fyne.CanvasObject
+
+	profile, mode, policy, mihomo *widget.Label
+
+	node                           *fyne.Container
+	nodeBody                       *fyne.Container
+	nodeEmpty, nodeName, nodeGroup *widget.Label
+	nodeDetail                     *widget.Label
+	nodeLatency, nodeUnit          *canvas.Text
+	streamBody                     *fyne.Container
+	streamSummary, streamLabel     *widget.Label
+	streamKBps                     *canvas.Text
+	streamMeter                    *meter
+	switchTitle, switchTime        *widget.Label
+	switchEvidence                 *widget.Label
+	usage                          *fyne.Container
+	usageName, usageExpires        *widget.Label
+	usageUsed, usageTotal          *canvas.Text
+	usageMeter                     *meter
+	healthCounts, healthIssue      *widget.Label
+	healthDot                      *statusPill
+}
+
+func newOverviewView(openActivity func()) *overviewView {
+	v := &overviewView{}
+	label := func(style fyne.TextStyle) *widget.Label {
+		l := widget.NewLabelWithStyle("", fyne.TextAlignLeading, style)
+		l.Wrapping = fyne.TextWrapWord
+		return l
+	}
+	fact := func(caption string) (*fyne.Container, *widget.Label) {
+		value := label(fyne.TextStyle{Bold: true})
+		value.Wrapping = fyne.TextWrapOff
+		value.Truncation = fyne.TextTruncateEllipsis
+		return newCard(caption, value), value
+	}
+	profileCard, profile := fact(localize.T("Profile"))
+	modeCard, mode := fact(localize.T("Mode"))
+	policyCard, policy := fact(localize.T("Switch policy"))
+	mihomoCard, mihomo := fact("Mihomo")
+	v.profile, v.mode, v.policy, v.mihomo = profile, mode, policy, mihomo
+
+	v.nodeName, v.nodeGroup = label(fyne.TextStyle{Bold: true}), label(fyne.TextStyle{})
+	v.nodeDetail = label(fyne.TextStyle{})
+	v.nodeEmpty = label(fyne.TextStyle{})
+	v.nodeEmpty.SetText(localize.T("No proxy group yet"))
+	latency, number, unit := newValue("-", "")
+	v.nodeLatency, v.nodeUnit = number, unit
+	v.nodeBody = container.New(layout.NewCustomPaddedVBoxLayout(0), v.nodeName, latency, v.nodeDetail, v.nodeGroup)
+	v.nodeBody.Hide()
+	v.node = newCard(localize.T("Current node"), v.nodeEmpty, v.nodeBody)
+
+	v.streamSummary, v.streamLabel = label(fyne.TextStyle{}), label(fyne.TextStyle{})
+	kbps, kbpsNumber, _ := newValue("0", "KB/s")
+	v.streamKBps = kbpsNumber
+	v.streamMeter = newMeter()
+	v.streamBody = container.New(layout.NewCustomPaddedVBoxLayout(0), kbps, v.streamLabel, v.streamMeter.object)
+	v.streamBody.Hide()
+	stream := newCard(localize.T("Monitor"), v.streamSummary, v.streamBody)
+
+	v.switchTitle, v.switchTime = label(fyne.TextStyle{Bold: true}), label(fyne.TextStyle{})
+	v.switchEvidence = label(fyne.TextStyle{})
+	v.switchTitle.SetText(localize.T("No switch yet"))
+	switchCard := newCard(localize.T("Last switch"), v.switchTitle, v.switchTime, v.switchEvidence)
+
+	v.usageName, v.usageExpires = label(fyne.TextStyle{}), label(fyne.TextStyle{})
+	used, usedNumber, usedTotal := newValue("0", "")
+	v.usageUsed, v.usageTotal = usedNumber, usedTotal
+	v.usageMeter = newMeter()
+	v.usage = newCard(localize.T("Subscription usage"), v.usageName, used, v.usageMeter.object, v.usageExpires)
+	v.usage.Hide()
+
+	v.healthCounts, v.healthIssue = label(fyne.TextStyle{}), label(fyne.TextStyle{})
+	v.healthDot = pill(localize.T("Status"))
+	activity := widget.NewButton(localize.T("View activity"), openActivity)
+	activity.Importance = widget.LowImportance
+	health := newTapArea(newCard(localize.T("Health"), v.healthCounts, container.NewHBox(v.healthDot.object), v.healthIssue, container.NewHBox(activity)), openActivity)
+
+	facts := container.NewGridWithColumns(4, profileCard, modeCard, policyCard, mihomoCard)
+	content := container.NewVBox(facts, container.NewGridWithColumns(2, v.node, stream), switchCard, container.NewGridWithColumns(2, v.usage, health))
+	v.object = container.NewVScroll(container.NewPadded(content))
+	v.update(buildOverview(core.Snapshot{}))
+	return v
+}
+
+func setLabel(label *widget.Label, text string) {
+	if label.Text != text {
+		label.SetText(text)
+	}
+}
+
+func setText(text *canvas.Text, value string) {
+	if text.Text != value {
+		text.Text = value
+		text.Refresh()
+	}
+}
+
+func setVisible(object fyne.CanvasObject, visible bool) {
+	if object.Visible() == visible {
+		return
+	}
+	if visible {
+		object.Show()
+	} else {
+		object.Hide()
+	}
+}
+
+func (v *overviewView) update(m overviewModel) {
+	setLabel(v.profile, m.Profile)
+	setLabel(v.mode, m.Mode)
+	setLabel(v.policy, m.Policy)
+	setLabel(v.mihomo, m.Mihomo)
+
+	setVisible(v.nodeEmpty, !m.Node.Visible)
+	setVisible(v.nodeBody, m.Node.Visible)
+	setLabel(v.nodeName, m.Node.Node)
+	setLabel(v.nodeGroup, m.Node.Group)
+	setLabel(v.nodeDetail, joinNonEmpty(m.Node.Detail, m.Node.Automation))
+	setText(v.nodeLatency, m.Node.Latency)
+	setText(v.nodeUnit, m.Node.Unit)
+
+	setVisible(v.streamSummary, !m.Stream.Visible)
+	setVisible(v.streamBody, m.Stream.Visible)
+	setLabel(v.streamSummary, m.Stream.Summary)
+	setLabel(v.streamLabel, m.Stream.Label)
+	setText(v.streamKBps, m.Stream.KBps)
+	if m.Stream.Visible {
+		v.streamMeter.set(m.Stream.Fraction, m.Stream.Color)
+	}
+
+	setLabel(v.switchTitle, m.Switch.Title)
+	setLabel(v.switchTime, joinNonEmpty(m.Switch.Time, m.Switch.Reason))
+	setLabel(v.switchEvidence, m.Switch.Evidence)
+	setVisible(v.switchTime, !m.Switch.Empty)
+	setVisible(v.switchEvidence, m.Switch.Evidence != "")
+
+	setVisible(v.usage, m.Usage.Visible)
+	setLabel(v.usageName, m.Usage.Name)
+	setText(v.usageUsed, m.Usage.Used)
+	setText(v.usageTotal, m.Usage.Total)
+	setLabel(v.usageExpires, m.Usage.Expires)
+	setVisible(v.usageExpires, m.Usage.Expires != "")
+	if m.Usage.Visible {
+		v.usageMeter.set(m.Usage.Fraction, m.Usage.Color)
+	}
+
+	setLabel(v.healthCounts, m.Health.Counts)
+	setLabel(v.healthIssue, m.Health.Issue)
+	v.healthDot.set(m.Health.State)
+}
+
+// tapArea makes a whole card open something when tapped.
+type tapArea struct {
+	widget.BaseWidget
+	content fyne.CanvasObject
+	onTap   func()
+}
+
+func newTapArea(content fyne.CanvasObject, onTap func()) *tapArea {
+	t := &tapArea{content: content, onTap: onTap}
+	t.ExtendBaseWidget(t)
+	return t
+}
+
+func (t *tapArea) CreateRenderer() fyne.WidgetRenderer {
+	return widget.NewSimpleRenderer(t.content)
+}
+
+func (t *tapArea) Tapped(*fyne.PointEvent) {
+	t.onTap()
+}
+
+func joinNonEmpty(parts ...string) string {
+	kept := parts[:0:0]
+	for _, part := range parts {
+		if part != "" {
+			kept = append(kept, part)
+		}
+	}
+	return strings.Join(kept, " \u00b7 ")
+}
