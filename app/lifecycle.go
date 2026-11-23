@@ -823,6 +823,7 @@ func (s *runtimeService) startProcess(ctx context.Context, capability mihomo.Cap
 		}
 	}
 	s.controller = controller
+	clear(s.serviceObserved)
 	s.probePool = nil
 	if len(s.probes) > 0 {
 		s.probePool = mihomo.NewProbePool(controller, s.probes)
@@ -879,13 +880,20 @@ func (s *runtimeService) stopStartedProcess(ctx context.Context, cause error) er
 	return cause
 }
 
-func (s *runtimeService) stopMonitorAndProcess(ctx context.Context) error {
-	if s.stopMonitor != nil {
-		s.stopMonitor()
-		<-s.monitorDone
-		s.stopMonitor = nil
-		s.monitor = nil
+// stopMonitorLoop cancels the latency monitor and service scheduler and waits
+// for both.
+func (s *runtimeService) stopMonitorLoop() {
+	if s.stopMonitor == nil {
+		return
 	}
+	s.stopMonitor()
+	<-s.monitorDone
+	s.stopMonitor = nil
+	s.monitor, s.serviceScheduler, s.servicePlan = nil, nil, monitor.ServicePlan{}
+}
+
+func (s *runtimeService) stopMonitorAndProcess(ctx context.Context) error {
+	s.stopMonitorLoop()
 	s.running.Store(false)
 	s.tunActive = false
 	s.exited = nil
@@ -1031,12 +1039,16 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 		group.Proxies = slices.DeleteFunc(group.Proxies, mihomo.IsProbeName)
 		id := opaqueID(group.Name)
 		managedSelector := selectorType(group.Type)
+		serviceID, serviceGroup := mihomo.ServiceGroupFor(group.Name)
+		if s.automation[id] && serviceGroup {
+			return fmt.Errorf("clashpulse: automation group %q is a service group; use services automatic", id)
+		}
 		if s.automation[id] && !managedSelector {
 			return fmt.Errorf("clashpulse: automation group %q is not a managed select group", id)
 		}
 		s.groups[id] = group
-		measured := probeEnabled(group.Type, settings.Enabled)
-		automatic := automationEnabled(group.Type, settings.Enabled, s.automation[id])
+		measured := probeEnabled(group.Type, settings.Enabled) && !serviceGroup
+		automatic := automationEnabled(group.Type, settings.Enabled, s.automation[id]) && !serviceGroup
 		view := core.GroupSnapshot{ID: id, Label: proxyDisplayLabel(group.Name, "Group", groupIndex+1), Type: group.Type, Selected: opaqueID(group.Selected), AutomationEnabled: automatic, ManualOverride: s.manualOverride[id]}
 		labels := make(map[string]int, len(group.Proxies))
 		for proxyIndex, name := range group.Proxies {
@@ -1053,6 +1065,11 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 			s.snapshot.Proxies = append(s.snapshot.Proxies, view)
 		}
 		s.snapshot.Groups = append(s.snapshot.Groups, view)
+		// Service groups follow service checks, never latency automation.
+		if serviceGroup {
+			s.observeServiceGroup(serviceID, group)
+			continue
+		}
 		// A selection of a hidden probe group cannot be monitored.
 		if (managedSelector || group.Selected != "") && !mihomo.IsProbeName(group.Selected) {
 			monitorGroups = append(monitorGroups, monitor.GroupState{Group: group.Name, Selected: group.Selected, Proxies: append([]string(nil), group.Proxies...), ProbeEnabled: measured, AutomationEnabled: automatic, ManualOverride: s.manualOverride[id], LastSwitchAt: s.lastSwitch[id]})
@@ -1084,10 +1101,17 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 		}
 		monitorCtx, cancel := context.WithCancel(s.processCtx)
 		s.stopMonitor, s.monitorDone = cancel, make(chan error, 1)
-		scheduler, controller := s.monitor, s.controller
+		s.serviceScheduler = monitor.NewServiceScheduler(serviceChecker{pool: s.probePool}, func(batch monitor.ServiceBatch) {
+			select {
+			case s.serviceBatches <- batch:
+			case <-monitorCtx.Done():
+			}
+		})
+		scheduler, serviceScheduler, controller := s.monitor, s.serviceScheduler, s.controller
 		go func() {
 			var watcher sync.WaitGroup
 			watcher.Go(func() { watchDialFailures(monitorCtx, controller, scheduler.ProbedGroups, scheduler.ReportDialFailure) })
+			watcher.Go(func() { _ = serviceScheduler.Run(monitorCtx) })
 			err := scheduler.Run(monitorCtx)
 			watcher.Wait()
 			s.monitorDone <- err
@@ -1098,6 +1122,7 @@ func (s *runtimeService) refreshGroups(ctx context.Context) error {
 	if err := s.monitor.SetGroups(monitorGroups); err != nil {
 		return err
 	}
+	s.updateServicePlan()
 	s.publish()
 	return nil
 }

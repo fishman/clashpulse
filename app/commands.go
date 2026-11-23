@@ -17,6 +17,7 @@ import (
 	"github.com/fishman/clashpulse/config"
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
+	"github.com/fishman/clashpulse/mihomo"
 	"github.com/fishman/clashpulse/monitor"
 	"github.com/fishman/clashpulse/subscriptions"
 )
@@ -140,6 +141,12 @@ func (s *runtimeService) execute(ctx context.Context, cmd ipc.Command) error {
 		if s.controller == nil || !ok || !found || !selectorType(group.Type) {
 			return fmt.Errorf("selection is unavailable")
 		}
+		if serviceID, ok := mihomo.ServiceGroupFor(group.Name); ok {
+			if !slices.Contains(group.Proxies, proxy) {
+				return fmt.Errorf("proxy is not a member of this group")
+			}
+			return s.selectServiceGroup(ctx, serviceID, group, proxy)
+		}
 		eligible := false
 		for _, member := range group.Proxies {
 			if member == proxy {
@@ -163,13 +170,16 @@ func (s *runtimeService) execute(ctx context.Context, cmd ipc.Command) error {
 		if !ok || !selectorType(group.Type) {
 			return fmt.Errorf("group does not support automation")
 		}
+		if _, service := mihomo.ServiceGroupFor(group.Name); service {
+			return errServiceGroupAutomation
+		}
 		return s.setGroupAutomation(cmd.GroupID, cmd.Automation.Enabled)
 	case ipc.CommandSetAutoFastest:
 		// One settings write: per-group writes would each restart the monitor
 		// and discard its probe history.
 		managed := make([]string, 0, len(s.groups))
 		for id, group := range s.groups {
-			if selectorType(group.Type) {
+			if latencyManaged(group) {
 				managed = append(managed, id)
 			}
 		}
@@ -182,6 +192,10 @@ func (s *runtimeService) execute(ctx context.Context, cmd ipc.Command) error {
 		}
 		change.MonitorAutomatedGroups = &groups
 		return s.applySettings(ctx, change)
+	case ipc.CommandSetService:
+		return s.setService(ctx, cmd.Service)
+	case ipc.CommandCheckService:
+		return s.checkService(cmd.ServiceID)
 	case ipc.CommandTestNotification:
 		// A pending test already covers this request.
 		select {
@@ -218,7 +232,7 @@ func (s *runtimeService) autoFastest(settings config.Monitor) bool {
 	}
 	managed := false
 	for id, group := range s.groups {
-		if !selectorType(group.Type) {
+		if !latencyManaged(group) {
 			continue
 		}
 		if !s.automation[id] || s.manualOverride[id] {
@@ -370,7 +384,10 @@ func (s *runtimeService) applyChange(ctx context.Context, _ config.Change) (resu
 			proxyChanged = true
 		}
 	}
-	// Only steady_stream renders the probe listener and group.
+	// Probe slots and service groups are rendered only when in use.
+	if !slices.Equal(serviceRenderKey(change.Before), serviceRenderKey(change.After)) {
+		needsRender = true
+	}
 	if (change.Before.Monitor.SwitchPolicy == monitor.SwitchSteadyStream) != (change.After.Monitor.SwitchPolicy == monitor.SwitchSteadyStream) {
 		needsRender = true
 	}
@@ -483,12 +500,7 @@ func (s *runtimeService) applyChange(ctx context.Context, _ config.Change) (resu
 		}
 	}
 	if s.controller != nil && monitorChanged {
-		if s.stopMonitor != nil {
-			s.stopMonitor()
-			<-s.monitorDone
-			s.stopMonitor = nil
-			s.monitor = nil
-		}
+		s.stopMonitorLoop()
 		if err := s.refreshGroups(ctx); err != nil {
 			return revert(err)
 		}
@@ -521,6 +533,7 @@ func (s *runtimeService) applyChange(ctx context.Context, _ config.Change) (resu
 		}
 	}
 	s.lastAppliedSettings = change.After
+	s.updateServicePlan()
 	s.resolveIssue("config", "")
 	if deletionErr != nil && s.configErrors != nil {
 		offerLatest(s.configErrors, deletionErr)
@@ -650,6 +663,7 @@ func (s *runtimeService) acceptBatch(ctx context.Context, batch monitor.Batch) {
 			s.reportError("switch", err)
 		}
 	}
+	s.updateServicePlan()
 	s.publish()
 }
 

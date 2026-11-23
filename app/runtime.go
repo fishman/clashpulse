@@ -51,16 +51,18 @@ type runtimeService struct {
 	changes             chan config.Change
 	batches             chan monitor.Batch
 	streamBatches       chan monitor.Batch // apart from batches: a latency batch never replaces a stream decision
-	resourceRefresh     chan []string
-	stateChanged        chan struct{}
-	resourceDirty       atomic.Bool
-	resourceScheduleMu  sync.Mutex
-	resourceAttempts    map[string]time.Time
-	backgroundErrors    chan error
-	configErrors        chan error
-	configResults       chan error
-	notificationErrors  chan error
-	controller          *mihomo.Controller
+	// serviceBatches blocks the service scheduler rather than drop a switch.
+	serviceBatches     chan monitor.ServiceBatch
+	resourceRefresh    chan []string
+	stateChanged       chan struct{}
+	resourceDirty      atomic.Bool
+	resourceScheduleMu sync.Mutex
+	resourceAttempts   map[string]time.Time
+	backgroundErrors   chan error
+	configErrors       chan error
+	configResults      chan error
+	notificationErrors chan error
+	controller         *mihomo.Controller
 	// Exactly one is set: the controller socket, or a loopback address where
 	// no Unix-socket controller exists.
 	controllerAddress, controllerSocket, secret string
@@ -73,24 +75,32 @@ type runtimeService struct {
 	probePool *mihomo.ProbePool
 	// autoProxy serves the auto route while Mihomo is stopped; nil connects
 	// directly. Terminal commands set it so they honor http_proxy.
-	autoProxy                func(*http.Request) (*url.URL, error)
-	cap                      mihomo.Capability
-	exited                   <-chan struct{}
-	running                  atomic.Bool
-	proxyActive              bool
-	generated                []byte
-	resourceHome             string
-	configOverrides          []core.ConfigOverrideSnapshot
-	configReportPending      bool
-	localProfile             []byte
-	generatedPath            string
-	foreground               bool
-	forceRestart             bool
-	activationBackup         *runtimeBackup
-	groups                   map[string]mihomo.Group
-	proxies                  map[string]string
-	automation               map[string]bool
-	monitor                  *monitor.Scheduler
+	autoProxy           func(*http.Request) (*url.URL, error)
+	cap                 mihomo.Capability
+	exited              <-chan struct{}
+	running             atomic.Bool
+	proxyActive         bool
+	generated           []byte
+	resourceHome        string
+	configOverrides     []core.ConfigOverrideSnapshot
+	configReportPending bool
+	localProfile        []byte
+	generatedPath       string
+	foreground          bool
+	forceRestart        bool
+	activationBackup    *runtimeBackup
+	groups              map[string]mihomo.Group
+	proxies             map[string]string
+	automation          map[string]bool
+	monitor             *monitor.Scheduler
+	// serviceScheduler shares the monitor's lifetime; servicePlan is the
+	// last plan handed to it.
+	serviceScheduler *monitor.ServiceScheduler
+	servicePlan      monitor.ServicePlan
+	serviceStatus    map[string]serviceStatus
+	// serviceObserved is each service group's selection as last seen; a
+	// start or reload clears it.
+	serviceObserved          map[string]string
 	stopMonitor              context.CancelFunc
 	monitorDone              chan error
 	snapshot                 core.Snapshot
@@ -357,6 +367,7 @@ func (s *runtimeService) stateSnapshot() core.Snapshot {
 	state.ProxyMode = settings.Mihomo.Mode
 	state.SystemProxy = core.SystemProxySnapshot{Enabled: settings.App.SystemProxy.Enabled, Active: s.proxyActive}
 	state.Tun = s.tunSnapshot(settings.Tun)
+	state.Services = s.serviceSnapshots(settings, state.Proxies)
 	state.Binary.Desired = settings.Mihomo.Binary
 	state.Binary.ObservedVersion = s.cap.Version
 	state.Binary.Capabilities = nil
@@ -591,11 +602,7 @@ func compatibilityFailure(err error) string {
 }
 
 func (s *runtimeService) shutdown() error {
-	if s.stopMonitor != nil {
-		s.stopMonitor()
-		<-s.monitorDone
-		s.stopMonitor = nil
-	}
+	s.stopMonitorLoop()
 	cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	proxyErr := s.proxy.Restore(cleanup)

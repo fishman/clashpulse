@@ -222,3 +222,21 @@ other = "Replaced"
 
 ["override.change.removed"]
 other = "Removed"
+
+["operation.set_service"]
+other = "Service check settings"
+
+["operation.check_service"]
+other = "Service check"
+
+["operation.service_switch"]
+other = "Service switch"
+
+["service.switch.blocked"]
+other = "switched: service blocked on the selected node"
+
+["service.switch.failing"]
+other = "switched: service checks kept failing"
+
+["service.exhausted"]
+other = "no usable node found for this service"

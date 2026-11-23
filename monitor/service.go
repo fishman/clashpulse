@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"context"
+	"maps"
 	"math/rand/v2"
 	"slices"
 	"sync"
@@ -68,7 +69,6 @@ type ServiceScheduler struct {
 
 	mu         sync.Mutex
 	plan       ServicePlan
-	generation uint64
 	requested  map[string]bool
 	wake       chan struct{}
 	timerArmed bool
@@ -89,7 +89,6 @@ func NewServiceScheduler(checker ServiceChecker, onBatch func(ServiceBatch)) *Se
 func (s *ServiceScheduler) SetPlan(plan ServicePlan) {
 	s.mu.Lock()
 	s.plan = plan
-	s.generation++
 	s.mu.Unlock()
 	s.signal()
 }
@@ -189,7 +188,7 @@ func (s *ServiceScheduler) Run(ctx context.Context) error {
 	defer timer.Stop()
 	for {
 		s.mu.Lock()
-		plan, requested, generation := s.plan, s.requested, s.generation
+		plan, requested := s.plan, s.requested
 		s.requested = make(map[string]bool)
 		s.mu.Unlock()
 		now := time.Now()
@@ -204,10 +203,12 @@ func (s *ServiceScheduler) Run(ctx context.Context) error {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
+			// A plan change during the round drops results for services it
+			// removed, and switches whose old node is no longer selected.
 			s.mu.Lock()
-			stale := s.generation != generation
+			current := s.plan
 			s.mu.Unlock()
-			if !stale {
+			if batch = currentBatch(batch, current); len(batch.Checks)+len(batch.Switches)+len(batch.Exhausted) > 0 {
 				s.onBatch(batch)
 			}
 			continue
@@ -234,6 +235,19 @@ func (s *ServiceScheduler) Run(ctx context.Context) error {
 		case <-timerC:
 		}
 	}
+}
+
+func currentBatch(batch ServiceBatch, plan ServicePlan) ServiceBatch {
+	selected := make(map[string]string, len(plan.Targets))
+	for _, target := range plan.Targets {
+		selected[target.ID] = target.Selected
+	}
+	present := func(id string) bool { _, ok := selected[id]; return ok }
+	batch.Checks = slices.DeleteFunc(batch.Checks, func(check ServiceCheck) bool { return !present(check.Service) })
+	batch.Switches = slices.DeleteFunc(batch.Switches, func(change ServiceSwitch) bool { return selected[change.Service] != change.Old })
+	batch.Exhausted = slices.DeleteFunc(batch.Exhausted, func(id string) bool { return !present(id) })
+	maps.DeleteFunc(batch.Next, func(id string, _ time.Time) bool { return !present(id) })
+	return batch
 }
 
 // reconcileServices adds new targets as due, drops removed ones, and makes a

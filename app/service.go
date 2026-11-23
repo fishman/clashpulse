@@ -45,7 +45,7 @@ func newRuntimeServiceWithResponseCapture(configDir, stateDir string, initial co
 		groups: make(map[string]mihomo.Group), proxies: make(map[string]string), automation: make(map[string]bool),
 		lastSwitch: make(map[string]time.Time), manualOverride: make(map[string]bool), notifications: make(chan time.Duration, 1),
 		improvementNotifications: make(chan struct{}, 1), testNotifications: make(chan struct{}, 1), notify: notifyDesktop, notificationDone: make(chan struct{}),
-		tun: grant,
+		tun: grant, serviceBatches: make(chan monitor.ServiceBatch, 1), serviceStatus: make(map[string]serviceStatus), serviceObserved: make(map[string]string),
 	}
 	for _, id := range initial.Monitor.AutomatedGroups {
 		s.automation[id] = true

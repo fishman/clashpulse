@@ -432,3 +432,21 @@ other = "替换"
 
 ["override.change.removed"]
 other = "移除"
+
+["operation.set_service"]
+other = "服务检测设置"
+
+["operation.check_service"]
+other = "服务检测"
+
+["operation.service_switch"]
+other = "服务切换"
+
+["service.switch.blocked"]
+other = "已切换：当前节点无法使用该服务"
+
+["service.switch.failing"]
+other = "已切换：服务检测持续失败"
+
+["service.exhausted"]
+other = "未找到可用于该服务的节点"

@@ -255,3 +255,19 @@ func TestServiceSchedulerIdleWithoutServices(t *testing.T) {
 		t.Fatal("timer armed with no services")
 	}
 }
+
+func TestServiceSchedulerKeepsResultsAcrossLatencyOnlyPlanChange(t *testing.T) {
+	gate := make(chan struct{})
+	checker := &fakeChecker{gate: gate}
+	plan := ServicePlan{Slots: 4, Targets: []ServiceTarget{target("claude", "a", "a", "b")}}
+	s, batches := runServiceScheduler(t, checker, plan)
+	for checker.callCount() == 0 {
+		time.Sleep(time.Millisecond)
+	}
+	plan.Latency = map[string]time.Duration{"b": time.Millisecond}
+	s.SetPlan(plan)
+	close(gate)
+	if b := nextServiceBatch(t, batches); len(b.Checks) != 1 {
+		t.Fatalf("a latency update discarded the round: %+v", b)
+	}
+}

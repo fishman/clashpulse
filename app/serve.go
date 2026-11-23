@@ -533,6 +533,8 @@ func (s *runtimeService) run(ctx context.Context, startup func(context.Context) 
 			s.acceptBatch(serviceCtx, batch)
 		case batch := <-s.streamBatches:
 			s.acceptBatch(serviceCtx, batch)
+		case batch := <-s.serviceBatches:
+			s.applyServiceBatch(serviceCtx, batch)
 		}
 	}
 }
