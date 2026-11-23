@@ -194,6 +194,9 @@ func Render(profile []byte, intent config.Snapshot, paths ManagedPaths, controll
 	if len(providers) > 0 {
 		document["rule-providers"] = providers
 	}
+	if err := renderServices(document, intent); err != nil {
+		return nil, err
+	}
 	if err := renderFilters(document, registry); err != nil {
 		return nil, err
 	}
