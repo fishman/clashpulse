@@ -1690,13 +1690,13 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 			switchEvent := snapshot.Switches[len(snapshot.Switches)-1]
 			measurements := make([]string, 0, len(switchEvent.Evidence))
 			for _, sample := range switchEvent.Evidence {
-				measurements = append(measurements, fmt.Sprintf("%s %s %dms", shortProxyID(sample.ProxyID), localize.Code("probe.outcome", sample.Outcome), sample.LatencyMillis))
+				measurements = append(measurements, fmt.Sprintf("%s %s %dms", core.ProxyLabel(snapshot.Proxies, sample.ProxyID), localize.Code("probe.outcome", sample.Outcome), sample.LatencyMillis))
 			}
-			detail := fmt.Sprintf("%s -> %s: %s [%s]", shortProxyID(switchEvent.OldID), shortProxyID(switchEvent.NewID), localize.T(switchEvent.Reason), strings.Join(measurements, "; "))
+			detail := fmt.Sprintf("%s -> %s: %s [%s]", core.ProxyLabel(snapshot.Proxies, switchEvent.OldID), core.ProxyLabel(snapshot.Proxies, switchEvent.NewID), localize.T(switchEvent.Reason), strings.Join(measurements, "; "))
 			if len(switchEvent.StreamEvidence) > 0 {
 				downloads := make([]string, 0, len(switchEvent.StreamEvidence))
 				for _, sample := range switchEvent.StreamEvidence {
-					downloads = append(downloads, shortProxyID(sample.ProxyID)+" "+sample.Label())
+					downloads = append(downloads, core.ProxyLabel(snapshot.Proxies, sample.ProxyID)+" "+sample.Label())
 				}
 				detail += " [" + strings.Join(downloads, "; ") + "]"
 			}
@@ -1955,13 +1955,6 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 
 func timeLabel(unixSeconds int64) string {
 	return time.Unix(unixSeconds, 0).UTC().Format("2006-01-02 15:04Z")
-}
-
-func shortProxyID(id string) string {
-	if len(id) > 8 {
-		return id[:8]
-	}
-	return id
 }
 
 func tunRows(tun core.TunSnapshot) []Row {

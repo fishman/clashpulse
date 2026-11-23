@@ -297,21 +297,26 @@ type DiagnosticSnapshot struct {
 }
 
 // DiagnosticSource names a diagnostic's source for display. A stream probe
-// carries an opaque node ID, shown as that node's masked row label, or as its
-// 8-character prefix when no row carries it.
+// carries an opaque node ID, shown through ProxyLabel.
 func DiagnosticSource(proxies []ProxySnapshot, diagnostic DiagnosticSnapshot) string {
 	if diagnostic.Kind != "stream_probe" {
 		return diagnostic.SourceID
 	}
+	return ProxyLabel(proxies, diagnostic.SourceID)
+}
+
+// ProxyLabel names a node for display: its masked row label, or the
+// 8-character ID prefix when no row carries it.
+func ProxyLabel(proxies []ProxySnapshot, id string) string {
 	for _, proxy := range proxies {
-		if proxy.ID == diagnostic.SourceID && proxy.Label != "" {
+		if proxy.ID == id && proxy.Label != "" {
 			return proxy.Label
 		}
 	}
-	if len(diagnostic.SourceID) > 8 {
-		return diagnostic.SourceID[:8]
+	if len(id) > 8 {
+		return id[:8]
 	}
-	return diagnostic.SourceID
+	return id
 }
 
 type Snapshot struct {

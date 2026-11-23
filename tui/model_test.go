@@ -1255,3 +1255,19 @@ func dnsPolicyModel(t *testing.T) Model {
 	model, _, _ = model.HandleKey("6")
 	return model
 }
+
+func TestLastSwitchRowUsesProxyLabels(t *testing.T) {
+	state := core.Snapshot{
+		Switches: []core.SwitchSnapshot{{OldID: "aaaaaaaa1111", NewID: "bbbbbbbb2222", Reason: "materially better candidate"}},
+		Proxies:  []core.ProxySnapshot{{ID: "aaaaaaaa1111", Label: "Example Tokyo 01"}, {ID: "bbbbbbbb2222", Label: "Example Tokyo 02"}},
+	}
+	for _, row := range NewModel().Apply(ipc.Event{Snapshot: state}).Rows() {
+		if row.ID == "switch:last" {
+			if !strings.Contains(row.Detail, "Example Tokyo 01 -> Example Tokyo 02") {
+				t.Fatalf("switch row = %q", row.Detail)
+			}
+			return
+		}
+	}
+	t.Fatal("switch row missing")
+}

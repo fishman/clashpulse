@@ -142,3 +142,24 @@ func TestManualGrantCommandOnlyWhenSetcapCanHelp(t *testing.T) {
 		t.Errorf("no path: ManualGrantCommand() = %q", got)
 	}
 }
+
+func TestProxyLabel(t *testing.T) {
+	long := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	rows := []ProxySnapshot{{ID: "labeled", Label: "Example Tokyo 01"}, {ID: "unlabeled1234"}}
+	for _, test := range []struct {
+		name    string
+		proxies []ProxySnapshot
+		id      string
+		want    string
+	}{
+		{"row label", rows, "labeled", "Example Tokyo 01"},
+		{"row without label", rows, "unlabeled1234", "unlabele"},
+		{"missing long id", rows, long, long[:8]},
+		{"short id", rows, "abc", "abc"},
+		{"empty proxies", nil, long, long[:8]},
+	} {
+		if got := ProxyLabel(test.proxies, test.id); got != test.want {
+			t.Errorf("%s: ProxyLabel = %q, want %q", test.name, got, test.want)
+		}
+	}
+}
