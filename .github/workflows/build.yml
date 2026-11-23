@@ -68,7 +68,13 @@ jobs:
             cp packaging/mihomo/LICENSE "$2/mihomo-LICENSE.txt"
             fetched=$(go run ./tools/fetch-mihomo -target ${{ matrix.mihomo }} -out "$1" -provenance "$2/mihomo-PROVENANCE.txt")
             eval "$fetched"
+            [ -n "$version" ] && [ -n "$sha256" ] || { echo "::error::fetch-mihomo reported no identity"; exit 1; }
             ldflags="$ldflags -X 'github.com/fishman/clashpulse/internal/bundled.Version=$version' -X 'github.com/fishman/clashpulse/internal/bundled.SHA256=$sha256'"
+          }
+          # The linker ignores a mistyped -X path, which would ship a package
+          # that silently defaults to system Mihomo.
+          require_identity() {
+            grep -aq "$sha256" "$1" || { echo "::error::$1 does not embed the bundled Mihomo digest"; exit 1; }
           }
           case "${{ matrix.target }}" in
             linux)
@@ -81,6 +87,7 @@ jobs:
               mkdir -p "$bundle/MacOS" "$bundle/Resources"
               bundle_mihomo "$bundle/Resources/mihomo" "$bundle/Resources/licenses"
               bash "$a" "build ${{ matrix.target }}" go build -trimpath -ldflags "$ldflags" -o "$bundle/MacOS/clashpulse" ./cmd/clashpulse
+              require_identity "$bundle/MacOS/clashpulse"
               printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<plist version="1.0"><dict>' '<key>CFBundleIdentifier</key><string>io.github.fishman.clashpulse</string>' '<key>CFBundleName</key><string>ClashPulse</string>' '<key>CFBundleExecutable</key><string>clashpulse</string>' "<key>CFBundleShortVersionString</key><string>${VERSION#v}</string>" '<key>CFBundlePackageType</key><string>APPL</string>' '</dict></plist>' > "$bundle/Info.plist"
               cp README.md LICENSE THIRD_PARTY_LICENSES.txt "$bundle/Resources/"
               tar -czf "dist/$name.tar.gz" -C package ClashPulse.app
@@ -88,6 +95,7 @@ jobs:
             windows)
               bundle_mihomo package/mihomo.exe package/licenses
               bash "$a" "build ${{ matrix.target }}" go build -trimpath -ldflags "$ldflags" -o package/clashpulse.exe ./cmd/clashpulse
+              require_identity package/clashpulse.exe
               cp README.md LICENSE THIRD_PARTY_LICENSES.txt package/
               powershell.exe -NoProfile -Command "Compress-Archive -Path 'package/*' -DestinationPath 'dist/$name.zip'"
               ;;
