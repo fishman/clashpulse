@@ -356,6 +356,10 @@ func (d *desktopUI) postSnapshot(snapshot core.Snapshot) {
 		}
 		if first || !reflect.DeepEqual(previous.Resources, immutable.Resources) {
 			d.resourcePage.update(immutable.Resources)
+			d.settingsPage.services.setResources(immutable.Resources)
+		}
+		if first || !reflect.DeepEqual(previous.Services, immutable.Services) {
+			d.settingsPage.services.update(immutable.Services)
 		}
 		if first || !reflect.DeepEqual(previous.Filters, immutable.Filters) {
 			d.filterPage.update(immutable.Filters)

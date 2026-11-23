@@ -30,3 +30,15 @@ other = "Always keep the lowest-latency node."
 
 ["gui.monitor.switch-policy-help.steady_stream"]
 other = "Leave nodes whose downloads break."
+
+["gui.settings.section.Services"]
+other = "Services"
+
+["service.last-switch.blocked"]
+other = "last switch: service blocked"
+
+["service.last-switch.failing"]
+other = "last switch: checks kept failing"
+
+["service.last-switch.exhausted"]
+other = "no usable node found"

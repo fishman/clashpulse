@@ -1291,11 +1291,13 @@ type settingsPage struct {
 	send                sendIntent
 	window              fyne.Window
 	dns                 *dnsSettings
+	services            *servicesSection
 }
 
 func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 	p := &settingsPage{send: send, window: window, intervals: make(map[string]uint32)}
 	p.dns = newDNSSettings(send, window)
+	p.services = newServicesSection(send, window)
 	for i, value := range binaryFieldValues(core.BinarySnapshot{}) {
 		p.binaryValues[i] = widget.NewLabel(value)
 	}
@@ -1386,7 +1388,7 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 			p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{MonitorIntervalSeconds: &value}})
 		}
 	})
-	sections := []string{"Mihomo binary", "System Proxy", "TUN", "Monitor", "DNS"}
+	sections := []string{"Mihomo binary", "System Proxy", "TUN", "Monitor", "Services", "DNS"}
 	sectionNames := make([]string, len(sections))
 	for i, section := range sections {
 		sectionNames[i] = localize.T("gui.settings.section." + section)
@@ -1437,7 +1439,8 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 				})),
 			)),
 		),
-		sections[4]: p.dns.view,
+		sections[4]: p.services.content,
+		sections[5]: p.dns.view,
 	}
 	selectSection := func(label string) {
 		for i, name := range sectionNames {

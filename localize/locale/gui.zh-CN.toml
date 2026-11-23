@@ -980,3 +980,63 @@ other = "URL 测试"
 
 ["ms (mihomo)"]
 other = "毫秒（Mihomo）"
+
+["gui.settings.section.Services"]
+other = "服务检测"
+
+["Services"]
+other = "服务"
+
+["Not checked"]
+other = "未检测"
+
+["Enable"]
+other = "启用"
+
+["Check now"]
+other = "立即检测"
+
+["Off"]
+other = "关闭"
+
+["Usable"]
+other = "可用"
+
+["Blocked"]
+other = "不可用"
+
+["Check failed"]
+other = "检测失败"
+
+["Last check"]
+other = "上次检测"
+
+["next"]
+other = "下次"
+
+["Built-in domains"]
+other = "内置域名"
+
+["Regions"]
+other = "地区"
+
+["Check interval"]
+other = "检测间隔"
+
+["Failures before switching"]
+other = "切换前失败次数"
+
+["Domains"]
+other = "域名"
+
+["If YouTube's region notice lies beyond the read limit, the check relies on the country alone and may report usable."]
+other = "若 YouTube 的地区提示超出读取上限，检测仅依据国家判断，可能误报为可用。"
+
+["service.last-switch.blocked"]
+other = "上次切换：服务不可用"
+
+["service.last-switch.failing"]
+other = "上次切换：检测持续失败"
+
+["service.last-switch.exhausted"]
+other = "未找到可用节点"

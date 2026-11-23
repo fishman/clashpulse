@@ -33,6 +33,7 @@ func TestSettingsPanesExposeRowsAndActions(t *testing.T) {
 		"Mihomo binary": {"Choose path..."},
 		"System Proxy":  {"Change"},
 		"Monitor":       {"Change", "Edit...", "Send test"},
+		"Services":      {"Check now", "Edit..."},
 		"DNS":           {"Change", "Add"},
 	} {
 		for _, text := range buttons {
@@ -42,7 +43,7 @@ func TestSettingsPanesExposeRowsAndActions(t *testing.T) {
 		}
 	}
 	// The section list names the pane; the card panes repeat no bold heading.
-	for _, section := range []string{"Mihomo binary", "System Proxy", "TUN", "Monitor", "DNS"} {
+	for _, section := range []string{"Mihomo binary", "System Proxy", "TUN", "Monitor", "Services", "DNS"} {
 		if heading := boldLabels(page.sectionViews[section]); len(heading) > 0 {
 			t.Errorf("%s pane has a bold heading: %q", section, heading)
 		}
