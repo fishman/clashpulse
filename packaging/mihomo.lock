@@ -1,0 +1,7 @@
+# Mihomo assets bundled in release packages. Checksums are of the upstream
+# archives, computed once when the pin changes. Bump only in a reviewed commit.
+version v1.19.34
+darwin-arm64  mihomo-darwin-arm64-v1.19.34.gz       1a7a20eca63fbbaec90137717465bfde488d0db2a3a79b8fadebf9b2545b6e4c
+darwin-amd64  mihomo-darwin-amd64-v1-v1.19.34.gz    84af3a9ffd4699e02f14b89859c58b4fc380f6a2135037c6e88e6822347ae657
+windows-amd64 mihomo-windows-amd64-v1-v1.19.34.zip  703e325bfeee582f874b06d054eaae55ab7c194645d1835411685aafa85da5ea
+source        v1.19.34.tar.gz                       e3284a44f1052f1c454c90d418faa244516c2470bf232b455ea18fc4f5fa6028
