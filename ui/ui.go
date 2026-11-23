@@ -164,7 +164,12 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem(localize.T("View activity"), d.openActivity),
 	)
+	// Every page stays in the window tree so a theme change reaches the hidden
+	// ones too; showView only toggles visibility.
 	d.viewStack = container.NewStack()
+	for _, name := range viewIDs {
+		d.viewStack.Add(d.views[name])
+	}
 	d.showView(viewIDs[0])
 	page := container.NewBorder(d.topBar.object, nil, nil, nil, d.viewStack)
 	w.SetContent(container.NewBorder(nil, nil, d.sidebar.object, nil, page))
@@ -192,8 +197,13 @@ func (d *desktopUI) showView(name string) {
 	}
 	d.sidebar.setSelected(name)
 	d.topBar.setTitle(localize.T(name))
-	d.viewStack.Objects = []fyne.CanvasObject{view}
-	d.viewStack.Refresh()
+	for _, other := range d.viewStack.Objects {
+		if other != view {
+			other.Hide()
+		}
+	}
+	view.Show()
+	view.Refresh()
 }
 
 func (d *desktopUI) enqueue(command ipc.Command) {

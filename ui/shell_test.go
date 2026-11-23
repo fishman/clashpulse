@@ -2,9 +2,13 @@ package ui
 
 import (
 	"context"
+	"image/color"
 	"testing"
 
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/theme"
 
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/localize"
@@ -59,4 +63,59 @@ func TestTopBarDisconnectedTurnsPillsOff(t *testing.T) {
 	if view.topBar.mihomo.state != pillOff || view.topBar.tun.state != pillOff || view.connection.Text != "Disconnected" {
 		t.Fatalf("disconnected top bar = %v %v %q", view.topBar.mihomo.state, view.topBar.tun.state, view.connection.Text)
 	}
+}
+
+func TestHiddenPageFollowsThemeChange(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	a.Settings().SetTheme(variantTheme{newTheme(), theme.VariantLight})
+	window := a.NewWindow("ClashPulse")
+	view := newDesktopUI(context.Background(), "", window)
+	window.Resize(fyne.NewSize(1000, 700))
+	view.postSnapshot(core.Snapshot{
+		Groups:  []core.GroupSnapshot{{ID: "g", Label: "Proxy", Type: "Selector", Selected: "a", Proxies: []string{"a"}}},
+		Proxies: []core.ProxySnapshot{{ID: "a", GroupID: "g", Label: "Example Tokyo 01"}},
+	})
+	fyne.DoAndWait(func() {})
+	view.showView("Proxies")
+	view.showView("Overview")
+	dark := variantTheme{newTheme(), theme.VariantDark}
+	a.Settings().SetTheme(dark)
+	want := dark.Color(theme.ColorNameForeground, theme.VariantDark)
+	rowColor := func() color.Color {
+		for _, object := range paintedObjects(view.proxyPage.list) {
+			if text, ok := object.(*canvas.Text); ok && text.Text == "Example Tokyo 01" {
+				return text.Color
+			}
+		}
+		t.Fatal("proxy row label not rendered")
+		return nil
+	}
+	// The hidden page must take the theme change itself: list rows skip
+	// unchanged setters, so showing the page later does not repaint them.
+	if got := rowColor(); got != want {
+		t.Fatalf("hidden row label color = %v, want dark foreground %v", got, want)
+	}
+	view.showView("Proxies")
+	if got := rowColor(); got != want {
+		t.Fatalf("shown row label color = %v, want dark foreground %v", got, want)
+	}
+}
+
+// paintedObjects collects the objects under o through the renderers that
+// already exist, without laying anything out again, so colors are what the
+// last theme pass left behind.
+func paintedObjects(o fyne.CanvasObject) []fyne.CanvasObject {
+	objects := []fyne.CanvasObject{o}
+	switch o := o.(type) {
+	case fyne.Widget:
+		for _, child := range test.WidgetRenderer(o).Objects() {
+			objects = append(objects, paintedObjects(child)...)
+		}
+	case *fyne.Container:
+		for _, child := range o.Objects {
+			objects = append(objects, paintedObjects(child)...)
+		}
+	}
+	return objects
 }
