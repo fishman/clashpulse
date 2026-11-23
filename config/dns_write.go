@@ -19,7 +19,7 @@ func ReplaceDNSRouting(path string, current Snapshot, sets []ResolverSet, routes
 	}
 	document.Routes = make([]dnsRouteDoc, 0, len(routes))
 	for _, route := range routes {
-		document.Routes = append(document.Routes, dnsRouteDoc{Suffix: route.Suffix, GeoSite: route.GeoSite, Resource: route.Resource, ResolverSet: route.ResolverSet})
+		document.Routes = append(document.Routes, dnsRouteDoc(route))
 	}
 	return writeTOML(path, document)
 }

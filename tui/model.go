@@ -1500,15 +1500,6 @@ func validSubscriptionNumber(value string, min, max uint64) bool {
 	return err == nil && parsed >= min && parsed <= max
 }
 
-func validYesNo(value string) bool {
-	switch strings.ToLower(value) {
-	case "yes", "y", "true", "no", "n", "false":
-		return true
-	default:
-		return false
-	}
-}
-
 func validSubscriptionID(value string) bool {
 	if len(value) == 0 || len(value) > 64 || !asciiAlphaNumeric(value[0]) {
 		return false

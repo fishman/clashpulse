@@ -141,10 +141,7 @@ func validateRuleLine(ruleType config.RuleType, line string) error {
 	}
 	switch ruleType {
 	case config.RuleDomain:
-		if strings.HasPrefix(line, "+.") {
-			line = line[2:]
-		}
-		return validateDomain(line)
+		return validateDomain(strings.TrimPrefix(line, "+."))
 	case config.RuleIPCIDR:
 		if _, err := netip.ParsePrefix(line); err != nil {
 			return fmt.Errorf("invalid IP prefix")

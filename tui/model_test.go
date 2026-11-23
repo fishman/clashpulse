@@ -485,7 +485,7 @@ func TestResourceCreateEmitsTypedPrivateIntent(t *testing.T) {
 	model := NewModel().Apply(eventFromJSON(t, `{"Snapshot":{"Resources":[{"ID":"keep"}]}}`))
 	model.Tab = TabResources
 	model.Selection[TabResources] = "resource:keep"
-	model, command, _ := model.HandleKey("n")
+	model, _, _ = model.HandleKey("n")
 	if model.Modal == nil || model.Modal.Form == nil || model.Focus != FocusModal {
 		t.Fatal("new resource form did not open")
 	}
@@ -496,7 +496,7 @@ func TestResourceCreateEmitsTypedPrivateIntent(t *testing.T) {
 	}
 	model = moveToFormField(t, model, "enabled")
 	model, _, _ = model.HandleKey("space")
-	model, command, _ = model.HandleKey("ctrl+s")
+	model, command, _ := model.HandleKey("ctrl+s")
 	if command == nil || command.Kind != ipc.CommandPutResource || command.ResourceID != "resource-new" || command.Resource == nil {
 		t.Fatalf("resource create intent = %#v", command)
 	}
@@ -801,7 +801,7 @@ func TestMonitorPolicyEditsKeepSubsecondUnitsAndAllowZero(t *testing.T) {
 	for _, field := range []struct{ id, value string }{{"timeout", "900"}, {"cooldown", "0"}, {"jitter", "0"}} {
 		model = setFormText(t, model, field.id, field.value)
 	}
-	model, command, _ := model.HandleKey("ctrl+s")
+	_, command, _ := model.HandleKey("ctrl+s")
 	if command == nil || command.Kind != ipc.CommandUpdateConfiguration || command.Config == nil || command.Config.MonitorTimeoutMillis == nil || *command.Config.MonitorTimeoutMillis != 900 || command.Config.MonitorCooldownSeconds == nil || *command.Config.MonitorCooldownSeconds != 0 || command.Config.MonitorJitterMillis == nil || *command.Config.MonitorJitterMillis != 0 {
 		t.Fatalf("subsecond and zero policy values lost: %#v", command)
 	}

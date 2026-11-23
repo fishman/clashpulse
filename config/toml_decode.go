@@ -355,7 +355,7 @@ func loadResources(path string) ([]Resource, []ResolverSet, []DNSRoute, error) {
 	}
 	routes := make([]DNSRoute, 0, len(doc.Routes))
 	for _, entry := range doc.Routes {
-		routes = append(routes, DNSRoute{Suffix: entry.Suffix, GeoSite: entry.GeoSite, Resource: entry.Resource, ResolverSet: entry.ResolverSet})
+		routes = append(routes, DNSRoute(entry))
 	}
 	return resources, resolverSets, routes, nil
 }

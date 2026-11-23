@@ -166,7 +166,7 @@ func (s *Scheduler) run(ctx context.Context, done chan struct{}) {
 	}
 	for ctx.Err() == nil {
 		now := time.Now()
-		due, subscriptionNext := s.service.dueIDs(now, pending)
+		due, _ := s.service.dueIDs(now, pending)
 		resourceNextFn, resourceEnqueue := s.resourceCallbacks()
 		var externalNext time.Time
 		if !resourcePending && resourceNextFn != nil && resourceEnqueue != nil {
@@ -202,7 +202,7 @@ func (s *Scheduler) run(ctx context.Context, done chan struct{}) {
 			continue
 		}
 
-		_, subscriptionNext = s.service.dueIDs(time.Now(), pending)
+		_, subscriptionNext := s.service.dueIDs(time.Now(), pending)
 		resourceNextFn, resourceEnqueue = s.resourceCallbacks()
 		if resourcePending || resourceNextFn == nil || resourceEnqueue == nil {
 			externalNext = time.Time{}

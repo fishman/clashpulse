@@ -78,8 +78,6 @@ func dialLocal(ctx context.Context, endpoint string) (net.Conn, error) {
 	return conn, nil
 }
 
-func peerAuthAvailable() bool { return true }
-
 func checkPeer(conn net.Conn) error { return verifyPipeOwner(conn, false) }
 
 func verifyPipeOwner(conn net.Conn, server bool) error {

@@ -63,7 +63,7 @@ func (windowsRegistryAPI) read(ctx context.Context, name string) (windowsRegistr
 		return windowsRegistryValue{}, err
 	}
 
-	size, typ, err := key.GetValue(name, nil)
+	size, _, err := key.GetValue(name, nil)
 	if errors.Is(err, registry.ErrNotExist) {
 		return windowsRegistryValue{}, ctx.Err()
 	}
@@ -74,7 +74,7 @@ func (windowsRegistryAPI) read(ctx context.Context, name string) (windowsRegistr
 		return windowsRegistryValue{}, err
 	}
 	data := make([]byte, size)
-	size, typ, err = key.GetValue(name, data)
+	size, typ, err := key.GetValue(name, data)
 	if errors.Is(err, registry.ErrNotExist) {
 		return windowsRegistryValue{}, ctx.Err()
 	}

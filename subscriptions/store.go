@@ -287,18 +287,6 @@ func (s *Store) ActiveProfile() (string, []byte, error) {
 	return id, profile, nil
 }
 
-func (s *Store) appliedProfile(id string) ([]byte, error) {
-	s.mu.RLock()
-	record, ok := s.records[id]
-	if !ok {
-		s.mu.RUnlock()
-		return nil, ErrNotFound
-	}
-	profile, err := s.readPairProfile(id, record.AppliedProfileHash, record.AppliedCandidateHash)
-	s.mu.RUnlock()
-	return profile, err
-}
-
 func (s *Store) readPairProfile(id, profileHash, candidateHash string) ([]byte, error) {
 	if !validID(id) || !validOptionalHash(profileHash) || profileHash == "" || !validOptionalHash(candidateHash) || candidateHash == "" {
 		return nil, ErrNoSnapshot

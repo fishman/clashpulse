@@ -257,7 +257,7 @@ func getDarwinProxy(ctx context.Context, runner commandRunner, kind, service str
 	if err != nil {
 		return darwinProxySettings{}, fmt.Errorf("sysproxy: read %s proxy settings: %w", kind, err)
 	}
-	return darwinProxySettings{enabled: settings.enabled, host: settings.host, port: settings.port, auth: settings.auth}, nil
+	return darwinProxySettings(settings), nil
 }
 
 func restoreDarwinSettings(ctx context.Context, runner commandRunner, previous map[string]string) error {

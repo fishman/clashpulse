@@ -38,6 +38,9 @@ func TestSchedulerStopCancelsInFlightRefresh(t *testing.T) {
 		Apply:    func(context.Context, []byte) error { return nil },
 		Restore:  func(context.Context, []byte) error { return nil },
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := service.Add(config.Subscription{
 		ID: "blocked", Name: "Blocked", URL: "https://example.invalid/sub?token=short-lived", Enabled: true, Timeout: time.Minute,
 	}); err != nil {
@@ -90,6 +93,9 @@ func TestAddRejectsURLUserinfo(t *testing.T) {
 		Apply:     func(context.Context, []byte) error { return nil },
 		Restore:   func(context.Context, []byte) error { return nil },
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, err = service.Add(config.Subscription{ID: "unsafe", URL: "https://user:secret@example.invalid/list"})
 	if err != ErrInvalid || strings.Contains(err.Error(), "secret") {
 		t.Fatalf("Add error = %v, want sanitized ErrInvalid", err)

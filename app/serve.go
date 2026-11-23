@@ -464,7 +464,7 @@ func (s *runtimeService) run(ctx context.Context, startup func(context.Context) 
 	if startup != nil {
 		select {
 		case <-s.exited:
-			return core.WrapActivation(core.ActivationControllerReadiness, errors.New("Mihomo exited before readiness announcement"))
+			return core.WrapActivation(core.ActivationControllerReadiness, errors.New("mihomo exited before readiness announcement"))
 		default:
 		}
 		if ready != nil {
@@ -526,7 +526,7 @@ func (s *runtimeService) run(ctx context.Context, startup func(context.Context) 
 			_ = s.stopMonitorAndProcess(cleanup)
 			stop()
 			if s.foreground {
-				return core.WrapActivation(core.ActivationProcessStart, fmt.Errorf("Mihomo child exited unexpectedly"))
+				return core.WrapActivation(core.ActivationProcessStart, errors.New("mihomo child exited unexpectedly"))
 			}
 			s.reportError("mihomo", fmt.Errorf("mihomo child exited unexpectedly"))
 		case batch := <-s.batches:
