@@ -1305,6 +1305,9 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 		if i := slices.Index(binaryLabels, label); i >= 0 {
 			value := binarySources[i]
 			p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{Binary: &value}})
+			// Show the snapshot's binary until a new snapshot confirms the
+			// choice: a repeated rejection publishes no change to correct it.
+			p.updateBinarySource(p.binaryPath)
 		}
 	})
 	p.binarySource.PlaceHolder = localize.T("Not set")

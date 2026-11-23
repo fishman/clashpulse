@@ -177,3 +177,23 @@ func findSettingsButton(object fyne.CanvasObject, text string) *widget.Button {
 	}
 	return nil
 }
+
+// A rejected binary choice produces no new snapshot when the rejection repeats,
+// so the Use select must keep showing the desired binary from the last
+// snapshot rather than the user's pending pick.
+func TestSettingsBinarySelectShowsSnapshotChoiceWhilePending(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	var sent []ipc.Command
+	page := newSettingsPage(func(command ipc.Command) { sent = append(sent, command) }, app.NewWindow("ClashPulse"))
+	page.update(core.BinarySnapshot{Desired: "system"}, core.MonitorSnapshot{}, core.SystemProxySnapshot{}, core.DNSSnapshot{})
+	for attempt := 1; attempt <= 2; attempt++ {
+		page.binarySource.SetSelected(localize.T("Bundled"))
+		if len(sent) != attempt || *sent[attempt-1].Config.Binary != "bundled" {
+			t.Fatalf("attempt %d: sent %+v", attempt, sent)
+		}
+		if page.binarySource.Selected != localize.T("System") {
+			t.Fatalf("attempt %d: select shows pending %q, want snapshot choice", attempt, page.binarySource.Selected)
+		}
+	}
+}
