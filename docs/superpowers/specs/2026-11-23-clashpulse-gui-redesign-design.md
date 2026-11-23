@@ -95,8 +95,10 @@ Cards, two-column grid that collapses to one column below 760 px:
    the node has stream samples. Value KB/s, `StreamLabel`, meter of
    completed/samples (success color, warning below 100%, error at 0).
    Otherwise the card shows the URL-test settings summary instead.
-3. Last switch (full width): relative time, `old -> new` by name, localized
-   reason, evidence line. Empty state: "No switch yet".
+3. Last switch (full width): absolute time via the existing `detailTime`
+   (`ui/display.go`), `old -> new` by name, localized reason, evidence line.
+   Empty state: "No switch yet". No relative times anywhere: without a ticker
+   they go stale while idle.
 4. Subscription usage: active subscription; used of total GB, expiry date,
    meter. Hidden when the active source has no usage metadata.
 5. Health: counts of subscriptions, resources, filters; status dot plus
@@ -134,9 +136,9 @@ never as a raw name from elsewhere.
 
 ## Performance
 
-No timers, animations, or per-frame work. Relative times ("12 min ago") are
-computed when a snapshot arrives, not ticked. Every widget update compares the
-new text/color with the current one before calling `Refresh`.
+No timers, animations, or per-frame work. Times are absolute. Every widget
+update compares the new text/color with the current one before calling
+`Refresh`.
 
 ## Testing
 
@@ -150,5 +152,9 @@ new text/color with the current one before calling `Refresh`.
   threshold, usage fraction and hidden state, pill state.
 - Existing UI tests stay green in English and zh_CN; `go vet` with the ci and
   screenshots tags.
-- Regenerate GUI screenshots (`make screenshots`) and visually check light and
-  dark Overview and Proxies; update docs images.
+- `ui/docs_screenshot_test.go` sets its own theme on `test.NewApp()`, so the
+  theme from `Run` never reaches it. Replace `lightTheme{theme.DefaultTheme()}`
+  with a variant-pinning wrapper around the new theme, used for a light and a
+  dark pass. Regenerate GUI screenshots (`make screenshots`), visually check
+  light and dark Overview and Proxies, and update docs images (light images
+  stay the docs default).
