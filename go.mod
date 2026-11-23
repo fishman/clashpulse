@@ -2,6 +2,8 @@ module github.com/fishman/clashpulse
 
 go 1.26.6
 
+toolchain go1.26.11
+
 require (
 	charm.land/lipgloss/v2 v2.1.1
 	fyne.io/fyne/v2 v2.8.2
