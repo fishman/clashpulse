@@ -183,13 +183,16 @@ func TestMonitorSectionShowsSwitchPolicy(t *testing.T) {
 	app := test.NewApp()
 	defer app.Quit()
 	page := newSettingsPage(func(ipc.Command) {}, app.NewWindow("ClashPulse"))
-	if !containsObject(page.sectionViews["Monitor"], page.switchPolicy) {
+	if !containsObject(page.sectionViews["Monitor"], page.switchPolicy) || !containsObject(page.sectionViews["Monitor"], page.switchPolicyHelp) {
 		t.Fatal("switch policy is missing from the Monitor section")
 	}
 	for _, policy := range []string{monitor.SwitchSteadyStream, monitor.SwitchFailover} {
 		page.update(core.BinarySnapshot{}, core.MonitorSnapshot{SwitchPolicy: policy}, core.SystemProxySnapshot{}, core.DNSSnapshot{})
-		if want := localize.T("gui.monitor.switch-policy." + policy); page.switchPolicy.Text != want {
+		if want := localize.Code("monitor.policy", policy); page.switchPolicy.Text != want {
 			t.Fatalf("Monitor section shows %q for %s, want %q", page.switchPolicy.Text, policy, want)
+		}
+		if want := localize.T("gui.monitor.switch-policy." + policy); page.switchPolicyHelp.String() != want {
+			t.Fatalf("Monitor section explains %s as %q, want %q", policy, page.switchPolicyHelp.String(), want)
 		}
 	}
 }

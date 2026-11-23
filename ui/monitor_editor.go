@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -29,13 +30,22 @@ type monitorPolicyInput struct {
 // IDs remain opaque; descriptions live in the locale catalogs.
 var switchPolicyIDs = monitor.SwitchPolicies
 
-func switchPolicyLabel(value string) string {
-	for _, id := range switchPolicyIDs {
-		if id == value {
-			return localize.T("gui.monitor.switch-policy." + id)
-		}
+// switchPolicyID maps an unknown policy to the default, as the monitor does.
+func switchPolicyID(value string) string {
+	if slices.Contains(switchPolicyIDs, value) {
+		return value
 	}
-	return localize.T("gui.monitor.switch-policy." + monitor.DefaultPolicy().SwitchPolicy)
+	return monitor.DefaultPolicy().SwitchPolicy
+}
+
+// switchPolicyLabel is the policy's full description.
+func switchPolicyLabel(value string) string {
+	return localize.T("gui.monitor.switch-policy." + switchPolicyID(value))
+}
+
+// switchPolicyName is the policy's short name.
+func switchPolicyName(value string) string {
+	return localize.Code("monitor.policy", switchPolicyID(value))
 }
 
 func switchPolicyValue(label string) (string, bool) {

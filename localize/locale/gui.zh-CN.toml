@@ -328,20 +328,35 @@ other = "系统代理"
 ["Change"]
 other = "修改"
 
-["Edit probe policy"]
-other = "编辑探测策略"
+["Probe policy"]
+other = "探测策略"
+
+["Edit..."]
+other = "编辑…"
 
 ["Mihomo url-test delay"]
 other = "Mihomo URL-test 延迟"
 
-["Use system Mihomo"]
-other = "使用系统 Mihomo"
+["System"]
+other = "系统"
 
-["Use bundled Mihomo"]
-other = "使用内置 Mihomo"
+["Bundled"]
+other = "内置"
 
-["Choose executable path"]
-other = "选择可执行文件路径"
+["Version"]
+other = "版本"
+
+["Binary"]
+other = "程序"
+
+["Use"]
+other = "使用"
+
+["Not set"]
+other = "未设置"
+
+["Choose path..."]
+other = "选择路径…"
 
 ["Absolute path to Mihomo"]
 other = "Mihomo 的绝对路径"
@@ -831,8 +846,20 @@ other = "切换稳定性"
 ["window %d samples, %d successes to switch, at most %d failures"]
 other = "窗口 %d 个样本，切换需 %d 次成功，最多 %d 次失败"
 
-["Send test notification"]
-other = "发送测试通知"
+["Latency monitor"]
+other = "延迟监测"
+
+["Switching"]
+other = "切换"
+
+["Notifications"]
+other = "通知"
+
+["Test notification"]
+other = "测试通知"
+
+["Send test"]
+other = "发送测试"
 
 ["Monitor probe policy"]
 other = "监测探测策略"

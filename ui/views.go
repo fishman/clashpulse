@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -1216,6 +1217,9 @@ func (e *filterEditor) command() (ipc.Command, bool, error) {
 // dropdown, content.
 type settingsLayout struct{}
 
+// settingsListWidth keeps the section list the same width for every pane.
+const settingsListWidth = 168
+
 func (settingsLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
 	return fyne.NewSize(fyne.Max(280, objects[2].MinSize().Width), 240)
 }
@@ -1223,7 +1227,7 @@ func (settingsLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
 func (settingsLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 	surface, sidebar, dropdown, content := objects[0], objects[1], objects[2], objects[3]
 	gap := theme.Padding()
-	sideWidth := sidebar.MinSize().Width + 2*gap
+	sideWidth := fyne.Max(settingsListWidth, sidebar.MinSize().Width) + 2*gap
 	if size.Width >= sideWidth+gap+content.MinSize().Width {
 		dropdown.Hide()
 		sidebar.Show()
@@ -1253,18 +1257,19 @@ type settingsPage struct {
 	sectionContent      *fyne.Container
 	section             string
 	sectionViews        map[string]fyne.CanvasObject
-	binary              *widget.Form
 	binaryValues        [4]*widget.Label
+	binarySource        *widget.Select
 	binaryPath          string
 	threshold           *widget.Label
 	urlTestDelay        *widget.Label
 	stability           *widget.Label
 	switchPolicy        *widget.Label
+	switchPolicyHelp    *widget.RichText
 	monitor             *widget.Check
 	monitorState        core.MonitorSnapshot
 	systemProxy         *widget.Check
 	systemProxyState    core.SystemProxySnapshot
-	proxyStatus         *widget.Label
+	proxyStatus         *widget.RichText
 	mixedPort           *widget.Label
 	mixedPortEditor     *widget.Entry
 	mixedPortDialog     *dialog.FormDialog
@@ -1272,10 +1277,10 @@ type settingsPage struct {
 	tunEnabled          *widget.Check
 	tunStack            *widget.Select
 	tunDNSMode          *widget.Select
-	tunStatus           *widget.Label
+	tunStatus           *widget.RichText
 	tunAuthorize        *widget.Button
 	tunManual           *widget.Label
-	tunLeftover         *widget.Label
+	tunLeftover         *widget.RichText
 	tunState            core.TunSnapshot
 	tunInitialized      bool
 	tunView             *fyne.Container
@@ -1291,19 +1296,31 @@ type settingsPage struct {
 func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 	p := &settingsPage{send: send, window: window, intervals: make(map[string]uint32)}
 	p.dns = newDNSSettings(send, window)
-	p.binary, p.binaryValues = newBinaryForm()
+	for i, value := range binaryFieldValues(core.BinarySnapshot{}) {
+		p.binaryValues[i] = widget.NewLabel(value)
+	}
+	binarySources := []string{"system", "bundled"}
+	binaryLabels := []string{localize.T("System"), localize.T("Bundled")}
+	p.binarySource = widget.NewSelect(binaryLabels, func(label string) {
+		if i := slices.Index(binaryLabels, label); i >= 0 {
+			value := binarySources[i]
+			p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{Binary: &value}})
+		}
+	})
+	p.binarySource.PlaceHolder = localize.T("Not set")
 	p.threshold = widget.NewLabel(localize.T("Not configured"))
 	p.urlTestDelay = widget.NewLabel(localize.T("Profile default"))
 	p.stability = widget.NewLabel("")
 	p.switchPolicy = widget.NewLabel("")
-	p.systemProxy = widget.NewCheck(localize.T("Enable system proxy"), func(enabled bool) {
+	p.switchPolicyHelp = newHelpText("")
+	p.systemProxy = widget.NewCheck("", func(enabled bool) {
 		if p.refreshing {
 			return
 		}
 		value := enabled
 		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{SystemProxyEnabled: &value}})
 	})
-	p.proxyStatus = widget.NewLabel(localize.T("System proxy inactive"))
+	p.proxyStatus = newHelpText(localize.T("System proxy inactive"))
 	p.mixedPort = widget.NewLabel("")
 	modeLabels := make([]string, len(core.ProxyModes))
 	for i, mode := range core.ProxyModes {
@@ -1321,7 +1338,7 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 			}
 		}
 	})
-	p.tunEnabled = widget.NewCheck(localize.T("Enable TUN"), func(enabled bool) {
+	p.tunEnabled = widget.NewCheck("", func(enabled bool) {
 		if p.refreshing {
 			return
 		}
@@ -1340,24 +1357,17 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 		}
 		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{TunDNSMode: &mode}})
 	})
-	p.tunStatus = widget.NewLabel("")
-	p.tunStatus.Wrapping = fyne.TextWrapWord
+	p.tunStatus = newHelpText("")
 	p.tunAuthorize = widget.NewButton(localize.T("Authorize"), func() { p.send(ipc.Command{Kind: ipc.CommandAuthorizeTun}) })
 	p.tunManual = widget.NewLabel("")
 	p.tunManual.Selectable = true
-	p.tunLeftover = widget.NewLabel(localize.T("A leftover TUN device exists while no ClashPulse Mihomo runs. ClashPulse does not remove network state it did not create."))
-	p.tunLeftover.Wrapping = fyne.TextWrapWord
+	p.tunManual.Wrapping = fyne.TextWrapBreak
+	p.tunLeftover = newHelpText(localize.T("A leftover TUN device exists while no ClashPulse Mihomo runs. ClashPulse does not remove network state it did not create."))
+	tunAuthorizeRow := container.NewHBox(layout.NewSpacer(), p.tunAuthorize)
 	p.tunAuthorize.Hide()
 	p.tunManual.Hide()
 	p.tunLeftover.Hide()
-	p.tunView = container.NewVBox(
-		widget.NewLabelWithStyle(localize.T("TUN"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		p.tunEnabled,
-		container.NewHBox(widget.NewLabel(localize.T("Stack")), p.tunStack),
-		container.NewHBox(widget.NewLabel(localize.T("DNS mode")), p.tunDNSMode),
-		p.tunStatus, p.tunAuthorize, p.tunManual, p.tunLeftover,
-	)
-	p.monitor = widget.NewCheck(localize.T("Enable latency monitor"), func(enabled bool) {
+	p.monitor = widget.NewCheck("", func(enabled bool) {
 		if p.refreshing {
 			return
 		}
@@ -1378,42 +1388,51 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 	for i, section := range sections {
 		sectionNames[i] = localize.T("gui.settings.section." + section)
 	}
+	none := []fyne.CanvasObject(nil)
+	button := func(text string, tapped func()) []fyne.CanvasObject {
+		return []fyne.CanvasObject{widget.NewButton(text, tapped)}
+	}
+	p.tunView = cardBody(
+		settingRow(localize.T("Enable TUN"), nil, []fyne.CanvasObject{p.tunEnabled}, p.tunStatus, tunAuthorizeRow, p.tunManual, p.tunLeftover),
+		settingRow(localize.T("Stack"), nil, []fyne.CanvasObject{p.tunStack}),
+		settingRow(localize.T("DNS mode"), nil, []fyne.CanvasObject{p.tunDNSMode}),
+	)
 	p.sectionViews = map[string]fyne.CanvasObject{
-		sections[0]: container.NewVBox(
-			widget.NewLabelWithStyle(localize.T("Mihomo binary"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-			p.binary,
-			container.NewVBox(
-				widget.NewButton(localize.T("Use system Mihomo"), func() {
-					value := "system"
-					p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{Binary: &value}})
-				}),
-				widget.NewButton(localize.T("Use bundled Mihomo"), func() {
-					value := "bundled"
-					p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{Binary: &value}})
-				}),
-				widget.NewButton(localize.T("Choose executable path"), p.editBinaryPath),
-			),
+		sections[0]: settingsPane(
+			settingsCard(localize.T("Version"), nil, cardBody(
+				settingRow(localize.T("Desired"), p.binaryValues[0], none),
+				settingRow(localize.T("Observed"), p.binaryValues[1], none),
+				settingRow(localize.T("Capabilities"), p.binaryValues[2], none),
+				settingRow(localize.T("Compatibility"), p.binaryValues[3], none),
+			)),
+			settingsCard(localize.T("Binary"), nil, cardBody(
+				settingRow(localize.T("Use"), nil, []fyne.CanvasObject{p.binarySource}),
+				settingRow(localize.T("Executable path"), nil, button(localize.T("Choose path..."), p.editBinaryPath)),
+			)),
 		),
-		sections[1]: container.NewVBox(
-			widget.NewLabelWithStyle(localize.T("System proxy"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-			p.systemProxy, p.proxyStatus,
-			container.NewHBox(widget.NewLabel(localize.T("Mixed port")), p.mixedPort, widget.NewButton(localize.T("Change"), p.editMixedPort)),
-			widget.NewLabel(localize.T("HTTP, HTTPS, and SOCKS proxy port on 127.0.0.1")),
-			container.NewHBox(widget.NewLabel(localize.T("Proxy mode")), p.proxyMode),
-		),
-		sections[2]: p.tunView,
-		sections[3]: container.NewVBox(
-			widget.NewLabelWithStyle(localize.T("Monitor"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-			p.monitor,
-			container.NewHBox(widget.NewLabel(localize.T("Monitor interval")), p.interval),
-			container.NewHBox(widget.NewLabel(localize.T("Alert threshold")), p.threshold, widget.NewButton(localize.T("Change"), p.editThreshold)),
-			widget.NewButton(localize.T("Edit probe policy"), p.editMonitorPolicy),
-			container.NewHBox(widget.NewLabel(localize.T("Switch policy")), p.switchPolicy),
-			container.NewHBox(widget.NewLabel(localize.T("Switch stability")), p.stability),
-			container.NewHBox(widget.NewLabel(localize.T("Mihomo url-test delay")), p.urlTestDelay, widget.NewButton(localize.T("Change"), p.editURLTestDelay)),
-			widget.NewButton(localize.T("Send test notification"), func() {
-				p.send(ipc.Command{Kind: ipc.CommandTestNotification})
-			}),
+		sections[1]: settingsPane(settingsCard(localize.T("System proxy"), nil, cardBody(
+			settingRow(localize.T("Enable system proxy"), nil, []fyne.CanvasObject{p.systemProxy}, p.proxyStatus),
+			settingRow(localize.T("Mixed port"), p.mixedPort, button(localize.T("Change"), p.editMixedPort), newHelpText(localize.T("HTTP, HTTPS, and SOCKS proxy port on 127.0.0.1"))),
+			settingRow(localize.T("Proxy mode"), nil, []fyne.CanvasObject{p.proxyMode}),
+		))),
+		sections[2]: settingsPane(settingsCard(localize.T("TUN"), nil, p.tunView)),
+		sections[3]: settingsPane(
+			settingsCard(localize.T("Latency monitor"), nil, cardBody(
+				settingRow(localize.T("Enable latency monitor"), nil, []fyne.CanvasObject{p.monitor}),
+				settingRow(localize.T("Monitor interval"), nil, []fyne.CanvasObject{p.interval}),
+				settingRow(localize.T("Alert threshold"), p.threshold, button(localize.T("Change"), p.editThreshold)),
+				settingRow(localize.T("Probe policy"), nil, button(localize.T("Edit..."), p.editMonitorPolicy)),
+			)),
+			settingsCard(localize.T("Switching"), nil, cardBody(
+				settingRow(localize.T("Switch policy"), p.switchPolicy, none, p.switchPolicyHelp),
+				settingRow(localize.T("Switch stability"), p.stability, none),
+				settingRow(localize.T("Mihomo url-test delay"), p.urlTestDelay, button(localize.T("Change"), p.editURLTestDelay)),
+			)),
+			settingsCard(localize.T("Notifications"), nil, cardBody(
+				settingRow(localize.T("Test notification"), nil, button(localize.T("Send test"), func() {
+					p.send(ipc.Command{Kind: ipc.CommandTestNotification})
+				})),
+			)),
 		),
 		sections[4]: p.dns.view,
 	}
@@ -1465,6 +1484,22 @@ func (p *settingsPage) selectSection(name string) {
 	}
 	if label := localize.T("gui.settings.section." + name); p.sectionSelect.Selected != label {
 		p.sectionSelect.SetSelected(label)
+	}
+}
+
+// updateBinarySource shows the desired binary as the Use select's value; a
+// custom path shows as itself. Setting Selected directly sends nothing.
+func (p *settingsPage) updateBinarySource(desired string) {
+	selected := desired
+	switch desired {
+	case "system":
+		selected = localize.T("System")
+	case "bundled":
+		selected = localize.T("Bundled")
+	}
+	if p.binarySource.Selected != selected {
+		p.binarySource.Selected = selected
+		p.binarySource.Refresh()
 	}
 }
 
@@ -1556,22 +1591,24 @@ func (p *settingsPage) update(binary core.BinarySnapshot, monitor core.MonitorSn
 			p.binaryValues[i].SetText(value)
 		}
 	}
+	p.updateBinarySource(binary.Desired)
 	if monitorChanged {
 		p.threshold.SetText(monitorThresholdLabel(monitor))
 		p.urlTestDelay.SetText(urlTestDelayLabel(monitor))
 		p.stability.SetText(monitorStabilityLabel(monitor))
-		p.switchPolicy.SetText(switchPolicyLabel(monitor.SwitchPolicy))
+		p.switchPolicy.SetText(switchPolicyName(monitor.SwitchPolicy))
+		setDetailText(p.switchPolicyHelp, switchPolicyLabel(monitor.SwitchPolicy))
 	}
 	if monitorChanged || proxyChanged {
 		p.refreshing = true
 		if proxyChanged {
 			p.systemProxy.SetChecked(systemProxy.Enabled)
 			if systemProxy.Active {
-				p.proxyStatus.SetText(localize.T("Active on the local Mihomo listener"))
+				setDetailText(p.proxyStatus, localize.T("Active on the local Mihomo listener"))
 			} else if systemProxy.Enabled {
-				p.proxyStatus.SetText(localize.T("Requested; waiting for a ready listener"))
+				setDetailText(p.proxyStatus, localize.T("Requested; waiting for a ready listener"))
 			} else {
-				p.proxyStatus.SetText(localize.T("Inactive"))
+				setDetailText(p.proxyStatus, localize.T("Inactive"))
 			}
 		}
 		if monitorChanged {
@@ -1613,7 +1650,7 @@ func (p *settingsPage) updateTun(tun core.TunSnapshot) {
 	if tun.LastFailure != "" {
 		lines = append(lines, fmt.Sprintf(localize.T("Last failure: %s"), localize.T(tun.LastFailure)))
 	}
-	p.tunStatus.SetText(strings.Join(lines, "\n"))
+	setDetailText(p.tunStatus, strings.Join(lines, "\n"))
 	unsupported := tun.Privilege == core.TunPrivilegeUnsupported
 	for _, control := range []fyne.Disableable{p.tunEnabled, p.tunStack, p.tunDNSMode} {
 		if unsupported {

@@ -14,20 +14,32 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/ipc"
+	"github.com/fishman/clashpulse/localize"
 )
 
-func TestSettingsCanSelectBundledBinaryAndShowCompatibilityIssue(t *testing.T) {
+func TestSettingsBinarySelectSendsOnlyUserChoicesAndShowsCompatibilityIssue(t *testing.T) {
 	app := test.NewApp()
 	defer app.Quit()
 	var sent []ipc.Command
 	page := newSettingsPage(func(command ipc.Command) { sent = append(sent, command) }, app.NewWindow("ClashPulse"))
-	bundled := findSettingsButton(page.view, "Use bundled Mihomo")
-	if bundled == nil {
-		t.Fatal("bundled binary choice is missing")
+	if !containsObject(page.sectionViews["Mihomo binary"], page.binarySource) || findSettingsButton(page.sectionViews["Mihomo binary"], localize.T("Choose path...")) == nil {
+		t.Fatal("binary choice or path action is missing")
 	}
-	bundled.OnTapped()
+	page.update(core.BinarySnapshot{Desired: "system"}, core.MonitorSnapshot{}, core.SystemProxySnapshot{}, core.DNSSnapshot{})
+	if len(sent) != 0 || page.binarySource.Selected != localize.T("System") {
+		t.Fatalf("snapshot rendering: selected %q, sent %+v", page.binarySource.Selected, sent)
+	}
+	page.binarySource.SetSelected(localize.T("Bundled"))
 	if len(sent) != 1 || sent[0].Kind != ipc.CommandUpdateConfiguration || sent[0].Config == nil || sent[0].Config.Binary == nil || *sent[0].Config.Binary != "bundled" {
 		t.Fatalf("bundled choice sent wrong command: %+v", sent)
+	}
+	page.update(core.BinarySnapshot{Desired: "/opt/mihomo/bin/mihomo"}, core.MonitorSnapshot{}, core.SystemProxySnapshot{}, core.DNSSnapshot{})
+	if len(sent) != 1 || page.binarySource.Selected != "/opt/mihomo/bin/mihomo" {
+		t.Fatalf("custom path: selected %q, sent %+v", page.binarySource.Selected, sent)
+	}
+	page.binarySource.SetSelected(localize.T("System"))
+	if len(sent) != 2 || *sent[1].Config.Binary != "system" {
+		t.Fatalf("system choice sent wrong command: %+v", sent)
 	}
 
 	page.update(core.BinarySnapshot{Desired: "bundled", LastCompatibilityFailure: "bundled Mihomo is not installed"}, core.MonitorSnapshot{}, core.SystemProxySnapshot{}, core.DNSSnapshot{})
@@ -44,7 +56,7 @@ func TestSettingsMonitorShowsStabilityAndSendsTestNotification(t *testing.T) {
 	defer app.Quit()
 	var sent []ipc.Command
 	page := newSettingsPage(func(command ipc.Command) { sent = append(sent, command) }, app.NewWindow("ClashPulse"))
-	button := findSettingsButton(page.sectionViews["Monitor"], "Send test notification")
+	button := findSettingsButton(page.sectionViews["Monitor"], localize.T("Send test"))
 	if button == nil {
 		t.Fatal("test notification button is missing from the monitor section")
 	}

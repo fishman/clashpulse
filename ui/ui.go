@@ -416,16 +416,3 @@ func binaryFieldValues(binary core.BinarySnapshot) [4]string {
 	}
 	return [4]string{desired, observed, capabilities, compatibilityLabel(binary.LastCompatibilityFailure)}
 }
-
-func newBinaryForm() (*widget.Form, [4]*widget.Label) {
-	var values [4]*widget.Label
-	initial := binaryFieldValues(core.BinarySnapshot{})
-	items := make([]*widget.FormItem, 0, len(values))
-	for i, label := range []string{localize.T("Desired"), localize.T("Observed"), localize.T("Capabilities"), localize.T("Compatibility")} {
-		value := widget.NewLabel(initial[i])
-		value.Wrapping = fyne.TextWrapWord
-		values[i] = value
-		items = append(items, widget.NewFormItem(label, value))
-	}
-	return widget.NewForm(items...), values
-}

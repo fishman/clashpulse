@@ -36,8 +36,8 @@ func TestSettingsTunRendersSnapshotAndSendsExactPatches(t *testing.T) {
 		t.Fatalf("TUN controls = enabled %t stack %q dns %q", page.tunEnabled.Checked, page.tunStack.Selected, page.tunDNSMode.Selected)
 	}
 	for _, want := range []string{"Requested yes, active no", "Mihomo was updated, re-authorize", "Mihomo did not start the TUN interface"} {
-		if !strings.Contains(page.tunStatus.Text, want) {
-			t.Fatalf("TUN status %q lacks %q", page.tunStatus.Text, want)
+		if !strings.Contains(page.tunStatus.String(), want) {
+			t.Fatalf("TUN status %q lacks %q", page.tunStatus.String(), want)
 		}
 	}
 	if !page.tunAuthorize.Visible() || page.tunManual.Visible() || page.tunLeftover.Visible() {
@@ -91,8 +91,8 @@ func TestSettingsTunPrivilegeControlsAuthorizeAndManualCommand(t *testing.T) {
 		if page.tunEnabled.Disabled() != tc.controlsDisabled || page.tunStack.Disabled() != tc.controlsDisabled || page.tunDNSMode.Disabled() != tc.controlsDisabled {
 			t.Errorf("%s: controls disabled = %t %t %t", tc.privilege, page.tunEnabled.Disabled(), page.tunStack.Disabled(), page.tunDNSMode.Disabled())
 		}
-		if tc.reasonFragment != "" && !strings.Contains(page.tunStatus.Text, tc.reasonFragment) {
-			t.Errorf("%s: status %q lacks %q", tc.privilege, page.tunStatus.Text, tc.reasonFragment)
+		if tc.reasonFragment != "" && !strings.Contains(page.tunStatus.String(), tc.reasonFragment) {
+			t.Errorf("%s: status %q lacks %q", tc.privilege, page.tunStatus.String(), tc.reasonFragment)
 		}
 	}
 }
@@ -103,17 +103,17 @@ func TestSettingsTunLeftoverAndUnchangedSnapshot(t *testing.T) {
 	page := newSettingsPage(func(ipc.Command) {}, a.NewWindow("ClashPulse"))
 	state := core.TunSnapshot{Privilege: core.TunPrivilegeReady, Stack: "gvisor", DNSMode: "profile", Leftover: true}
 	page.updateTun(state)
-	if !page.tunLeftover.Visible() || page.tunLeftover.Text == "" {
+	if !page.tunLeftover.Visible() || page.tunLeftover.String() == "" {
 		t.Fatal("leftover TUN device is not reported")
 	}
-	page.tunStatus.SetText("sentinel")
+	setDetailText(page.tunStatus, "sentinel")
 	page.updateTun(state)
-	if page.tunStatus.Text != "sentinel" {
+	if page.tunStatus.String() != "sentinel" {
 		t.Fatal("unchanged TUN snapshot rewrote the section")
 	}
 	state.Leftover = false
 	page.updateTun(state)
-	if page.tunLeftover.Visible() || page.tunStatus.Text == "sentinel" {
+	if page.tunLeftover.Visible() || page.tunStatus.String() == "sentinel" {
 		t.Fatal("changed TUN snapshot did not update the section")
 	}
 }
@@ -124,8 +124,8 @@ func TestSnapshotUpdatesSettingsTunSection(t *testing.T) {
 	view := newDesktopUI(context.Background(), "", a.NewWindow("ClashPulse"))
 	view.postSnapshot(core.Snapshot{Tun: core.TunSnapshot{Enabled: true, Active: true, Stack: "gvisor", DNSMode: "profile", Privilege: core.TunPrivilegeReady}})
 	fyne.DoAndWait(func() {})
-	if !view.settingsPage.tunEnabled.Checked || !strings.Contains(view.settingsPage.tunStatus.Text, "Requested yes, active yes") {
-		t.Fatalf("snapshot did not reach the TUN section: %q", view.settingsPage.tunStatus.Text)
+	if !view.settingsPage.tunEnabled.Checked || !strings.Contains(view.settingsPage.tunStatus.String(), "Requested yes, active yes") {
+		t.Fatalf("snapshot did not reach the TUN section: %q", view.settingsPage.tunStatus.String())
 	}
 }
 
