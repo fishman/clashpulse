@@ -40,9 +40,9 @@ ClashPulse 监视配置目录，用原子重命名保存的编辑器也没问题
 
 ```toml
 # ClashPulse user intent. Save all four files together in the private config dir.
-# Defaults: system Mihomo, enabled health monitoring, disabled system proxy and TUN, loopback DNS.
+# Defaults: bundled Mihomo in macOS/Windows release packages, system Mihomo otherwise; enabled health monitoring, disabled system proxy and TUN, loopback DNS.
 [mihomo]
-binary = "system" # "bundled" is explicit fallback; or an executable path.
+# binary = "system" # Default: "bundled" in macOS/Windows release packages, otherwise "system"; or an executable path.
 mixed_port = 7899 # HTTP, HTTPS, and SOCKS on 127.0.0.1; 1024-65535. Start fails if the port is taken.
 mode = "rule" # "global" sends everything through the GLOBAL group; "direct" bypasses all proxies. Switched live.
 # Delay settings for the url-test and fallback groups of the generated profile.

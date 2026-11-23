@@ -7,7 +7,9 @@ nav_order: 9
 
 # 依赖与桌面构建
 
-`go.mod` 固定了所有直接依赖的模块，包括 Fyne v2.8.2（正式版；[上游](https://github.com/fyne-io/fyne/tree/v2.8.2)，BSD-3-Clause）、`tcell/v3` v3.6.0、`lipgloss/v2` v2.1.1，以及 notmutt 的 `lib/xdg` 和 `lib/localipc` v0.1.0 与 `lib/tui` v0.1.3（Apache-2.0；单独打标签 `lib/tui/v0.1.3`）。需要 Go 1.26.6。Mihomo 是单独选择的可执行文件，不是 Go 依赖，不捆绑任何内核二进制。
+`go.mod` 固定了所有直接依赖的模块，包括 Fyne v2.8.2（正式版；[上游](https://github.com/fyne-io/fyne/tree/v2.8.2)，BSD-3-Clause）、`tcell/v3` v3.6.0、`lipgloss/v2` v2.1.1，以及 notmutt 的 `lib/xdg` 和 `lib/localipc` v0.1.0 与 `lib/tui` v0.1.3（Apache-2.0；单独打标签 `lib/tui/v0.1.3`）。需要 Go 1.26.6。Mihomo 是单独的可执行文件，不是 Go 依赖。
+
+macOS（arm64、amd64）和 Windows（amd64）发布包内置 `packaging/mihomo.lock` 固定的官方 Mihomo 发布构建（目前 v1.19.34；GPL-3.0；上游构建包含 gvisor 栈）。锁文件记录每个上游压缩包和源码标签压缩包的 SHA-256；`tools/fetch-mihomo` 下载固定的文件，任何不匹配都会失败，并给出构建通过 `internal/bundled` 嵌入的可执行文件摘要。Mihomo 不发布校验和，锁文件中的摘要是从上游文件计算一次得到的。发布包的 `licenses/` 里有 Mihomo 的许可证（`packaging/mihomo/LICENSE`）和来源说明；每个发布版附带 `mihomo-<version>-source.tar.gz`。ClashPulse 和 Mihomo 是一起分发的两个独立程序，没有链接关系。固定版本只在更新全部摘要的审阅提交中改变，不会自动更新。没有 Windows arm64 构建：`windows-11-arm` 运行器没有可编译 Fyne cgo 代码的 aarch64 mingw 编译器。
 
 `replace` 指令让 Fyne 从 [fishing-agents/fyne](https://github.com/fishing-agents/fyne/tree/fix/wayland-visible-create) `v2.8.2-0.20261001232054-d7b412429937`（BSD-3-Clause）构建：即 v2.8.1 加一个提交，让 Wayland 窗口在创建时保持可见（systray 监视器除外）。上游 v2.8.2 和该 fork 的默认分支都没有这个修复，所以在修复变基之前，构建不包含上游 v2.8.2 的改动。
 

@@ -31,7 +31,7 @@ go build -o clashpulse ./cmd/clashpulse
 
 `make install` 会把二进制、图标与 desktop 条目复制到 `~/.local`(`PREFIX=/usr/local` 等可覆盖前缀)。desktop 条目仅限 Linux。
 
-GUI 启动时不带代理配置。Mihomo 是独立可执行文件：把它放到 `PATH`，或在设置中选择一个绝对路径。本仓库不捆绑 Mihomo 二进制。
+GUI 启动时不带代理配置。macOS 和 Windows 发布包内置一个固定版本的官方 Mihomo 构建并默认使用；Linux 和源码构建需要把 `mihomo` 放到 `PATH`，或在设置中选择一个绝对路径。macOS 上 `brew install fishman/clashpulse/clashpulse` 会构建 ClashPulse 并安装 Homebrew 的 `mihomo`。详见 [安装](docs/zh-CN/installation.md)。
 
 ### Arch Linux
 

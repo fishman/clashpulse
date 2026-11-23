@@ -19,9 +19,9 @@ nav_order: 8
 
 不能。它没有脚本、合并、代理、组或规则编辑器，也从不修改源配置。ClashPulse 只负责在 Mihomo 之上选节点。
 
-## 为什么不捆绑 Mihomo？
+## ClashPulse 用的是哪个 Mihomo？
 
-由发行版或 Mihomo 官方发布来保持更新。ClashPulse 使用 `PATH` 里的 `mihomo` 或你指定的路径，并先检查它的能力；不支持的设置会报错并指出是哪一项。
+macOS 和 Windows 发布包附带一个固定版本、未修改的官方 Mihomo 构建，并默认使用它（`binary = "bundled"`）。Linux 软件包、Homebrew 和源码构建使用 `PATH` 里的 `mihomo`（`binary = "system"`），由发行版或 Homebrew 保持更新。可以在设置里切换，或指定可执行文件路径。内置 Mihomo 会按构建时记录的摘要校验，只随 ClashPulse 发布版更新；ClashPulse 从不自行下载 Mihomo。无论哪种，都会先检查能力，不支持的设置会报错并指出是哪一项。
 
 ## macOS 提示应用已损坏
 

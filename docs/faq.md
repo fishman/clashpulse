@@ -20,10 +20,15 @@ checks are done.
 No. There is no script, merge, proxy, group, or rule editor, and source
 profiles are never edited. ClashPulse picks nodes on top of Mihomo.
 
-## Why is Mihomo not bundled?
+## Which Mihomo does ClashPulse use?
 
-Your distribution or Mihomo's releases keep it current. ClashPulse uses
-`mihomo` from `PATH` or a path you choose and checks its capabilities; an
+macOS and Windows release packages ship a pinned, unmodified official Mihomo
+build and use it by default (`binary = "bundled"`). Linux packages, Homebrew,
+and source builds use `mihomo` from `PATH` (`binary = "system"`), so your
+distribution or Homebrew keeps it current. You can switch in Settings or pick
+an executable path. The bundled Mihomo is verified against a digest recorded
+at build time and updates only with a ClashPulse release; ClashPulse never
+downloads Mihomo by itself. Either way it checks capabilities first, and an
 unsupported setting is an error naming that setting.
 
 ## macOS says the app is damaged

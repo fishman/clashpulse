@@ -6,8 +6,9 @@ nav_order: 2
 
 # Installation
 
-You also need [Mihomo](https://github.com/MetaCubeX/mihomo); no build
-bundles it.
+ClashPulse runs [Mihomo](https://github.com/MetaCubeX/mihomo). macOS and
+Windows release packages after v0.1.1 include a pinned official Mihomo build;
+on Linux, with Homebrew, and in source builds you install Mihomo yourself.
 
 ## Release downloads
 
@@ -42,7 +43,21 @@ tar -xzf clashpulse-v0.1.1-darwin-arm64.tar.gz
 xattr -dr com.apple.quarantine ClashPulse.app
 ```
 
-On Windows, unzip and run `clashpulse.exe`.
+On Windows, unzip and run `clashpulse.exe`. The amd64 package also starts on
+Windows on ARM under x64 emulation (CI runs `clashpulse.exe version` and
+`mihomo.exe -v` there; the GUI is not tested on ARM). There is no native
+Windows arm64 build yet.
+
+## Homebrew (macOS)
+
+```sh
+brew install fishman/clashpulse/clashpulse
+clashpulse
+```
+
+The formula builds the tagged source on your Mac, so Gatekeeper does not
+block it, and installs Homebrew's `mihomo` as a dependency. It installs the
+`clashpulse` command, not an app in /Applications.
 
 ## Arch Linux
 
@@ -57,9 +72,17 @@ makepkg -si
 
 ## Mihomo
 
-Put `mihomo` on `PATH` (the default `binary = "system"`) or pick a path in
-Settings > Mihomo binary. ClashPulse checks its version and capabilities
-first. Steady stream needs pinned listener support (verified with v1.19.31).
+Release packages for macOS and Windows default to `binary = "bundled"`: the
+Mihomo inside the package, which ClashPulse checks against the digest recorded
+at build time, copies into its private state, and runs from there. Other
+builds default to `binary = "system"`, the `mihomo` on `PATH`. You can pick
+either, or an executable path, in Settings > Mihomo binary. ClashPulse checks
+the version and capabilities first. Steady stream needs pinned listener
+support (verified with v1.19.31).
+
+The bundled Mihomo changes only with a ClashPulse release. The package
+includes its GPL-3.0 licence and provenance in `licenses/`, and each release
+attaches the matching Mihomo source.
 
 ## Build from source
 

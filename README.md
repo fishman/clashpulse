@@ -29,7 +29,7 @@ The source build reports `clashpulse dev`. macOS needs Xcode Command Line Tools;
 ./clashpulse
 ```
 
-The GUI starts without a proxy profile. Mihomo is a separate executable: put `mihomo` on `PATH`, or choose an absolute executable path in Settings. No Mihomo binary is bundled.
+The GUI starts without a proxy profile. macOS and Windows release packages include a pinned official Mihomo build and use it by default; on Linux and in source builds, put `mihomo` on `PATH`, or choose an absolute executable path in Settings. On macOS, `brew install fishman/clashpulse/clashpulse` builds ClashPulse and installs Homebrew's `mihomo`. See [installation](docs/installation.md).
 
 The GUI needs a graphical desktop session (X11 or Wayland on Linux). Its tray uses StatusNotifier; GNOME may need the [AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/) to show it.
 
