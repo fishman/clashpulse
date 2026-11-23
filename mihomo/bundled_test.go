@@ -124,3 +124,18 @@ func TestPruneBundledKeepsOnlyActiveVersion(t *testing.T) {
 		t.Fatalf("active copy removed: %v", err)
 	}
 }
+
+func TestInstallBundledKeepsVerifiedCopyWhenPackageIsGone(t *testing.T) {
+	packaged, sum := packagedFake(t, "fake mihomo")
+	root := filepath.Join(t.TempDir(), "mihomo")
+	first, err := installBundled(packaged, root, "v1", sum)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(packaged); err != nil {
+		t.Fatal(err)
+	}
+	if again, err := installBundled(packaged, root, "v1", sum); err != nil || again != first {
+		t.Fatalf("copy after package removal = %q, %v", again, err)
+	}
+}

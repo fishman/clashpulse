@@ -27,6 +27,10 @@ func InstallBundled(stateDir string) (string, error) {
 		return "", errBundledMissing
 	}
 	exe, err := os.Executable()
+	if err == nil {
+		// A symlinked command (for example on PATH) must still find the package.
+		exe, err = filepath.EvalSymlinks(exe)
+	}
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", errBundledMissing, err)
 	}
@@ -63,11 +67,6 @@ func packagedPath(goos, exe string) string {
 }
 
 func installBundled(packaged, root, version, sum string) (string, error) {
-	source, err := os.Open(packaged)
-	if err != nil {
-		return "", fmt.Errorf("%w: %v", errBundledMissing, err)
-	}
-	defer source.Close()
 	if len(sum) < 12 {
 		return "", errBundledMismatch
 	}
@@ -77,10 +76,17 @@ func installBundled(packaged, root, version, sum string) (string, error) {
 			return "", fmt.Errorf("install bundled Mihomo: %w", err)
 		}
 	}
+	// The verified copy is enough on its own: the package is read only when the
+	// copy is missing or altered, so a moved or deleted package keeps working.
 	dest := filepath.Join(dir, filepath.Base(packaged))
 	if existing, err := fileSHA256(dest); err == nil && existing == sum {
 		return dest, nil
 	}
+	source, err := os.Open(packaged)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", errBundledMissing, err)
+	}
+	defer source.Close()
 	tmp, err := os.CreateTemp(dir, ".mihomo-*")
 	if err != nil {
 		return "", fmt.Errorf("install bundled Mihomo: %w", err)
