@@ -273,17 +273,17 @@ func newSubscriptionPage(send sendIntent, window fyne.Window) *subscriptionPage 
 					return
 				}
 				id := item.id
-				dialog.ShowConfirm(localize.T("Delete subscription"), fmt.Sprintf(localize.T("Delete subscription %s and its private snapshot?"), id), func(confirmed bool) {
+				showSized(dialog.NewConfirm(localize.T("Delete subscription"), fmt.Sprintf(localize.T("Delete subscription %s and its private snapshot?"), id), func(confirmed bool) {
 					if confirmed {
 						p.send(ipc.Command{Kind: ipc.CommandDeleteSubscription, SubscriptionID: id})
 					}
-				}, p.window)
+				}, p.window), p.window, messageDialogWidth, false)
 			})
 			item.edit = widget.NewButton(localize.T("Edit"), func() { p.editSubscription(item.id) })
 			item.details = widget.NewButton(localize.T("Details"), func() {
 				for _, sub := range p.rows {
 					if sub.ID == item.id {
-						dialog.ShowInformation(fmt.Sprintf(localize.T("Subscription %s"), sub.ID), subscriptionDetails(sub), p.window)
+						showInformation(fmt.Sprintf(localize.T("Subscription %s"), sub.ID), subscriptionDetails(sub), p.window)
 						return
 					}
 				}
@@ -453,14 +453,14 @@ func (p *subscriptionPage) openSubscriptionEditor(existing *core.SubscriptionSna
 		e.agent.SetText("")
 		p.editor = nil
 		if err != nil {
-			dialog.ShowError(err, p.window)
+			showError(err, p.window)
 			return
 		}
 		if changed {
 			p.send(command)
 		}
 	}, p.window)
-	e.dialog.Show()
+	showSized(e.dialog, p.window, formDialogWidth, false)
 }
 
 type subscriptionEditor struct {
@@ -676,7 +676,7 @@ func newResourcePage(send sendIntent, window fyne.Window) *resourcePage {
 			item.details = widget.NewButton(localize.T("Details"), func() {
 				for _, resource := range p.rows {
 					if resource.ID == item.id {
-						dialog.ShowInformation(fmt.Sprintf(localize.T("Resource %s"), resource.ID), resourceDetails(resource), p.window)
+						showInformation(fmt.Sprintf(localize.T("Resource %s"), resource.ID), resourceDetails(resource), p.window)
 						return
 					}
 				}
@@ -781,7 +781,7 @@ func newFilterPage(send sendIntent, window fyne.Window) *filterPage {
 			item.details = widget.NewButton(localize.T("Details"), func() {
 				for _, filter := range p.rows {
 					if filter.ID == item.id {
-						dialog.ShowInformation(fmt.Sprintf(localize.T("Filter %s"), filter.ID), filterDetails(filter), p.window)
+						showInformation(fmt.Sprintf(localize.T("Filter %s"), filter.ID), filterDetails(filter), p.window)
 						return
 					}
 				}
@@ -977,14 +977,14 @@ func (p *resourcePage) openResourceEditor(existing *core.ResourceSnapshot) {
 		e.source.SetText("")
 		p.editor = nil
 		if err != nil {
-			dialog.ShowError(err, p.window)
+			showError(err, p.window)
 			return
 		}
 		if changed {
 			p.send(command)
 		}
 	}, p.window)
-	e.dialog.Show()
+	showSized(e.dialog, p.window, formDialogWidth, false)
 }
 
 type resourceEditor struct {
@@ -1146,14 +1146,14 @@ func (p *filterPage) openFilterEditor(existing *core.FilterSnapshot) {
 		command, changed, err := e.command()
 		p.editor = nil
 		if err != nil {
-			dialog.ShowError(err, p.window)
+			showError(err, p.window)
 			return
 		}
 		if changed {
 			p.send(command)
 		}
 	}, p.window)
-	e.dialog.Show()
+	showSized(e.dialog, p.window, formDialogWidth, false)
 }
 
 type filterEditor struct {
@@ -1512,17 +1512,17 @@ func (p *settingsPage) editBinaryPath() {
 	if filepath.IsAbs(p.binaryPath) {
 		input.SetText(p.binaryPath)
 	}
-	dialog.NewForm(localize.T("Mihomo binary"), localize.T("Select"), localize.T("Cancel"), []*widget.FormItem{widget.NewFormItem(localize.T("Executable path"), input)}, func(confirmed bool) {
+	showSized(dialog.NewForm(localize.T("Mihomo binary"), localize.T("Select"), localize.T("Cancel"), []*widget.FormItem{widget.NewFormItem(localize.T("Executable path"), input)}, func(confirmed bool) {
 		if !confirmed {
 			return
 		}
 		path := strings.TrimSpace(input.Text)
 		if !filepath.IsAbs(path) || len(path) > 4096 || strings.ContainsAny(path, "\x00\r\n") {
-			dialog.ShowError(errors.New(localize.T("select an absolute executable path")), p.window)
+			showError(errors.New(localize.T("select an absolute executable path")), p.window)
 			return
 		}
 		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{Binary: &path}})
-	}, p.window).Show()
+	}, p.window), p.window, formDialogWidth, false)
 }
 
 func (p *settingsPage) editThreshold() {
@@ -1531,18 +1531,18 @@ func (p *settingsPage) editThreshold() {
 	if p.monitorState.AlertThresholdMillis > 0 {
 		input.SetText(strconv.FormatInt(p.monitorState.AlertThresholdMillis, 10))
 	}
-	dialog.NewForm(localize.T("Alert threshold"), localize.T("Apply"), localize.T("Cancel"), []*widget.FormItem{widget.NewFormItem(localize.T("Milliseconds"), input)}, func(confirmed bool) {
+	showSized(dialog.NewForm(localize.T("Alert threshold"), localize.T("Apply"), localize.T("Cancel"), []*widget.FormItem{widget.NewFormItem(localize.T("Milliseconds"), input)}, func(confirmed bool) {
 		if !confirmed {
 			return
 		}
 		parsed, err := strconv.ParseUint(strings.TrimSpace(input.Text), 10, 32)
 		if err != nil || parsed < 1 || parsed > 60000 {
-			dialog.ShowError(errors.New(localize.T("alert threshold must be 1-60000 ms")), p.window)
+			showError(errors.New(localize.T("alert threshold must be 1-60000 ms")), p.window)
 			return
 		}
 		value := uint32(parsed)
 		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{AlertThresholdMillis: &value}})
-	}, p.window).Show()
+	}, p.window), p.window, messageDialogWidth, false)
 }
 
 func (p *settingsPage) editMixedPort() {
@@ -1557,13 +1557,13 @@ func (p *settingsPage) editMixedPort() {
 		}
 		parsed, err := strconv.ParseUint(strings.TrimSpace(input.Text), 10, 32)
 		if err != nil || parsed < core.MixedPortMin || parsed > core.MixedPortMax {
-			dialog.ShowError(fmt.Errorf(localize.T("mixed port must be %d-%d"), core.MixedPortMin, core.MixedPortMax), p.window)
+			showError(fmt.Errorf(localize.T("mixed port must be %d-%d"), core.MixedPortMin, core.MixedPortMax), p.window)
 			return
 		}
 		value := uint32(parsed)
 		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{MixedPort: &value}})
 	}, p.window)
-	p.mixedPortDialog.Show()
+	showSized(p.mixedPortDialog, p.window, messageDialogWidth, false)
 }
 
 // updateMixedPort shows the configured port; an unchanged value leaves the label untouched.

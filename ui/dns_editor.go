@@ -137,14 +137,14 @@ func (p *dnsSettings) openListenerEditor() {
 		}
 		listen := strings.TrimSpace(input.Text)
 		if !validDNSListen(listen) {
-			dialog.ShowError(errors.New(localize.T("DNS listener must use a loopback IP address and valid port")), p.window)
+			showError(errors.New(localize.T("DNS listener must use a loopback IP address and valid port")), p.window)
 			return
 		}
 		if listen != p.snapshot.Listen {
 			p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{DNSListen: &listen}})
 		}
 	}, p.window)
-	p.listenerDialog.Show()
+	showSized(p.listenerDialog, p.window, formDialogWidth, false)
 }
 
 func (p *dnsSettings) editResolver(id string) {
@@ -193,14 +193,14 @@ func (p *dnsSettings) openResolverEditor(existing *core.ResolverSetSnapshot) {
 		}
 		command, changed, err := e.command(p.snapshot)
 		if err != nil {
-			dialog.ShowError(err, p.window)
+			showError(err, p.window)
 			return
 		}
 		if changed {
 			p.send(command)
 		}
 	}, p.window)
-	e.dialog.Show()
+	showSized(e.dialog, p.window, formDialogWidth, false)
 }
 
 func (p *dnsSettings) removeResolver(id string) {
@@ -210,7 +210,7 @@ func (p *dnsSettings) removeResolver(id string) {
 	}
 	for _, route := range p.snapshot.Routes {
 		if route.ResolverSet == id {
-			dialog.ShowError(fmt.Errorf(localize.T("remove or reassign DNS routes using resolver set %q first"), id), p.window)
+			showError(fmt.Errorf(localize.T("remove or reassign DNS routes using resolver set %q first"), id), p.window)
 			return
 		}
 	}
@@ -272,14 +272,14 @@ func (p *dnsSettings) openRouteEditor(index int) {
 		}
 		command, changed, err := e.command(p.snapshot)
 		if err != nil {
-			dialog.ShowError(err, p.window)
+			showError(err, p.window)
 			return
 		}
 		if changed {
 			p.send(command)
 		}
 	}, p.window)
-	e.dialog.Show()
+	showSized(e.dialog, p.window, formDialogWidth, false)
 }
 
 func (p *dnsSettings) removeRoute(index int) {

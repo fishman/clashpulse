@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/test"
 
@@ -88,7 +87,7 @@ func TestEscapeClosesUntrackedInformationDialog(t *testing.T) {
 	app := test.NewApp()
 	defer app.Quit()
 	view := newDesktopUI(t.Context(), "", app.NewWindow("ClashPulse"))
-	dialog.ShowInformation("Detail", "body", view.window)
+	showInformation("Detail", "body", view.window)
 	fyne.DoAndWait(func() {})
 	if view.window.Canvas().Overlays().Top() == nil {
 		t.Fatal("information dialog did not open")

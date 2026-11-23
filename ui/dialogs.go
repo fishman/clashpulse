@@ -14,6 +14,37 @@ type dialogOwner interface {
 	openDialog() dialog.Dialog
 }
 
+// Dialog widths: Fyne sizes a dialog to its content's minimum, which squeezes
+// forms and wrapped text into a narrow column. These caps apply on wide windows;
+// a narrow window gets a share of its width instead.
+const (
+	messageDialogWidth float32 = 560
+	formDialogWidth    float32 = 720
+	logDialogWidth     float32 = 1080
+)
+
+// showSized shows d at up to maxWidth, never wider than 90% of the window nor
+// narrower than its content needs. A tall dialog also takes 85% of the window
+// height; otherwise the height is what the content needs.
+func showSized(d dialog.Dialog, window fyne.Window, maxWidth float32, tall bool) {
+	canvas := window.Canvas().Size()
+	height := d.MinSize().Height
+	if tall {
+		height = canvas.Height * 0.85
+	}
+	// Sized before Show so the modal is centered at its final size.
+	d.Resize(fyne.NewSize(min(canvas.Width*0.9, maxWidth), height))
+	d.Show()
+}
+
+func showError(err error, window fyne.Window) {
+	showSized(dialog.NewError(err, window), window, messageDialogWidth, false)
+}
+
+func showInformation(title, message string, window fyne.Window) {
+	showSized(dialog.NewInformation(title, message, window), window, formDialogWidth, false)
+}
+
 // dismissTopDialog closes the dialog the user is looking at. An editor form is
 // dismissed through the Cancel path its view already relies on; every other dialog
 // is hidden at the overlay, which runs no callback because none of them carry state.

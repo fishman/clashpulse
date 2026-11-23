@@ -9,6 +9,7 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/localize"
@@ -55,10 +56,10 @@ func TestActivityDialogShowsSanitizedSnapshot(t *testing.T) {
 	if view.activity.list.Length() != 1 {
 		t.Fatal("open activity did not follow new snapshot")
 	}
-	item := view.activity.list.CreateItem().(*widget.Label)
+	item := view.activity.list.CreateItem().(*widget.RichText)
 	view.activity.list.UpdateItem(0, item)
-	if !strings.Contains(item.Text, "recovered") || !strings.Contains(item.Text, "feed") || strings.Contains(item.Text, "HTTP 406") {
-		t.Fatalf("activity row did not update: %q", item.Text)
+	if text := item.String(); !strings.Contains(text, "recovered") || !strings.Contains(text, "feed") || strings.Contains(text, "HTTP 406") {
+		t.Fatalf("activity row did not update: %q", text)
 	}
 }
 
@@ -238,5 +239,48 @@ func TestActivityNamesStreamProbeNodeByLabel(t *testing.T) {
 	text = activityText(entry, nil)
 	if !strings.Contains(text, id[:8]) || strings.Contains(text, id) {
 		t.Fatalf("unlabelled stream diagnostic = %q, want short ID", text)
+	}
+}
+
+func activityText(entry core.DiagnosticSnapshot, proxies []core.ProxySnapshot) string {
+	return activityRow(activitySegments(entry, proxies)).String()
+}
+
+func TestActivityHighlightsErrorSeverity(t *testing.T) {
+	color := func(severity string) fyne.ThemeColorName {
+		for _, segment := range activitySegments(core.DiagnosticSnapshot{At: 100, Severity: severity, Kind: "refresh_subscription", SourceID: "feed", Message: "fetch failed"}, nil) {
+			if text := segment.(*widget.TextSegment); text.Text == localize.Code("diagnostic.severity", severity) {
+				return text.Style.ColorName
+			}
+		}
+		return ""
+	}
+	if got := color("error"); got != theme.ColorNameError {
+		t.Fatalf("error severity color = %q", got)
+	}
+	if got := color("info"); got == theme.ColorNameError || got == "" {
+		t.Fatalf("info severity color = %q", got)
+	}
+}
+
+func TestDialogsUseReadableWidth(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	w := app.NewWindow("ClashPulse")
+	w.Resize(fyne.NewSize(980, 700))
+	view := newDesktopUI(t.Context(), "", w)
+	view.postSnapshot(core.Snapshot{Diagnostics: []core.DiagnosticSnapshot{{At: 100, Severity: "error", Kind: "refresh_subscription", SourceID: "feed", Message: "fetch failed"}}})
+	fyne.DoAndWait(func() {})
+	view.openActivity()
+	if size := view.activity.dialog.MinSize(); size.Width > 980 {
+		t.Fatalf("activity needs %v, wider than the window", size)
+	}
+	if width := view.activity.list.Size().Width; width < 800 {
+		t.Fatalf("activity list width %v, want most of the 980 px window", width)
+	}
+	hideTopOverlay(w.Canvas())
+	showInformation("Detail", "body", w)
+	if width := w.Canvas().Overlays().Top().Size().Width; width < 500 {
+		t.Fatalf("information dialog width %v, want a readable width", width)
 	}
 }

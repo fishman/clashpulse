@@ -176,17 +176,17 @@ func (p *settingsPage) editURLTestDelay() {
 		widget.NewFormItem(localize.T("Switch tolerance (ms)"), tolerance),
 		widget.NewFormItem(localize.T("Applies to"), widget.NewLabel(localize.T("url-test and fallback groups in the generated config. A blank field keeps what the profile sets."))),
 	}
-	dialog.NewForm(localize.T("Mihomo url-test delay"), localize.T("Apply"), localize.T("Cancel"), items, func(confirmed bool) {
+	showSized(dialog.NewForm(localize.T("Mihomo url-test delay"), localize.T("Apply"), localize.T("Cancel"), items, func(confirmed bool) {
 		if !confirmed {
 			return
 		}
 		patch, err := urlTestDelayPatch(interval.Text, tolerance.Text)
 		if err != nil {
-			dialog.ShowError(err, p.window)
+			showError(err, p.window)
 			return
 		}
 		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: patch})
-	}, p.window).Show()
+	}, p.window), p.window, formDialogWidth, false)
 }
 
 // A blank field leaves that group setting untouched, so clearing a value back to
@@ -220,7 +220,7 @@ func urlTestDelayPatch(interval, tolerance string) (*ipc.ConfigPatch, error) {
 var monitorPolicyMaxSize = fyne.NewSize(760, 600)
 
 func (p *settingsPage) editMonitorPolicy() {
-	p.monitorPolicyDialog().Show()
+	showSized(p.monitorPolicyDialog(), p.window, monitorPolicyMaxSize.Width, false)
 }
 
 func (p *settingsPage) monitorPolicyDialog() dialog.Dialog {
@@ -272,7 +272,7 @@ func (p *settingsPage) monitorPolicyDialog() dialog.Dialog {
 			StreamURL: streamURL.Text, StreamIntervalSeconds: streamInterval.Text,
 		})
 		if err != nil {
-			dialog.ShowError(err, p.window)
+			showError(err, p.window)
 			return
 		}
 		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: patch})

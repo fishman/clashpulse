@@ -1,11 +1,13 @@
 package ui
 
 import (
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/fishman/clashpulse/core"
@@ -26,12 +28,12 @@ func newActivityView() *activityView {
 	view.list = widget.NewList(
 		func() int { return len(view.entries) },
 		func() fyne.CanvasObject {
-			label := widget.NewLabel("")
-			label.Wrapping = fyne.TextWrapWord
-			return label
+			return activityRow(nil)
 		},
 		func(id widget.ListItemID, item fyne.CanvasObject) {
-			item.(*widget.Label).SetText(activityText(view.entries[id], view.proxies))
+			row := item.(*widget.RichText)
+			row.Segments = activitySegments(view.entries[id], view.proxies)
+			row.Refresh()
 		},
 	)
 	view.content = container.New(activityLayout{view: view}, view.list)
@@ -61,24 +63,47 @@ func (v *activityView) resizeRows(width float32, force bool) {
 	}
 	v.width = width
 	for id, entry := range v.entries {
-		v.list.SetItemHeight(widget.ListItemID(id), activityRowHeight(activityText(entry, v.proxies), width))
+		v.list.SetItemHeight(widget.ListItemID(id), activityRowHeight(activitySegments(entry, v.proxies), width))
 	}
 }
 
-func activityRowHeight(text string, width float32) float32 {
-	label := widget.NewLabel(text)
-	label.Wrapping = fyne.TextWrapWord
-	label.MinSize()
-	label.Resize(fyne.NewSize(width, 1<<15))
-	return label.MinSize().Height
+func activityRow(segments []widget.RichTextSegment) *widget.RichText {
+	row := widget.NewRichText(segments...)
+	row.Wrapping = fyne.TextWrapWord
+	return row
 }
 
-func activityText(entry core.DiagnosticSnapshot, proxies []core.ProxySnapshot) string {
-	text := time.Unix(entry.At, 0).UTC().Format(time.RFC3339) + "  " + localize.Code("diagnostic.severity", entry.Severity)
+func activityRowHeight(segments []widget.RichTextSegment, width float32) float32 {
+	row := activityRow(segments)
+	row.MinSize()
+	row.Resize(fyne.NewSize(width, 1<<15))
+	return row.MinSize().Height
+}
+
+// activitySegments renders an entry as a header line (local time, severity,
+// operation, source) above its message, so the message starts at the left edge
+// and the severity color marks errors at a glance.
+func activitySegments(entry core.DiagnosticSnapshot, proxies []core.ProxySnapshot) []widget.RichTextSegment {
+	severity := theme.ColorNamePrimary
+	if entry.Severity == "error" {
+		severity = theme.ColorNameError
+	}
+	inline := func(text string, color fyne.ThemeColorName, bold bool) *widget.TextSegment {
+		return &widget.TextSegment{Text: text, Style: widget.RichTextStyle{Inline: true, ColorName: color, SizeName: theme.SizeNameCaptionText, TextStyle: fyne.TextStyle{Bold: bold}}}
+	}
+	header := []widget.RichTextSegment{
+		inline(time.Unix(entry.At, 0).Local().Format(time.DateTime)+"   ", theme.ColorNamePlaceHolder, false),
+		inline(localize.Code("diagnostic.severity", entry.Severity), severity, true),
+	}
 	if entry.Kind != "" {
-		text += "  " + localize.Code("operation", entry.Kind)
+		// English has no operation labels, so the code itself is shown, spaced.
+		header = append(header, inline("   "+strings.ReplaceAll(localize.Code("operation", entry.Kind), "_", " "), theme.ColorNameForeground, true))
 	}
-	return text + "  " + core.DiagnosticSource(proxies, entry) + "  " + localize.T(entry.Message)
+	if source := core.DiagnosticSource(proxies, entry); source != "" {
+		header = append(header, inline("   "+source, theme.ColorNamePlaceHolder, false))
+	}
+	header[len(header)-1].(*widget.TextSegment).Style.Inline = false
+	return append(header, &widget.TextSegment{Text: localize.T(entry.Message), Style: widget.RichTextStyleParagraph})
 }
 
 // update shows entries; proxies name the nodes stream probe entries refer to.
@@ -94,5 +119,5 @@ func (d *desktopUI) openActivity() {
 	if d.activity.dialog == nil {
 		d.activity.dialog = dialog.NewCustom(localize.T("Activity"), localize.T("Close"), container.NewBorder(d.overridesSection, nil, nil, nil, d.activity.content), d.window)
 	}
-	d.activity.dialog.Show()
+	showSized(d.activity.dialog, d.window, logDialogWidth, true)
 }
