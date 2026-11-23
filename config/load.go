@@ -14,6 +14,7 @@ import (
 
 	"github.com/fishman/clashpulse/core"
 	"github.com/fishman/clashpulse/download"
+	"github.com/fishman/clashpulse/internal/bundled"
 	"github.com/fishman/clashpulse/monitor"
 )
 
@@ -69,6 +70,9 @@ func Load(dir string) (Snapshot, error) {
 func applyDefaults(s *Snapshot) {
 	if s.Mihomo.Binary == "" {
 		s.Mihomo.Binary = "system"
+		if bundled.Available() {
+			s.Mihomo.Binary = "bundled"
+		}
 	}
 	if s.Monitor.TestURL == "" {
 		s.Monitor.TestURL = "http://cp.cloudflare.com/generate_204"

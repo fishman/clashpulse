@@ -166,8 +166,10 @@ it (aggregate), not linked.
   and `system` when empty; an explicit `system` stays `system`.
 - Seed then load: a fresh config directory seeded from `examples/` resolves
   to `bundled` when `SHA256` is set and to `system` when empty.
-- Homebrew `test do` runs against a fresh temporary config directory and
-  asserts the resolved binary is `system`, not only `clashpulse version`.
+- Homebrew `test do` runs `clashpulse version`. No CLI command prints the
+  resolved binary, and one is not added just for a package test; a Homebrew
+  build sets no bundle identity, so the seed-then-load test above covers its
+  `system` default.
 - `mihomo` bundled resolution with a fake executable in a temp package
   layout: hash match installs a private copy with 0700 dir/file and inspects
   it; mismatch errors and leaves no copy; missing file errors; an existing
