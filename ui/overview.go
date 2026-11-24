@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -60,16 +59,11 @@ type overviewModel struct {
 // buildOverview derives every Overview card from one snapshot; it touches
 // no widget, so it is tested without a display.
 func buildOverview(s core.Snapshot) overviewModel {
+	// Mode and Policy are raw values; their selects label them.
 	m := overviewModel{
 		Profile: localize.T("None"),
-		Mode:    localize.Code("proxy.mode", s.ProxyMode),
-		Policy:  localize.Code("monitor.policy", s.Monitor.SwitchPolicy),
-	}
-	if m.Mode == "" {
-		m.Mode = "-"
-	}
-	if m.Policy == "" {
-		m.Policy = "-"
+		Mode:    s.ProxyMode,
+		Policy:  s.Monitor.SwitchPolicy,
 	}
 	binary := binaryFieldValues(s.Binary)
 	m.Mihomo = binary[1] + " \u00b7 " + binary[0]
@@ -211,8 +205,9 @@ func gigabytes(bytes uint64) string {
 type overviewView struct {
 	object fyne.CanvasObject
 
-	profile, mihomo *widget.Label
-	mode, policy    *choiceSelect
+	profile, mihomo      *widget.Label
+	mode, policy         *widget.Select
+	showMode, showPolicy func(string)
 
 	node, switchCard           *fyne.Container
 	nodeCaption, streamCaption *canvas.Text
@@ -234,51 +229,6 @@ type overviewView struct {
 	healthDot                  *dot
 }
 
-// choiceSelect picks one of a fixed set of values and sends the pick. It shows
-// the snapshot value until a new snapshot confirms the pick: a rejected pick
-// publishes no change that would correct it. The select is a field, not
-// embedded: an embedding widget without ExtendBaseWidget renders under a
-// different cache key than the one Refresh updates.
-type choiceSelect struct {
-	sel     *widget.Select
-	current string
-}
-
-func newChoiceSelect(values []string, label func(string) string, pick func(string)) *choiceSelect {
-	labels := make([]string, len(values))
-	for i, value := range values {
-		labels[i] = label(value)
-	}
-	c := &choiceSelect{}
-	c.sel = widget.NewSelect(labels, func(text string) {
-		// Re-showing the snapshot value lands here too and sends nothing.
-		if text == c.current {
-			return
-		}
-		if i := slices.Index(labels, text); i >= 0 {
-			pick(values[i])
-		}
-		c.set(c.current)
-	})
-	c.sel.PlaceHolder = "-"
-	c.sel.Disable()
-	return c
-}
-
-// set shows the snapshot's label; one outside the options clears the select.
-func (c *choiceSelect) set(text string) {
-	c.current = text
-	if !slices.Contains(c.sel.Options, text) {
-		if c.sel.Selected != "" {
-			c.sel.ClearSelected()
-		}
-		return
-	}
-	if c.sel.Selected != text {
-		c.sel.SetSelected(text)
-	}
-}
-
 func newOverviewView(openActivity func(), send func(ipc.Command)) *overviewView {
 	v := &overviewView{}
 	label := func(style fyne.TextStyle) *widget.Label {
@@ -297,15 +247,19 @@ func newOverviewView(openActivity func(), send func(ipc.Command)) *overviewView 
 	}
 	// One-field patches: everything else, the stream URL included, stays as
 	// configured.
-	v.mode = newChoiceSelect(core.ProxyModes, func(mode string) string { return localize.Code("proxy.mode", mode) }, func(mode string) {
+	v.mode, v.showMode = newChoiceSelect(core.ProxyModes, proxyModeLabel, func(mode string) {
 		configure(&ipc.ConfigPatch{ProxyMode: &mode})
 	})
-	v.policy = newChoiceSelect(monitor.SwitchPolicies, switchPolicyName, func(policy string) {
+	v.policy, v.showPolicy = newChoiceSelect(monitor.SwitchPolicies, switchPolicyName, func(policy string) {
 		configure(&ipc.ConfigPatch{MonitorSwitchPolicy: &policy})
 	})
+	for _, sel := range []*widget.Select{v.mode, v.policy} {
+		sel.PlaceHolder = "-"
+		sel.Disable()
+	}
 	profileCard, profile := fact(localize.T("Profile"))
-	modeCard := newCard(localize.T("Mode"), v.mode.sel)
-	policyCard := newCard(localize.T("Switch policy"), v.policy.sel)
+	modeCard := newCard(localize.T("Mode"), cardSelect(v.mode))
+	policyCard := newCard(localize.T("Switch policy"), cardSelect(v.policy))
 	mihomoCard, mihomo := fact("Mihomo")
 	v.profile, v.mihomo = profile, mihomo
 
@@ -385,10 +339,10 @@ func setVisible(object fyne.CanvasObject, visible bool) {
 
 func (v *overviewView) update(m overviewModel) {
 	setLabel(v.profile, m.Profile)
-	v.mode.set(m.Mode)
-	v.policy.set(m.Policy)
-	v.mode.sel.Enable()
-	v.policy.sel.Enable()
+	v.showMode(m.Mode)
+	v.showPolicy(m.Policy)
+	v.mode.Enable()
+	v.policy.Enable()
 	setLabel(v.mihomo, m.Mihomo)
 
 	setVisible(v.nodeEmpty, !m.Node.Visible)
@@ -434,8 +388,13 @@ func (v *overviewView) update(m overviewModel) {
 // snapshot there is no health to report and no service to send a pick to.
 func (v *overviewView) disconnect() {
 	v.healthDot.set(pillOff.color())
-	v.mode.sel.Disable()
-	v.policy.sel.Disable()
+	v.mode.Disable()
+	v.policy.Disable()
+}
+
+// proxyModeLabel is a proxy mode's display name.
+func proxyModeLabel(mode string) string {
+	return localize.Code("proxy.mode", mode)
 }
 
 func joinNonEmpty(parts ...string) string {

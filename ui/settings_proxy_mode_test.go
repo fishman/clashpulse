@@ -24,7 +24,7 @@ func TestSettingsProxyModeSelectShowsSnapshotAndSendsChange(t *testing.T) {
 	if got := strings.Join(page.proxyMode.Options, "|"); got != "Rule|Global|Direct" {
 		t.Fatalf("proxy mode options = %q", got)
 	}
-	page.updateProxyMode(core.ProxyModeGlobal)
+	page.showProxyMode(core.ProxyModeGlobal)
 	if page.proxyMode.Selected != "Global" || len(sent) != 0 {
 		t.Fatalf("snapshot mode shown as %q and sent %+v", page.proxyMode.Selected, sent)
 	}
@@ -33,7 +33,7 @@ func TestSettingsProxyModeSelectShowsSnapshotAndSendsChange(t *testing.T) {
 	if !reflect.DeepEqual(sent, want) {
 		t.Fatalf("proxy mode change sent %+v", sent)
 	}
-	page.updateProxyMode(core.ProxyModeRule)
+	page.showProxyMode(core.ProxyModeRule)
 	if page.proxyMode.Selected != "Rule" || !reflect.DeepEqual(sent, want) {
 		t.Fatalf("snapshot update echoed intent: shown %q, sent %+v", page.proxyMode.Selected, sent)
 	}

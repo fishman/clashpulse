@@ -30,7 +30,7 @@ func TestBuildOverviewEmptySnapshot(t *testing.T) {
 	}
 	// Before the first snapshot nothing is configured yet: no default policy
 	// and no zero-interval URL test.
-	if m.Policy != "-" || m.Mode != "-" || m.Stream.Summary != "-" {
+	if m.Policy != "" || m.Mode != "" || m.Stream.Summary != "-" {
 		t.Fatalf("empty facts = policy %q mode %q summary %q", m.Policy, m.Mode, m.Stream.Summary)
 	}
 }
@@ -61,15 +61,15 @@ func TestOverviewModeAndPolicySelectsSendPatch(t *testing.T) {
 	defer a.Quit()
 	var sent []ipc.Command
 	v := newOverviewView(nil, func(c ipc.Command) { sent = append(sent, c) })
-	if !v.mode.sel.Disabled() || !v.policy.sel.Disabled() {
+	if !v.mode.Disabled() || !v.policy.Disabled() || v.mode.Selected != "" || v.policy.Selected != "" {
 		t.Fatal("selects enabled before the first snapshot")
 	}
 	v.update(buildOverview(core.Snapshot{ProxyMode: core.ProxyModeRule, Monitor: core.MonitorSnapshot{SwitchPolicy: monitor.SwitchLowestLatency}}))
 	if len(sent) != 0 {
 		t.Fatalf("applying a snapshot sent %+v", sent)
 	}
-	v.mode.sel.SetSelected(localize.Code("proxy.mode", core.ProxyModeGlobal))
-	v.policy.sel.SetSelected(localize.Code("monitor.policy", monitor.SwitchSteadyStream))
+	v.mode.SetSelected(localize.Code("proxy.mode", core.ProxyModeGlobal))
+	v.policy.SetSelected(localize.Code("monitor.policy", monitor.SwitchSteadyStream))
 	if len(sent) != 2 {
 		t.Fatalf("sent %+v", sent)
 	}
@@ -80,11 +80,11 @@ func TestOverviewModeAndPolicySelectsSendPatch(t *testing.T) {
 	if policy.MonitorSwitchPolicy == nil || *policy.MonitorSwitchPolicy != monitor.SwitchSteadyStream || policy.MonitorStreamURL != nil || policy.ProxyMode != nil {
 		t.Fatalf("policy pick sent %+v", policy)
 	}
-	if v.mode.sel.Selected != localize.Code("proxy.mode", core.ProxyModeRule) || v.policy.sel.Selected != localize.Code("monitor.policy", monitor.SwitchLowestLatency) {
-		t.Fatalf("selects show pending %q %q, want snapshot values", v.mode.sel.Selected, v.policy.sel.Selected)
+	if v.mode.Selected != localize.Code("proxy.mode", core.ProxyModeRule) || v.policy.Selected != localize.Code("monitor.policy", monitor.SwitchLowestLatency) {
+		t.Fatalf("selects show pending %q %q, want snapshot values", v.mode.Selected, v.policy.Selected)
 	}
 	v.disconnect()
-	if !v.mode.sel.Disabled() || !v.policy.sel.Disabled() {
+	if !v.mode.Disabled() || !v.policy.Disabled() {
 		t.Fatal("selects enabled after disconnect")
 	}
 }
@@ -199,8 +199,8 @@ func TestBuildOverviewShortLabels(t *testing.T) {
 		Filters:       []core.FilterSnapshot{{ID: "ads"}},
 	}
 	m := buildOverview(s)
-	if m.Policy != localize.Code("monitor.policy", monitor.SwitchSteadyStream) || m.Stream.Title != localize.T("Steady stream") || m.Node.Group != "Proxy" {
-		t.Fatalf("labels = %q %q %q", m.Policy, m.Stream.Title, m.Node.Group)
+	if m.Policy != monitor.SwitchSteadyStream || m.Stream.Title != localize.T("Steady stream") || m.Node.Group != "Proxy" {
+		t.Fatalf("policy and labels = %q %q %q", m.Policy, m.Stream.Title, m.Node.Group)
 	}
 	if m.Health.Counts != fmt.Sprintf(localize.T("Subscriptions %d \u00b7 Data resources %d \u00b7 Filter lists %d"), 1, 0, 1) {
 		t.Fatalf("counts = %q", m.Health.Counts)
@@ -215,7 +215,7 @@ func TestBuildOverviewShortLabels(t *testing.T) {
 	if m := buildOverview(s); m.Node.Unit != "\u6beb\u79d2" {
 		t.Fatalf("zh latency unit = %q", m.Node.Unit)
 	}
-	if m := buildOverview(s); m.Policy != "\u7a33\u5b9a\u6d41" || m.Health.Counts != "\u8ba2\u9605 1 \u00b7 \u6570\u636e\u8d44\u6e90 0 \u00b7 \u8fc7\u6ee4\u5217\u8868 1" {
-		t.Fatalf("zh labels = %q %q", m.Policy, m.Health.Counts)
+	if m := buildOverview(s); m.Health.Counts != "\u8ba2\u9605 1 \u00b7 \u6570\u636e\u8d44\u6e90 0 \u00b7 \u8fc7\u6ee4\u5217\u8868 1" {
+		t.Fatalf("zh counts = %q", m.Health.Counts)
 	}
 }

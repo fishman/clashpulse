@@ -369,7 +369,7 @@ func (d *desktopUI) postSnapshot(snapshot core.Snapshot) {
 		}
 		d.settingsPage.updateTun(immutable.Tun)
 		d.settingsPage.updateMixedPort(immutable.MixedPort)
-		d.settingsPage.updateProxyMode(immutable.ProxyMode)
+		d.settingsPage.showProxyMode(immutable.ProxyMode)
 		if !reflect.DeepEqual(previous.Diagnostics, immutable.Diagnostics) {
 			d.activity.update(immutable.Diagnostics, immutable.Proxies)
 		}

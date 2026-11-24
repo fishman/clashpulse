@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -1259,6 +1258,7 @@ type settingsPage struct {
 	sectionViews        map[string]fyne.CanvasObject
 	binaryValues        [4]*widget.Label
 	binarySource        *widget.Select
+	showBinary          func(string)
 	binaryPath          string
 	threshold           *widget.Label
 	urlTestDelay        *widget.Label
@@ -1274,9 +1274,12 @@ type settingsPage struct {
 	mixedPortEditor     *widget.Entry
 	mixedPortDialog     *dialog.FormDialog
 	proxyMode           *widget.Select
+	showProxyMode       func(string)
 	tunEnabled          *widget.Check
 	tunStack            *widget.Select
+	showTunStack        func(string)
 	tunDNSMode          *widget.Select
+	showTunDNSMode      func(string)
 	tunStatus           *widget.RichText
 	tunAuthorize        *widget.Button
 	tunManual           *widget.Label
@@ -1301,16 +1304,12 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 	for i, value := range binaryFieldValues(core.BinarySnapshot{}) {
 		p.binaryValues[i] = widget.NewLabel(value)
 	}
-	binarySources := []string{"system", "bundled"}
-	binaryLabels := []string{localize.T("System"), localize.T("Bundled")}
-	p.binarySource = widget.NewSelect(binaryLabels, func(label string) {
-		if i := slices.Index(binaryLabels, label); i >= 0 {
-			value := binarySources[i]
-			p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{Binary: &value}})
-			// Show the snapshot's binary until a new snapshot confirms the
-			// choice: a repeated rejection publishes no change to correct it.
-			p.updateBinarySource(p.binaryPath)
-		}
+	configure := func(patch *ipc.ConfigPatch) {
+		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: patch})
+	}
+	binaryLabels := map[string]string{"system": localize.T("System"), "bundled": localize.T("Bundled")}
+	p.binarySource, p.showBinary = newChoiceSelect([]string{"system", "bundled"}, func(source string) string { return binaryLabels[source] }, func(source string) {
+		configure(&ipc.ConfigPatch{Binary: &source})
 	})
 	p.binarySource.PlaceHolder = localize.T("Not set")
 	p.threshold = widget.NewLabel(localize.T("Not configured"))
@@ -1323,44 +1322,26 @@ func newSettingsPage(send sendIntent, window fyne.Window) *settingsPage {
 			return
 		}
 		value := enabled
-		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{SystemProxyEnabled: &value}})
+		configure(&ipc.ConfigPatch{SystemProxyEnabled: &value})
 	})
 	p.proxyStatus = newHelpText(localize.T("System proxy inactive"))
 	p.mixedPort = widget.NewLabel("")
-	modeLabels := make([]string, len(core.ProxyModes))
-	for i, mode := range core.ProxyModes {
-		modeLabels[i] = localize.Code("proxy.mode", mode)
-	}
-	p.proxyMode = widget.NewSelect(modeLabels, func(label string) {
-		if p.refreshing {
-			return
-		}
-		for i, option := range modeLabels {
-			if option == label {
-				mode := core.ProxyModes[i]
-				p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{ProxyMode: &mode}})
-				return
-			}
-		}
+	p.proxyMode, p.showProxyMode = newChoiceSelect(core.ProxyModes, proxyModeLabel, func(mode string) {
+		configure(&ipc.ConfigPatch{ProxyMode: &mode})
 	})
 	p.tunEnabled = widget.NewCheck("", func(enabled bool) {
 		if p.refreshing {
 			return
 		}
 		value := enabled
-		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{TunEnabled: &value}})
+		configure(&ipc.ConfigPatch{TunEnabled: &value})
 	})
-	p.tunStack = widget.NewSelect(core.TunStacks, func(stack string) {
-		if p.refreshing {
-			return
-		}
-		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{TunStack: &stack}})
+	identity := func(value string) string { return value }
+	p.tunStack, p.showTunStack = newChoiceSelect(core.TunStacks, identity, func(stack string) {
+		configure(&ipc.ConfigPatch{TunStack: &stack})
 	})
-	p.tunDNSMode = widget.NewSelect(core.TunDNSModes, func(mode string) {
-		if p.refreshing {
-			return
-		}
-		p.send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: &ipc.ConfigPatch{TunDNSMode: &mode}})
+	p.tunDNSMode, p.showTunDNSMode = newChoiceSelect(core.TunDNSModes, identity, func(mode string) {
+		configure(&ipc.ConfigPatch{TunDNSMode: &mode})
 	})
 	p.tunStatus = newHelpText("")
 	p.tunAuthorize = widget.NewButton(localize.T("Authorize"), func() { p.send(ipc.Command{Kind: ipc.CommandAuthorizeTun}) })
@@ -1493,22 +1474,6 @@ func (p *settingsPage) selectSection(name string) {
 	}
 }
 
-// updateBinarySource shows the desired binary as the Use select's value; a
-// custom path shows as itself. Setting Selected directly sends nothing.
-func (p *settingsPage) updateBinarySource(desired string) {
-	selected := desired
-	switch desired {
-	case "system":
-		selected = localize.T("System")
-	case "bundled":
-		selected = localize.T("Bundled")
-	}
-	if p.binarySource.Selected != selected {
-		p.binarySource.Selected = selected
-		p.binarySource.Refresh()
-	}
-}
-
 func (p *settingsPage) editBinaryPath() {
 	input := widget.NewEntry()
 	input.SetPlaceHolder(localize.T("Absolute path to Mihomo"))
@@ -1576,15 +1541,6 @@ func (p *settingsPage) updateMixedPort(port int) {
 	}
 }
 
-// updateProxyMode selects the configured mode without echoing it back as intent.
-func (p *settingsPage) updateProxyMode(mode string) {
-	if label := localize.Code("proxy.mode", mode); p.proxyMode.Selected != label {
-		p.refreshing = true
-		p.proxyMode.SetSelected(label)
-		p.refreshing = false
-	}
-}
-
 func (p *settingsPage) update(binary core.BinarySnapshot, monitor core.MonitorSnapshot, systemProxy core.SystemProxySnapshot, dns core.DNSSnapshot) {
 	p.dns.update(dns)
 	monitorChanged := !p.settingsInitialized || p.monitorState != monitor
@@ -1597,7 +1553,7 @@ func (p *settingsPage) update(binary core.BinarySnapshot, monitor core.MonitorSn
 			p.binaryValues[i].SetText(value)
 		}
 	}
-	p.updateBinarySource(binary.Desired)
+	p.showBinary(binary.Desired)
 	if monitorChanged {
 		p.threshold.SetText(monitorThresholdLabel(monitor))
 		p.urlTestDelay.SetText(urlTestDelayLabel(monitor))
@@ -1644,10 +1600,8 @@ func (p *settingsPage) updateTun(tun core.TunSnapshot) {
 	p.tunInitialized, p.tunState = true, tun
 	p.refreshing = true
 	p.tunEnabled.SetChecked(tun.Enabled)
-	p.tunStack.Selected = tun.Stack
-	p.tunStack.Refresh()
-	p.tunDNSMode.Selected = tun.DNSMode
-	p.tunDNSMode.Refresh()
+	p.showTunStack(tun.Stack)
+	p.showTunDNSMode(tun.DNSMode)
 	p.refreshing = false
 	lines := []string{fmt.Sprintf(localize.T("Requested %s, active %s"), yesNo(tun.Enabled), yesNo(tun.Active))}
 	if reason := tunPrivilegeReason(tun.Privilege); reason != "" {
