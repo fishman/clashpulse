@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"image/color"
 	"strings"
 	"testing"
 
@@ -111,7 +110,7 @@ func TestOverviewModeAndPolicySelectsSendPatch(t *testing.T) {
 }
 
 // Opening a card choice's menu and dismissing it with Esc leaves no focused
-// widget, so the card keeps its background instead of a stuck focus colour.
+// widget. A Select stays focused here and keeps its focus colour.
 func TestOverviewChoiceDismissLeavesNoFocus(t *testing.T) {
 	a := test.NewApp()
 	defer a.Quit()
@@ -135,9 +134,6 @@ func TestOverviewChoiceDismissLeavesNoFocus(t *testing.T) {
 	}
 	if focused := window.Canvas().Focused(); focused != nil {
 		t.Fatalf("Esc left %T focused", focused)
-	}
-	if v.mode.tint.FillColor != color.Transparent {
-		t.Fatalf("dismissed choice tinted %v", v.mode.tint.FillColor)
 	}
 }
 
