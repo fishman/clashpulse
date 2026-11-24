@@ -87,6 +87,12 @@ func TestOverviewModeAndPolicySelectsSendPatch(t *testing.T) {
 	if !v.mode.Disabled() || !v.policy.Disabled() {
 		t.Fatal("selects enabled after disconnect")
 	}
+	// A snapshot before the first configuration load has no mode or policy;
+	// the selects must not fall back to the default policy's name.
+	v.update(buildOverview(core.Snapshot{}))
+	if v.mode.Selected != "" || v.policy.Selected != "" {
+		t.Fatalf("empty snapshot shows %q %q", v.mode.Selected, v.policy.Selected)
+	}
 }
 
 func TestBuildOverviewPrefersAutomatedGroup(t *testing.T) {
@@ -217,5 +223,12 @@ func TestBuildOverviewShortLabels(t *testing.T) {
 	}
 	if m := buildOverview(s); m.Health.Counts != "\u8ba2\u9605 1 \u00b7 \u6570\u636e\u8d44\u6e90 0 \u00b7 \u8fc7\u6ee4\u5217\u8868 1" {
 		t.Fatalf("zh counts = %q", m.Health.Counts)
+	}
+	a := test.NewApp()
+	defer a.Quit()
+	v := newOverviewView(nil, func(ipc.Command) {})
+	v.update(buildOverview(s))
+	if v.policy.Selected != "\u7a33\u5b9a\u6d41" {
+		t.Fatalf("zh policy = %q", v.policy.Selected)
 	}
 }
