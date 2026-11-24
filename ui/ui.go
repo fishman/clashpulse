@@ -151,7 +151,7 @@ func newDesktopUI(ctx context.Context, endpoint string, w fyne.Window) *desktopU
 	d.settingsPage = newSettingsPage(d.enqueue, w)
 	d.activity = newActivityView()
 
-	d.overview = newOverviewView(d.openActivity)
+	d.overview = newOverviewView(d.openActivity, d.enqueue)
 	d.views["Overview"] = d.overview.object
 	d.views["Proxies"] = d.proxyPage.view
 	d.views["Subscriptions"] = d.subPage.view

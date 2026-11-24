@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/localize"
 	"github.com/fishman/clashpulse/monitor"
 )
@@ -209,7 +211,8 @@ func gigabytes(bytes uint64) string {
 type overviewView struct {
 	object fyne.CanvasObject
 
-	profile, mode, policy, mihomo *widget.Label
+	profile, mihomo *widget.Label
+	mode, policy    *choiceSelect
 
 	node, switchCard           *fyne.Container
 	nodeCaption, streamCaption *canvas.Text
@@ -231,7 +234,52 @@ type overviewView struct {
 	healthDot                  *dot
 }
 
-func newOverviewView(openActivity func()) *overviewView {
+// choiceSelect picks one of a fixed set of values and sends the pick. It shows
+// the snapshot value until a new snapshot confirms the pick: a rejected pick
+// publishes no change that would correct it. The select is a field, not
+// embedded: an embedding widget without ExtendBaseWidget renders under a
+// different cache key than the one Refresh updates.
+type choiceSelect struct {
+	sel     *widget.Select
+	current string
+}
+
+func newChoiceSelect(values []string, label func(string) string, pick func(string)) *choiceSelect {
+	labels := make([]string, len(values))
+	for i, value := range values {
+		labels[i] = label(value)
+	}
+	c := &choiceSelect{}
+	c.sel = widget.NewSelect(labels, func(text string) {
+		// Re-showing the snapshot value lands here too and sends nothing.
+		if text == c.current {
+			return
+		}
+		if i := slices.Index(labels, text); i >= 0 {
+			pick(values[i])
+		}
+		c.set(c.current)
+	})
+	c.sel.PlaceHolder = "-"
+	c.sel.Disable()
+	return c
+}
+
+// set shows the snapshot's label; one outside the options clears the select.
+func (c *choiceSelect) set(text string) {
+	c.current = text
+	if !slices.Contains(c.sel.Options, text) {
+		if c.sel.Selected != "" {
+			c.sel.ClearSelected()
+		}
+		return
+	}
+	if c.sel.Selected != text {
+		c.sel.SetSelected(text)
+	}
+}
+
+func newOverviewView(openActivity func(), send func(ipc.Command)) *overviewView {
 	v := &overviewView{}
 	label := func(style fyne.TextStyle) *widget.Label {
 		l := widget.NewLabelWithStyle("", fyne.TextAlignLeading, style)
@@ -244,11 +292,22 @@ func newOverviewView(openActivity func()) *overviewView {
 		value.Truncation = fyne.TextTruncateEllipsis
 		return newCard(caption, value), value
 	}
+	configure := func(patch *ipc.ConfigPatch) {
+		send(ipc.Command{Kind: ipc.CommandUpdateConfiguration, Config: patch})
+	}
+	// One-field patches: everything else, the stream URL included, stays as
+	// configured.
+	v.mode = newChoiceSelect(core.ProxyModes, func(mode string) string { return localize.Code("proxy.mode", mode) }, func(mode string) {
+		configure(&ipc.ConfigPatch{ProxyMode: &mode})
+	})
+	v.policy = newChoiceSelect(monitor.SwitchPolicies, switchPolicyName, func(policy string) {
+		configure(&ipc.ConfigPatch{MonitorSwitchPolicy: &policy})
+	})
 	profileCard, profile := fact(localize.T("Profile"))
-	modeCard, mode := fact(localize.T("Mode"))
-	policyCard, policy := fact(localize.T("Switch policy"))
+	modeCard := newCard(localize.T("Mode"), v.mode.sel)
+	policyCard := newCard(localize.T("Switch policy"), v.policy.sel)
 	mihomoCard, mihomo := fact("Mihomo")
-	v.profile, v.mode, v.policy, v.mihomo = profile, mode, policy, mihomo
+	v.profile, v.mihomo = profile, mihomo
 
 	v.nodeName = label(fyne.TextStyle{Bold: true})
 	v.nodeDetail = label(fyne.TextStyle{})
@@ -326,8 +385,10 @@ func setVisible(object fyne.CanvasObject, visible bool) {
 
 func (v *overviewView) update(m overviewModel) {
 	setLabel(v.profile, m.Profile)
-	setLabel(v.mode, m.Mode)
-	setLabel(v.policy, m.Policy)
+	v.mode.set(m.Mode)
+	v.policy.set(m.Policy)
+	v.mode.sel.Enable()
+	v.policy.sel.Enable()
 	setLabel(v.mihomo, m.Mihomo)
 
 	setVisible(v.nodeEmpty, !m.Node.Visible)
@@ -369,10 +430,12 @@ func (v *overviewView) update(m overviewModel) {
 	v.healthDot.set(m.Health.State.color())
 }
 
-// disconnect greys the health dot: without a live snapshot there is no
-// health to report.
+// disconnect greys the health dot and locks the selects: without a live
+// snapshot there is no health to report and no service to send a pick to.
 func (v *overviewView) disconnect() {
 	v.healthDot.set(pillOff.color())
+	v.mode.sel.Disable()
+	v.policy.sel.Disable()
 }
 
 func joinNonEmpty(parts ...string) string {

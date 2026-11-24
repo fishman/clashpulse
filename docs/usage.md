@@ -32,9 +32,13 @@ view.
 
 Overview cards show the current node with its latency, the steady-stream
 download results, the last switch with its reason and evidence, subscription
-usage, and health. The activity view (top-bar menu or the Health card) lists
-this session's sanitized diagnostics and the fields ClashPulse added,
-replaced, or removed in the active profile, with a reason but no values.
+usage, and health. The Mode and Switch policy cards are dropdowns that change
+only that setting; Steady stream uses the stream URL and interval already
+configured in Settings. Switching to or from Steady stream restarts Mihomo,
+which drops open connections. The activity view (top-bar menu or the Health
+card) lists this session's sanitized diagnostics and the fields ClashPulse
+added, replaced, or removed in the active profile, with a reason but no
+values.
 
 ![GUI Proxies: group selector, automation toggle, per-node measurements](assets/screenshots/gui-proxies.png)
 
@@ -80,7 +84,7 @@ Default keys from `tui/keys.toml`:
 | where | keys |
 | --- | --- |
 | everywhere | `q` / `ctrl+c` quit, `?` help, `tab` / `shift+tab` next/previous tab, `up` / `k` and `down` / `j` move, `enter` activate, `esc` close modal, `1`-`6` views, `~` session log |
-| Overview | `s` start, `x` stop, `r` reload configuration |
+| Overview | `s` start, `x` stop, `r` reload configuration, `R` cycle mode, `y` cycle policy |
 | Proxies | `r` probe focused group, `a` toggle automation, `d` probe downloads |
 | Subscriptions | `r` refresh, `a` activate, `n` new, `e` edit, `d` delete |
 | Filter Lists, Data Resources | `r` refresh, `n` new, `e` edit |

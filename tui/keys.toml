@@ -25,6 +25,8 @@
 "s" = { fun = "start", desc = "enqueue start", show = true }
 "x" = { fun = "stop", desc = "enqueue stop", show = true }
 "r" = { fun = "reload_configuration", desc = "reload configuration", show = true }
+"R" = { fun = "cycle_proxy_mode", desc = "cycle proxy mode", show = true }
+"y" = { fun = "cycle_switch_policy", desc = "cycle switch policy", show = true }
 
 [schemes.default.proxies]
 "r" = { fun = "manual_probe", desc = "probe focused group", show = true }

@@ -219,7 +219,7 @@ func tabRowsChanged(before, after ipc.Event, tab Tab) bool {
 	old, next := before.Snapshot, after.Snapshot
 	switch tab {
 	case TabOverview:
-		return !reflect.DeepEqual(old.Binary, next.Binary) || !reflect.DeepEqual(old.ConfigOverrides, next.ConfigOverrides) || !reflect.DeepEqual(old.Switches, next.Switches) || !reflect.DeepEqual(old.Jobs, next.Jobs) || !reflect.DeepEqual(old.Errors, next.Errors)
+		return !reflect.DeepEqual(old.Binary, next.Binary) || old.ProxyMode != next.ProxyMode || old.Monitor.SwitchPolicy != next.Monitor.SwitchPolicy || !reflect.DeepEqual(old.ConfigOverrides, next.ConfigOverrides) || !reflect.DeepEqual(old.Switches, next.Switches) || !reflect.DeepEqual(old.Jobs, next.Jobs) || !reflect.DeepEqual(old.Errors, next.Errors)
 	case TabProxies:
 		return !reflect.DeepEqual(old.Groups, next.Groups) || !reflect.DeepEqual(old.Proxies, next.Proxies)
 	case TabSubscriptions:
@@ -1674,7 +1674,11 @@ func rowsForSnapshot(event ipc.Event, tab Tab) []Row {
 	snapshot := event.Snapshot
 	switch tab {
 	case TabOverview:
-		rows := []Row{{ID: "binary", Title: localize.T("Mihomo binary"), Detail: binaryDetail(snapshot.Binary.Desired, snapshot.Binary.ObservedVersion, snapshot.Binary.LastCompatibilityFailure, snapshot.Binary.Capabilities)}}
+		rows := []Row{
+			{ID: "binary", Title: localize.T("Mihomo binary"), Detail: binaryDetail(snapshot.Binary.Desired, snapshot.Binary.ObservedVersion, snapshot.Binary.LastCompatibilityFailure, snapshot.Binary.Capabilities)},
+			{ID: "overview:proxy-mode", Title: localize.T("Proxy mode"), Detail: localize.Code("proxy.mode", snapshot.ProxyMode)},
+			{ID: "overview:switch-policy", Title: localize.T("Switch policy"), Detail: localize.Code("monitor.policy", snapshot.Monitor.SwitchPolicy)},
+		}
 		if len(snapshot.ConfigOverrides) == 0 {
 			rows = append(rows, Row{ID: "override:summary", Title: localize.T("Generated config changes"), Detail: localize.T("No managed overrides")})
 		} else {

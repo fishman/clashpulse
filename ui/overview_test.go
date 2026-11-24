@@ -9,6 +9,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 
 	"github.com/fishman/clashpulse/core"
+	"github.com/fishman/clashpulse/ipc"
 	"github.com/fishman/clashpulse/localize"
 	"github.com/fishman/clashpulse/monitor"
 )
@@ -37,7 +38,7 @@ func TestBuildOverviewEmptySnapshot(t *testing.T) {
 func TestOverviewHealthDotOffWithoutSnapshot(t *testing.T) {
 	a := test.NewApp()
 	defer a.Quit()
-	v := newOverviewView(nil)
+	v := newOverviewView(nil, func(ipc.Command) {})
 	if v.healthDot.color != pillOff.color() {
 		t.Fatalf("health dot before snapshot = %v", v.healthDot.color)
 	}
@@ -48,6 +49,43 @@ func TestOverviewHealthDotOffWithoutSnapshot(t *testing.T) {
 	v.disconnect()
 	if v.healthDot.color != pillOff.color() {
 		t.Fatalf("health dot after disconnect = %v", v.healthDot.color)
+	}
+}
+
+// The Mode and Switch policy cards send a pick as a one-field patch, so the
+// stored stream URL and every other setting stay as they are. Until a new
+// snapshot confirms the pick they show the snapshot value, and they are
+// inert while disconnected.
+func TestOverviewModeAndPolicySelectsSendPatch(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	var sent []ipc.Command
+	v := newOverviewView(nil, func(c ipc.Command) { sent = append(sent, c) })
+	if !v.mode.sel.Disabled() || !v.policy.sel.Disabled() {
+		t.Fatal("selects enabled before the first snapshot")
+	}
+	v.update(buildOverview(core.Snapshot{ProxyMode: core.ProxyModeRule, Monitor: core.MonitorSnapshot{SwitchPolicy: monitor.SwitchLowestLatency}}))
+	if len(sent) != 0 {
+		t.Fatalf("applying a snapshot sent %+v", sent)
+	}
+	v.mode.sel.SetSelected(localize.Code("proxy.mode", core.ProxyModeGlobal))
+	v.policy.sel.SetSelected(localize.Code("monitor.policy", monitor.SwitchSteadyStream))
+	if len(sent) != 2 {
+		t.Fatalf("sent %+v", sent)
+	}
+	mode, policy := sent[0].Config, sent[1].Config
+	if sent[0].Kind != ipc.CommandUpdateConfiguration || mode.ProxyMode == nil || *mode.ProxyMode != core.ProxyModeGlobal || mode.MonitorSwitchPolicy != nil {
+		t.Fatalf("mode pick sent %+v", mode)
+	}
+	if policy.MonitorSwitchPolicy == nil || *policy.MonitorSwitchPolicy != monitor.SwitchSteadyStream || policy.MonitorStreamURL != nil || policy.ProxyMode != nil {
+		t.Fatalf("policy pick sent %+v", policy)
+	}
+	if v.mode.sel.Selected != localize.Code("proxy.mode", core.ProxyModeRule) || v.policy.sel.Selected != localize.Code("monitor.policy", monitor.SwitchLowestLatency) {
+		t.Fatalf("selects show pending %q %q, want snapshot values", v.mode.sel.Selected, v.policy.sel.Selected)
+	}
+	v.disconnect()
+	if !v.mode.sel.Disabled() || !v.policy.sel.Disabled() {
+		t.Fatal("selects enabled after disconnect")
 	}
 }
 
