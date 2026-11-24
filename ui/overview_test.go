@@ -2,9 +2,12 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 	"testing"
 
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
 
@@ -61,15 +64,18 @@ func TestOverviewModeAndPolicySelectsSendPatch(t *testing.T) {
 	defer a.Quit()
 	var sent []ipc.Command
 	v := newOverviewView(nil, func(c ipc.Command) { sent = append(sent, c) })
-	if !v.mode.Disabled() || !v.policy.Disabled() || v.mode.Selected != "" || v.policy.Selected != "" {
-		t.Fatal("selects enabled before the first snapshot")
+	window := a.NewWindow("x")
+	window.SetContent(v.object)
+	window.Resize(fyne.NewSize(1000, 700))
+	if !v.mode.Disabled() || !v.policy.Disabled() || v.mode.text.Text != "-" || v.policy.text.Text != "-" {
+		t.Fatal("choices enabled before the first snapshot")
 	}
 	v.update(buildOverview(core.Snapshot{ProxyMode: core.ProxyModeRule, Monitor: core.MonitorSnapshot{SwitchPolicy: monitor.SwitchLowestLatency}}))
 	if len(sent) != 0 {
 		t.Fatalf("applying a snapshot sent %+v", sent)
 	}
-	v.mode.SetSelected(localize.Code("proxy.mode", core.ProxyModeGlobal))
-	v.policy.SetSelected(localize.Code("monitor.policy", monitor.SwitchSteadyStream))
+	pickMenuItem(t, window, v.mode, localize.Code("proxy.mode", core.ProxyModeGlobal))
+	pickMenuItem(t, window, v.policy, localize.Code("monitor.policy", monitor.SwitchSteadyStream))
 	if len(sent) != 2 {
 		t.Fatalf("sent %+v", sent)
 	}
@@ -80,19 +86,81 @@ func TestOverviewModeAndPolicySelectsSendPatch(t *testing.T) {
 	if policy.MonitorSwitchPolicy == nil || *policy.MonitorSwitchPolicy != monitor.SwitchSteadyStream || policy.MonitorStreamURL != nil || policy.ProxyMode != nil {
 		t.Fatalf("policy pick sent %+v", policy)
 	}
-	if v.mode.Selected != localize.Code("proxy.mode", core.ProxyModeRule) || v.policy.Selected != localize.Code("monitor.policy", monitor.SwitchLowestLatency) {
-		t.Fatalf("selects show pending %q %q, want snapshot values", v.mode.Selected, v.policy.Selected)
+	if v.mode.text.Text != localize.Code("proxy.mode", core.ProxyModeRule) || v.policy.text.Text != localize.Code("monitor.policy", monitor.SwitchLowestLatency) {
+		t.Fatalf("choices show pending %q %q, want snapshot values", v.mode.text.Text, v.policy.text.Text)
+	}
+	// Picking the shown value sends nothing.
+	pickMenuItem(t, window, v.mode, localize.Code("proxy.mode", core.ProxyModeRule))
+	if len(sent) != 2 {
+		t.Fatalf("unchanged pick sent %+v", sent[2:])
 	}
 	v.disconnect()
 	if !v.mode.Disabled() || !v.policy.Disabled() {
-		t.Fatal("selects enabled after disconnect")
+		t.Fatal("choices enabled after disconnect")
+	}
+	test.Tap(v.mode)
+	if window.Canvas().Overlays().Top() != nil {
+		t.Fatal("disconnected choice opened a menu")
 	}
 	// A snapshot before the first configuration load has no mode or policy;
-	// the selects must not fall back to the default policy's name.
+	// the choices must not fall back to the default policy's name.
 	v.update(buildOverview(core.Snapshot{}))
-	if v.mode.Selected != "" || v.policy.Selected != "" {
-		t.Fatalf("empty snapshot shows %q %q", v.mode.Selected, v.policy.Selected)
+	if v.mode.text.Text != "-" || v.policy.text.Text != "-" {
+		t.Fatalf("empty snapshot shows %q %q", v.mode.text.Text, v.policy.text.Text)
 	}
+}
+
+// Opening a card choice's menu and dismissing it with Esc leaves no focused
+// widget, so the card keeps its background instead of a stuck focus colour.
+func TestOverviewChoiceDismissLeavesNoFocus(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	v := newOverviewView(nil, func(ipc.Command) {})
+	window := a.NewWindow("x")
+	window.SetContent(v.object)
+	window.Resize(fyne.NewSize(1000, 700))
+	v.update(buildOverview(core.Snapshot{ProxyMode: core.ProxyModeRule}))
+	test.Tap(v.mode)
+	menu := window.Canvas().Overlays().Top()
+	if menu == nil {
+		t.Fatal("tap opened no menu")
+	}
+	focused := window.Canvas().Focused()
+	if focused == nil {
+		t.Fatal("open menu has no keyboard focus for Esc")
+	}
+	focused.TypedKey(&fyne.KeyEvent{Name: fyne.KeyEscape})
+	if window.Canvas().Overlays().Top() != nil {
+		t.Fatal("Esc left the menu open")
+	}
+	if focused := window.Canvas().Focused(); focused != nil {
+		t.Fatalf("Esc left %T focused", focused)
+	}
+	if v.mode.tint.FillColor != color.Transparent {
+		t.Fatalf("dismissed choice tinted %v", v.mode.tint.FillColor)
+	}
+}
+
+// pickMenuItem opens choice's menu and taps the item labelled text.
+func pickMenuItem(t *testing.T, window fyne.Window, choice *cardChoice, text string) {
+	t.Helper()
+	test.Tap(choice)
+	menu := window.Canvas().Overlays().Top()
+	if menu == nil {
+		t.Fatal("tap opened no menu")
+	}
+	// A menu item is laid out just before its own label text.
+	var item fyne.Tappable
+	for _, object := range test.LaidOutObjects(menu) {
+		if tappable, ok := object.(fyne.Tappable); ok {
+			item = tappable
+		}
+		if label, ok := object.(*canvas.Text); ok && label.Text == text && item != nil {
+			test.Tap(item)
+			return
+		}
+	}
+	t.Fatalf("menu has no %q item", text)
 }
 
 func TestBuildOverviewPrefersAutomatedGroup(t *testing.T) {
@@ -228,7 +296,7 @@ func TestBuildOverviewShortLabels(t *testing.T) {
 	defer a.Quit()
 	v := newOverviewView(nil, func(ipc.Command) {})
 	v.update(buildOverview(s))
-	if v.policy.Selected != "\u7a33\u5b9a\u6d41" {
-		t.Fatalf("zh policy = %q", v.policy.Selected)
+	if v.policy.text.Text != "\u7a33\u5b9a\u6d41" {
+		t.Fatalf("zh policy = %q", v.policy.text.Text)
 	}
 }

@@ -205,9 +205,8 @@ func gigabytes(bytes uint64) string {
 type overviewView struct {
 	object fyne.CanvasObject
 
-	profile, mihomo      *widget.Label
-	mode, policy         *widget.Select
-	showMode, showPolicy func(string)
+	profile, mihomo *widget.Label
+	mode, policy    *cardChoice
 
 	node, switchCard           *fyne.Container
 	nodeCaption, streamCaption *canvas.Text
@@ -247,19 +246,17 @@ func newOverviewView(openActivity func(), send func(ipc.Command)) *overviewView 
 	}
 	// One-field patches: everything else, the stream URL included, stays as
 	// configured.
-	v.mode, v.showMode = newChoiceSelect(core.ProxyModes, proxyModeLabel, func(mode string) {
+	v.mode = newCardChoice(core.ProxyModes, proxyModeLabel, func(mode string) {
 		configure(&ipc.ConfigPatch{ProxyMode: &mode})
 	})
-	v.policy, v.showPolicy = newChoiceSelect(monitor.SwitchPolicies, switchPolicyName, func(policy string) {
+	v.policy = newCardChoice(monitor.SwitchPolicies, switchPolicyName, func(policy string) {
 		configure(&ipc.ConfigPatch{MonitorSwitchPolicy: &policy})
 	})
-	for _, sel := range []*widget.Select{v.mode, v.policy} {
-		sel.PlaceHolder = "-"
-		sel.Disable()
-	}
+	v.mode.Disable()
+	v.policy.Disable()
 	profileCard, profile := fact(localize.T("Profile"))
-	modeCard := newCard(localize.T("Mode"), cardSelect(v.mode))
-	policyCard := newCard(localize.T("Switch policy"), cardSelect(v.policy))
+	modeCard := newCard(localize.T("Mode"), v.mode)
+	policyCard := newCard(localize.T("Switch policy"), v.policy)
 	mihomoCard, mihomo := fact("Mihomo")
 	v.profile, v.mihomo = profile, mihomo
 
@@ -339,8 +336,8 @@ func setVisible(object fyne.CanvasObject, visible bool) {
 
 func (v *overviewView) update(m overviewModel) {
 	setLabel(v.profile, m.Profile)
-	v.showMode(m.Mode)
-	v.showPolicy(m.Policy)
+	v.mode.show(m.Mode)
+	v.policy.show(m.Policy)
 	v.mode.Enable()
 	v.policy.Enable()
 	setLabel(v.mihomo, m.Mihomo)
@@ -384,8 +381,9 @@ func (v *overviewView) update(m overviewModel) {
 	v.healthDot.set(m.Health.State.color())
 }
 
-// disconnect greys the health dot and locks the selects: without a live
-// snapshot there is no health to report and no service to send a pick to.
+// disconnect greys the health dot and locks the mode and policy choices:
+// without a live snapshot there is no health to report and no service to
+// send a pick to.
 func (v *overviewView) disconnect() {
 	v.healthDot.set(pillOff.color())
 	v.mode.Disable()
